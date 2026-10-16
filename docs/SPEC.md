@@ -189,7 +189,7 @@ StoredEvent (scritto dal relay)
 | `MEMBER_ADMITTED` | Dave | `memberPubkey` |
 | `POLICY_UPDATED` | membro | `policy` |
 | `CHANNELS_READY` | Dave | `memberPubkey`, `tripChannelId`, `liquidityChannelId` |
-| `EXPENSE_SUBMITTED` | pagatore | `expenseId`, `receipt` (merchant, date, currency, items, tax, tip, total), `receiptImageSha256`, `rateEventHash`, `rate`, `totalUsdCents`, `lines: [{ debtorPubkey, cents, itemIndexes, bolt11 }]`, `fingerprint` |
+| `EXPENSE_SUBMITTED` | pagatore | `expenseId`, `receipt` (merchant, date, currency, items, tax, tip, total), `receiptImageSha256`, `rateEventHash`, `rate`, `totalUsdCents`, `payerCents` (quota del pagatore), `payerItemIndexes` (righe dello scontrino che condivide), `lines: [{ debtorPubkey, cents, itemIndexes, bolt11 }]`, `fingerprint` |
 | `LINE_SEEN` | debitore | `expenseEventHash` |
 | `LINE_DECIDED` | debitore | `expenseEventHash`, `decision: approve \| contest`, `cents`, `reason?` |
 | `PAYMENT_MADE` | debitore | `expenseEventHash`, `creditorPubkey`, `cents`, `rail: ln \| onchain`, `paymentHash` + `preimage` oppure `txid` |
@@ -202,10 +202,10 @@ StoredEvent (scritto dal relay)
 | `TRIP_CLOSED` | Dave | `summary` |
 
 ### 9.3 Validazione
-Le stesse regole, in una funzione pura `validateEvent(stored, trip, verify)` del ledger (con il `SignatureVerifier` iniettato, così il ledger resta puro e testabile senza B), girano **sia sul relay** (che rifiuta l'evento) **sia in ogni agente** (che non si fida del relay):
+Le stesse regole, in una funzione pura `validateEvent(stored, trip, deps)` del ledger, con `deps = { verify: SignatureVerifier, decodeInvoice: (bolt11) => DecodedInvoice }` iniettati (così il ledger resta puro e testabile senza B e senza un nodo), girano **sia sul relay** (che rifiuta l'evento) **sia in ogni agente** (che non si fida del relay):
 - firma valida per `author`; autore ammesso al viaggio (tranne `TRIP_CREATED` e `MEMBER_JOINED`); i tipi "Dave" solo da Dave;
 - `nonce` mai visto in quel viaggio;
-- `EXPENSE_SUBMITTED`: totale = righe + tasse + mancia (nella valuta dello scontrino); `Σ lines.cents + quota del pagatore = totalUsdCents`; i debitori sono membri attivi (non esclusi); `fingerprint` non duplicato; per ogni riga, l'invoice è decodificabile, intestato al pagatore, per l'asset del viaggio e per l'importo della riga;
+- `EXPENSE_SUBMITTED`: totale = righe + tasse + mancia (nella valuta dello scontrino); `Σ lines.cents + payerCents = totalUsdCents`, e le quote coincidono con quelle ricalcolate dal ledger da scontrino, `itemIndexes`, `payerItemIndexes` e `rate`; i debitori sono membri attivi (non esclusi); `fingerprint` non duplicato; per ogni riga, l'invoice è decodificabile, intestato al pagatore, per l'asset del viaggio e per l'importo della riga;
 - `LINE_SEEN`/`LINE_DECIDED`: l'autore è debitore di quella spesa; `cents` coincide con la riga;
 - `PAYMENT_MADE`/`GUARANTEE_PAID`: `sha256(preimage) == paymentHash` dell'invoice della riga; l'importo coincide.
 
