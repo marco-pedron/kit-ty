@@ -1,0 +1,7 @@
+node_modules/
+data/
+data-run*/
+.secrets
+.secrets-run*
+*.log.raw
+vss/build.log
