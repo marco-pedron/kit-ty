@@ -1,0 +1,17 @@
+{
+  "name": "@kitty/rln-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "gen": "openapi-typescript ../../docs/vendor/rln-openapi.yaml -o src/schema.d.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}
