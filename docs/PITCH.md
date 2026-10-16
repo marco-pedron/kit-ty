@@ -23,7 +23,7 @@ Revolut funziona se tutti hanno Revolut. Il nostro gruppo è italiano, tedesco e
 Splitwise calcola e spera. Noi paghiamo, in secondi, tra persone senza un sistema di pagamento comune, con un agente che rispetta limiti fissati dall'utente e una garanzia dell'operatore se qualcuno sparisce. E senza custode.
 
 **"Dove gira il nodo di Bob?"**
-Nella demo su questo portatile, uno per persona, dentro il wallet WDK di ciascuno. Lo stesso modulo (`@utexo/wdk-rgb-lightning`) gira anche su mobile, e `@utexo/rgb-sdk-rn` porta lo stesso nodo su iOS e Android: il passo verso l'app è un cambio di host, non di architettura.
+Nella demo su questo portatile: un `rgb-lightning-node` per persona, pilotato via REST dal suo agente. WDK c'è dove oggi è solido: `@utexo/wdk-wallet-rgb` è la tesoreria on-chain dell'operatore, che emette i DUSD e fa l'on-ramp ai viaggiatori. Il nodo Lightning di WDK (`@utexo/wdk-rgb-lightning`, che gira anche su mobile, con `@utexo/rgb-sdk-rn` per iOS e Android) l'abbiamo provato: instrada pagamenti RGB, ma nella beta pubblicata su npm il firmatore non sopravvive a un riavvio, la chiusura del canale non restituisce i DUSD on-chain e il ripristino dal backup VSS si blocca. Le correzioni sono già upstream ma non ancora su npm: è il primo passo della roadmap. Il wallet sta dietro un'unica interfaccia, quindi il passo verso l'app è un cambio di motore, non di architettura.
 
 **"Lightning sul telefono non è self-custody vera: serve essere online, servono watchtower."**
 Vero. Per il rischio di stati vecchi: watchtower indipendente dall'operatore (roadmap). Per chi riceve offline: il pagamento riparte quando torna online; gli invoice durano 48 ore. Nessuno perde fondi nell'attesa.
@@ -62,7 +62,7 @@ L'output è vincolato ai membri e alle righe esistenti, e il debitore approva l'
 Nessuno deve garantirlo. Ogni spesa è firmata da chi la fa, ogni approvazione da chi approva, ogni pagamento ha la sua ricevuta crittografica Lightning, e la catena di hash è la stessa su tutti i telefoni. Il server è solo un postino.
 
 **"Se perdo il telefono?"**
-Con RGB la mnemonica non basta: serve lo stato dei dati lato client. Per questo il wallet fa un backup cifrato automatico (VSS, il meccanismo nativo del modulo WDK) dopo ogni pagamento; il server lo conserva senza poterlo leggere, e un recinto impedisce che il telefono vecchio e quello nuovo scrivano insieme. [Se pronto: lo mostriamo.]
+Con RGB la mnemonica non basta: serve lo stato dei dati lato client. Per questo l'agente fa un backup cifrato automatico del nodo dopo ogni cambiamento di stato, appena il nodo è inattivo (lo blocca per un istante, esporta, sblocca) e lo carica sul relay, che lo conserva senza poterlo leggere; il ripristino su un nodo nuovo riporta la stessa identità e gli stessi canali. Il backup nativo di WDK (VSS, senza fermare il nodo) è in roadmap: nello spike il salvataggio funzionava ma il ripristino si bloccava, e le correzioni upstream non sono ancora su npm. [Se pronto: lo mostriamo.]
 
 **"Un operatore che gestisce stablecoin dei clienti in UE è regolamentato."**
 L'operatore non custodisce i fondi dei clienti, e questo cambia molto la posizione. La garanzia è un impegno commerciale da inquadrare con un legale; il prodotto funziona con qualunque stablecoin su RGB. (Non va nelle slide; risposta prudente, non siamo avvocati.)

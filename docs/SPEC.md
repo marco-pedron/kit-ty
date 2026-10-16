@@ -22,7 +22,7 @@ Non è contante spendibile sul posto: il ristorante in Vietnam si paga comunque 
 
 *Agentic Dollars on Bitcoin*, BLOX Torino, 17-18 ottobre 2026. Organizzatore RGB Protocol Association; sponsor Tether (WDK, QVAC) e Utexo; giuria Tether, KaleidoSwap, Utexo. **Submit domenica alle 13:00, pitch alle 16:00.**
 
-RGB e QVAC sono obbligatori; WDK dà un bonus, pieno se l'integrazione è "ben fatta e centrale": per questo in kit+ty WDK è il wallet di ogni membro (§14.0). Cinque criteri con lo stesso peso, voto 1-10. Ecco come li colpiamo:
+RGB e QVAC sono obbligatori; WDK dà un bonus, pieno se l'integrazione è "ben fatta e centrale": in kit+ty WDK gestisce la tesoreria on-chain dell'operatore: emissione e on-ramp dei DUSD (§14.0); il nodo Lightning WDK è in roadmap (§18). Cinque criteri con lo stesso peso, voto 1-10. Ecco come li colpiamo:
 
 | Criterio | Come lo colpisce kit+ty |
 |---|---|
@@ -49,7 +49,7 @@ Oggi le spese comuni finiscono in due modi sbagliati: la **busta di contanti** d
 | **Canale di viaggio** | Canale Lightning RGB aperto **dal viaggiatore** verso il nodo dell'operatore, con D dollari digitali suoi. È il suo budget impegnato per il viaggio. Solo lui può spenderlo, e può uscire chiudendo il canale. |
 | **Canale di liquidità** | Canale aperto **dall'operatore** verso il viaggiatore, con L dollari dell'operatore. Serve al viaggiatore per **ricevere** i rimborsi. I fondi restano dell'operatore finché non vengono instradati. (Due canali per coppia: verificato nello spike.) |
 | **Cassa distribuita** | La somma dei saldi dei viaggiatori nei loro canali. Nessuno la detiene e nessuno ne vede il totale: ognuno vede solo il proprio saldo. **Non si chiama "cassa comune" nel pitch.** |
-| **DUSD** | Asset NIA demo, precisione 2 (1 centesimo = 1 unità), al posto di USDT. Emesso nel seed dal nodo dell'operatore, che lo "vende" ai viaggiatori alla prenotazione (simulazione dell'on-ramp). |
+| **DUSD** | Asset NIA demo, precisione 2 (1 centesimo = 1 unità), al posto di USDT. Emesso nel seed dal **wallet WDK on-chain** dell'operatore (`wdk-wallet-rgb`), che lo "vende" ai viaggiatori alla prenotazione (simulazione dell'on-ramp). |
 | **Agente** | Il software che agisce per un membro: ha accesso **solo** al nodo e alla chiave di quel membro, verifica il registro e paga secondo la policy del membro (§8). |
 | **Registro firmato** | Elenco append-only di eventi firmati dai rispettivi autori, ospitato da un **relay** (il "postino") che non può falsificare nulla (§9). |
 | **Garanzia dell'operatore** [D] | Se un debitore non paga entro la scadenza, Dave paga il creditore **con la liquidità dell'operatore**, fino a un tetto G per membro e viaggio. Il debito diventa un credito dell'operatore verso il debitore, recuperato fuori dalla piattaforma (l'operatore ha prenotazione, documento e carta del cliente). |
@@ -172,10 +172,10 @@ StoredEvent (scritto dal relay)
 ```
 
 - **canonical** = JSON canonico RFC 8785 (JCS); importi bigint serializzati come stringhe decimali.
-- **Chi firma dipende dal motore del wallet (§14.0):**
-  - **motore `wdk` (preferito):** firma con l'identità del nodo Lightning, tramite la funzione di firma dei messaggi di `@utexo/wdk-rgb-lightning` (firmatore VLS in-process). L'`author` è il `nodePubkey`: identità della persona = identità del suo nodo, senza chiavi in più. [VERIFICA spike 2: messaggi diversi danno firme diverse e la verifica rifiuta una firma alterata.]
-  - **motore `rln-rest` (fallback, già verificato):** `/signmessage` di RLN (`d4762ac`) firma sempre la stringa vuota, quindi **non va mai usato**. Si usa una chiave ed25519 dell'app (`appPubkey`) come `author`, legata al nodo da un invoice: in `MEMBER_JOINED` il membro include un invoice creato dal **proprio nodo** con `description` = `kitty-bind:<sha256(appPubkey)>`; il `payee_pubkey` dell'invoice diventa il `nodePubkey` del membro, e Dave verifica il legame prima di `MEMBER_ADMITTED`.
-  - In entrambi i casi ogni controllo "invoice intestato al creditore" confronta il `payee_pubkey` con il `nodePubkey` del membro.
+- **Chi firma (motore scelto al gate 2: `rln-rest`, §14.0 e §20):**
+  - **motore `rln-rest` (scelto, verificato):** `/signmessage` di RLN (`d4762ac`) firma sempre la stringa vuota, quindi **non va mai usato**. Si usa una chiave ed25519 dell'app (`appPubkey`) come `author`, legata al nodo da un invoice: in `MEMBER_JOINED` il membro include un invoice creato dal **proprio nodo** con `description` = `kitty-bind:<sha256(appPubkey)>`; il `payee_pubkey` dell'invoice diventa il `nodePubkey` del membro, e Dave verifica il legame prima di `MEMBER_ADMITTED`.
+  - **motore `wdk` (scartato al gate 2):** la firma con l'identità del nodo di `@utexo/wdk-rgb-lightning` funziona (spike 2: messaggi diversi danno firme diverse, verifica in TypeScript puro, firma alterata rifiutata), ma il motore no; vedi §20.
+  - Ogni controllo "invoice intestato al creditore" confronta il `payee_pubkey` con il `nodePubkey` del membro.
   - Extra (P2): correzione di `/signmessage` in un fork di RLN, con link agli organizzatori e proposta upstream.
 - `nonce` + `tripId` + riferimenti espliciti (hash dell'evento della spesa, importi) rendono ogni firma inutilizzabile in un altro contesto (anti-replay).
 
@@ -285,9 +285,9 @@ Regole [D]:
 **Il problema:** con RGB la mnemonica non basta a recuperare i fondi. Lo dice la stessa API di RLN (`/init`): *"a mnemonic alone is not sufficient to recover RGB state, which also requires client-side data"*. Senza lo stash, chi perde il telefono perde i DUSD.
 
 **La soluzione:**
-1. **Motore `wdk` (preferito): VSS.** `@utexo/wdk-rgb-lightning` copia lo stato dei canali LDK e i dati RGB, cifrati lato client, su un server VSS (Versioned Storage Service). L'agente chiama `vssBackup()` dopo ogni cambiamento di stato. Il server VSS gira in `infra/` accanto al relay e non può leggere i dati. Il ripristino avviene all'avvio di un nodo nuovo con lo **stesso seed BIP-39** e lo stesso namespace VSS; un "recinto" (fence) impedisce che due nodi scrivano insieme, e va sbloccato solo dopo aver fermato per sempre il vecchio. [VERIFICA spike 2: quale server VSS si può far girare in locale, se il backup richiede di fermare il nodo, se il ripristino riporta canali e DUSD.]
-2. **Motore `rln-rest` (fallback, verificato):** `/backup` funziona **solo a nodo bloccato**: `/lock` → `/backup` → `/unlock`, rimandato finché il nodo è inattivo da 10 s, con i pagamenti in coda nel frattempo (per Dave mai durante un pagamento). Il file (≈440 KB, include i canali LDK) finisce in un volume condiviso `/backups` e l'agente lo carica sul relay (`PUT /backups/:pubkey`), che non può leggerlo. Ripristino su un nodo **mai inizializzato**: `/restore` → `/unlock` (verificato: stessa pubkey, canali usabili, instrada pagamenti).
-3. In entrambi i casi, dopo il ripristino l'agente riscarica il registro dal relay e verifica tutto. **Il nodo vecchio non deve mai tornare online.**
+1. **Motore `rln-rest` (scelto, verificato):** `/backup` funziona **solo a nodo bloccato**: `/lock` → `/backup` → `/unlock`, rimandato finché il nodo è inattivo da 10 s, con i pagamenti in coda nel frattempo (per Dave mai durante un pagamento). Il file (≈440 KB, include i canali LDK) finisce in un volume condiviso `/backups` e l'agente lo carica sul relay (`PUT /backups/:pubkey`), che non può leggerlo. Ripristino su un nodo **mai inizializzato**: `/restore` → `/unlock` (verificato: stessa pubkey, canali usabili, instrada pagamenti).
+2. **VSS (motore `wdk`, non usato):** `vssBackup()` funziona a nodo acceso (circa 60 ms), ma nello spike 2 il ripristino da VSS si blocca allo sblocco: un backup senza ripristino non serve alla demo. Roadmap (§18).
+3. Dopo il ripristino l'agente riscarica il registro dal relay e verifica tutto. **Il nodo vecchio non deve mai tornare online.**
 4. **Rischio specifico di Lightning:** ripristinare uno stato di canale **vecchio** e usarlo può essere punito come frode. Per questo il backup si aggiorna a ogni pagamento, e il ripristino usa sempre l'ultimo. Alternativa sicura, sempre disponibile: chiedere a Dave la chiusura cooperativa dei canali. Dave ha interesse a collaborare.
 5. **Telefono rubato:** il danno massimo è limitato da `autoPayLimitCents` e `dailyCapCents`; un'approvazione sopra limite richiede sblocco del dispositivo (roadmap: biometria). Il viaggiatore può chiedere a Dave di chiudere subito i canali.
 
@@ -324,19 +324,18 @@ Frase per la giuria: **"Dave può essere fastidioso, ma non può rubare."**
 
 ## 14. Architettura
 
-### 14.0 Il wallet di ogni membro: WDK nativo [D, motore confermato dallo spike 2]
-Ogni membro ha **un solo seed BIP-39**, gestito da WDK, da cui nascono:
-- **`@utexo/wdk-rgb-lightning`**: il nodo RGB Lightning (LDK + rgb-lib) **dentro il processo** dell'agente, con canali, invoice, pagamenti, firma dei messaggi con l'identità del nodo e backup VSS. Gira su Node.js (macOS arm64/x64, Linux) e su mobile (Bare), quindi lo stesso codice porta al prodotto su telefono; `@utexo/rgb-sdk-rn` è la strada per React Native.
-- **`@utexo/wdk-wallet-rgb`**: il wallet RGB **on-chain** (rgb-lib): riceve i DUSD dell'on-ramp, finanzia l'apertura dei canali, riceve i fondi dopo una chiusura, e per Dave emette il DUSD (il modulo Lightning non emette asset). Usa una `dataDir` separata dal modulo Lightning.
+### 14.0 Il wallet di ogni membro: motore misto [D, gate 2]
+- **Nodi Lightning: `rgb-lightning-node` (`d4762ac`) via REST**, uno per membro (alice, bob, charlie, dave), in Docker. Canali, invoice, pagamenti, chiusure con sweep dei DUSD e backup lock → backup → unlock: tutto verificato nello spike 1 (`docs/spike-lightning.md`). Ogni membro ha la mnemonica del proprio nodo.
+- **Tesoreria on-chain di Dave: `@utexo/wdk-wallet-rgb` `2.0.3`** (rgb-lib): emette il DUSD (NIA, precisione 2) e fa l'on-ramp verso i nodi RLN dei viaggiatori. Il processo che lo importa gira su **Node 22** (il binario rgb-lib non compila su Node 24), e il binario `@utexo/rgb-lib` della piattaforma della macchina demo va dichiarato esplicitamente in `package.json` (altrimenti npm lo salta in silenzio). [VERIFICA: trasferimento da `wdk-wallet-rgb` a un invoice di un nodo RLN REST; nello spike 2 è provato solo verso nodi `wdk`, con lo stesso formato di invoice.]
 
 | Motore | Cosa è | Stato |
 |---|---|---|
-| `wdk` | moduli WDK di UTEXO in-process, un nodo per membro | **preferito**, da verificare con lo spike 2 (beta `0.1.0-beta.15`, modulo della comunità) |
-| `rln-rest` | `rgb-lightning-node` in Docker via REST (`d4762ac`) | verificato nello spike 1; fallback |
+| `wdk` | `@utexo/wdk-rgb-lightning` in-process, un nodo per membro | **scartato al gate 2** (`0.1.0-beta.15`: firmatore non persistente, nessuno sweep dopo la chiusura, ripristino VSS bloccato; roadmap §18) |
+| `rln-rest` | `rgb-lightning-node` in Docker via REST (`d4762ac`) | **scelto**, verificato nello spike 1 |
 
 L'interfaccia `Wallet` (§14.2) nasconde il motore: ledger, relay, flussi e UI non cambiano. Variabile `KITTY_WALLET_ENGINE`.
 
-Punti da chiudere nello spike 2 (`docs/prompts/02-spike-wdk.md`): più nodi nello stesso processo Node o un processo per membro; canali RGB tra due nodi `wdk`; versione della libreria nativa; firma dei messaggi corretta; server VSS locale; come seed, `dataDir` e i due moduli convivono senza conflitti sugli UTXO.
+Esito dello spike 2 e opzioni valutate al gate: `docs/spike-wdk.md`.
 
 ```
  apps/web (React+Vite, ?as=alice|bob|charlie|dave)      tre finestre a larghezza telefono
@@ -344,19 +343,17 @@ Punti da chiudere nello spike 2 (`docs/prompts/02-spike-wdk.md`): più nodi nell
         ▼
  apps/agent (Fastify :4100)  ── un'istanza Agent per membro, ognuna con SOLO il suo wallet e il suo seed
    ├─ ai/      QVAC in-process (caricato una volta, usato dall'agente di chi paga)
-   ├─ wallet/  Wallet per membro: motore wdk (moduli WDK in-process) o rln-rest (RLN in Docker)
+   ├─ wallet/  Wallet per membro: RLN via REST (nodo in Docker) + tesoreria wdk-wallet-rgb di Dave
    ├─ rail/    LightningRail | OnchainRail (KITTY_RAIL_MODE)
    ├─ flows/   spesa, decisioni, loop dell'agente (seen, policy, pagamento, checkpoint), azioni di Dave
    └─ routes/  API per la UI
         │ HTTP + SSE                                   │ REST
         ▼                                              ▼
  apps/relay (Fastify :4000)                    docker compose regtest: bitcoind, electrs (+ REST esplora :3010),
-   SQLite append-only, verifica firme,         rgb-proxy-server :3000, server VSS;
-   catena di hash, SSE                         solo con il motore rln-rest: 4× rgb-lightning-node (3001-3004)
+   SQLite append-only, verifica firme,         rgb-proxy-server :3000;
+   catena di hash, SSE                         4× rgb-lightning-node (3001-3004)
                                                (porte su 127.0.0.1)
 ```
-
-Se i nodi `wdk` non possono convivere nello stesso processo, ogni membro ha il proprio processo agente (porte 4101-4104) e l'AI gira solo nel processo di chi la usa; la UI non cambia.
 
 **Onestà sulla demo:** i quattro agenti girano nello stesso processo per non caricare quattro volte i modelli AI, ma ogni istanza riceve soltanto il client del proprio nodo; i quattro nodi girano su un portatile. In produzione l'agente e il nodo stanno sul telefono del viaggiatore.
 
@@ -385,16 +382,16 @@ kit-ty/
 interface Wallet {                         // B — apps/agent/src/wallet
   engine: 'wdk' | 'rln-rest'
   nodePubkey(): Promise<string>
-  authorPubkey(): Promise<string>                    // = nodePubkey con wdk; = appPubkey ed25519 con rln-rest
-  sign(message: string): Promise<string>             // firma nativa del nodo (wdk) o ed25519 (rln-rest), §9.1
-  bindInvoice(appPubkey: string): Promise<string | null>   // solo rln-rest: invoice di legame; null con wdk
+  authorPubkey(): Promise<string>                    // = appPubkey ed25519 con rln-rest (scelto); = nodePubkey con wdk (non usato in demo)
+  sign(message: string): Promise<string>             // ed25519 (rln-rest) o firma nativa del nodo (wdk, non usato in demo), §9.1
+  bindInvoice(appPubkey: string): Promise<string | null>   // rln-rest: invoice di legame; null con wdk (non usato in demo)
   createInvoice(p: { cents: bigint; description: string; expirySec: number }): Promise<{ bolt11: string; paymentHash: string }>
   decodeInvoice(bolt11: string): Promise<DecodedInvoice>      // payeePubkey, paymentHash, assetId, cents, description, expiresAt
   pay(bolt11: string, opts?: { timeoutMs?: number }): Promise<PaymentProof>
   balances(): Promise<{ tripOutboundCents: bigint; inboundCents: bigint; onchainCents: bigint }>
   openLiquidity(peerPubkey: string, cents: bigint): Promise<{ channelId: string }>   // solo Dave, §10.5
   closeChannelsWith(peerPubkey: string): Promise<{ txids: string[] }>   // solo Dave
-  backupNow(): Promise<{ version: string }>                             // VSS (wdk) o lock-backup-unlock (rln-rest)
+  backupNow(): Promise<{ version: string }>                             // lock-backup-unlock (rln-rest) o VSS (wdk, non usato in demo)
 }
 interface SignatureVerifier {              // B — packages/shared/src/crypto.ts; usato da relay e ledger
   verify(authorPubkey: string, message: string, signature: string): boolean
@@ -412,6 +409,8 @@ interface RelayClient {                    // C — apps/agent/src/relay
   getBackup(pubkey: string): Promise<Uint8Array | null>
 }
 ```
+Il motore `wdk` resta nell'unione di `engine` per non cambiare il contratto, ma non è usato in demo (§20). Emissione e on-ramp dei DUSD non passano da `Wallet`: li fa il seed (B2) con `wdk-wallet-rgb` sulla tesoreria di Dave (§14.0).
+
 Esistono dei **fake** (`FakeWallet`, `FakeAi`) per sviluppare in parallelo, attivi solo con `KITTY_FAKES=1`, con un banner visibile, e vietati da `demo:reset` (`assertNoFakes()`).
 
 ### 14.3 API dell'agente per la UI
@@ -474,7 +473,7 @@ Saldi attesi dopo il passo 7: Alice 50.00 nel canale di viaggio + 6.59 ricevuti;
 
 ## 18. Fuori scope e roadmap
 
-Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion, invio cifrato della foto, app mobile (il percorso è `@utexo/rgb-sdk-rn` o il modulo WDK su Bare), multisig, LSP e canali virtuali di UTEXO. **WDK non è più un extra:** è il wallet di ogni membro (§14.0), se lo spike 2 lo conferma.
+Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion, invio cifrato della foto, app mobile (il percorso è `@utexo/rgb-sdk-rn` o il modulo WDK su Bare), multisig, LSP e canali virtuali di UTEXO. **Roadmap WDK:** `@utexo/wdk-rgb-lightning` come nodo di ogni membro (in-process, anche su mobile) con backup VSS, quando saranno pubblicate su npm le correzioni upstream (firmatore persistente `createWithStorage`, sweep dei DUSD dopo la chiusura, ripristino VSS). Oggi in demo WDK è la tesoreria on-chain di Dave (§14.0).
 
 ## 19. Domande dello spike (chiuse il 16/10)
 
@@ -496,6 +495,7 @@ Domande originali:
 ### Spike 2: motore WDK (venerdì pomeriggio, `docs/prompts/02-spike-wdk.md`)
 Domande: installazione dei moduli e delle librerie native sulla macchina della demo; più nodi in un processo; canale RGB e pagamento instradato tra nodi `wdk` (e, se serve, tra `wdk` e `rln-rest`); preimage e `payee_pubkey`; firma e verifica dei messaggi; server VSS locale, backup e ripristino; convivenza di `wdk-wallet-rgb` e `wdk-rgb-lightning` con lo stesso seed; emissione DUSD con `wdk-wallet-rgb` e trasferimento al nodo Lightning.
 **Regola del gate 2:** canale + pagamento instradato + preimage tra nodi `wdk` verdi → motore `wdk`. Firma o VSS rossi da soli non bastano a scartarlo: si usano i fallback di §9.1 e §12. Altrimenti motore `rln-rest`, già verificato.
+**Esito (16/10, `docs/spike-wdk.md`):** canale, pagamento instradato e preimage tra nodi `wdk` verdi solo in forma `ln-lsp`; stato del firmatore perso al riavvio, nessuno sweep dei DUSD dopo la chiusura, ripristino VSS bloccato allo sblocco. Quindi motore `rln-rest`, con `wdk-wallet-rgb` per i DUSD di Dave (§20).
 
 **Regola del gate 1 (venerdì 13:30):** 1, 3, 4 e 5 verdi → modalità Lightning (`ln-2ch` se anche 2 è verde, altrimenti `ln-lsp`). Altrimenti modalità `onchain`, senza discussioni.
 
@@ -516,3 +516,4 @@ Domande: installazione dei moduli e delle librerie native sulla macchina della d
 | 16/10 | Backup con VSS (motore `wdk`); lock → backup → unlock solo con `rln-rest` | VSS è il meccanismo nativo; `/backup` REST richiede il nodo bloccato |
 | 16/10 | Liquidità di Dave calcolata dal ledger (`liquidityPlan`) e aperta just-in-time | Il fabbisogno è deterministico: credito netto di picco più righe aperte |
 | 16/10 | Canali da 1,000,000 sat in demo | 3 pagamenti in volo e 32 in uscita con 100,000 sat erano un effetto della capacità, non del protocollo |
+| 16/10 | **Gate 2, opzione A di `docs/spike-wdk.md` (motore misto).** Nodi Lightning: motore **`rln-rest`** (RLN `d4762ac` via REST, modalità `ln-2ch`). `@utexo/wdk-wallet-rgb` (`2.0.3`) **solo** per emissione e on-ramp dei DUSD di Dave, nel processo che lo importa su **Node 22**. Firma degli eventi: **ed25519 + invoice di legame**. Backup: **lock → backup → unlock** sul relay. **Supera** le tre righe precedenti "WDK nativo come wallet di ogni membro…", "Firma degli eventi con l'identità del nodo…" e "Backup con VSS…" | Spike 2 con `wdk-rgb-lightning` `0.1.0-beta.15`: lo stato del firmatore VLS non sopravvive a un riavvio (chiusure bloccate, un nodo non più sbloccabile); la chiusura cooperativa non restituisce i DUSD on-chain (nessuno sweep, passi 6-7 della demo impossibili); il ripristino da VSS si blocca allo sblocco. In più il routing funziona solo in forma `ln-lsp`. Le correzioni upstream non sono su npm e richiederebbero di cambiare le versioni fissate. `rln-rest` è già verificato end to end nello spike 1 |

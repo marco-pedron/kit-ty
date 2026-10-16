@@ -31,9 +31,9 @@ Full product and technical spec (roles, event log, payments, security, architect
 | Layer | Technology |
 |---|---|
 | Bitcoin / RGB | Bitcoin Core 30.2 regtest, electrs 0.11.0, esplora, `rgb-proxy-server` 0.3.0, RGB NIA asset `DUSD` (stand-in for USD₮, precision 2) |
-| Lightning RGB node | `rgb-lightning-node` at commit `d4762ac` (Docker, REST); Tether **WDK** modules `@utexo/wdk-rgb-lightning` `0.1.0-beta.15` + `@utexo/wdk-wallet-rgb` as the per-member wallet (under evaluation) |
+| Lightning RGB node and wallets | `rgb-lightning-node` at commit `d4762ac` (Docker, REST) as every member's Lightning node; Tether **WDK** `@utexo/wdk-wallet-rgb` `2.0.3` (Node 22) as the operator's on-chain treasury for `DUSD` issuance and on-ramp |
 | Local AI | Tether **QVAC** `@qvac/sdk` ~0.21.0: OCR (Latin) + Qwen3 1.7B Instruct Q4 (Qwen3 0.6B as fast fallback) |
-| Backend | TypeScript, Node ≥ 22.17, Fastify (agent + relay), SQLite append-only log, zod |
+| Backend | TypeScript, Node 22.x (`wdk-wallet-rgb` does not compile on Node 24), Fastify (agent + relay), SQLite append-only log, zod |
 | Frontend | React 19, Vite, Tailwind 4 |
 | Tooling | pnpm workspaces, vitest + fast-check, ESLint, Prettier, Claude Code |
 

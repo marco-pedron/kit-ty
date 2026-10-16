@@ -8,7 +8,7 @@
 - **P1**: rafforza le risposte alle critiche (backup, checkpoint, test anti-injection). Si fa dopo `demo-v1`.
 - **P2**: extra (correzione di `/signmessage` in un fork di RLN, LSP e canali virtuali). Solo con tempo avanzato, con ritorno all'ultimo tag se la finestra scade.
 
-**Ordine dei tagli se siamo in ritardo** (dal primo da tagliare): ripristino del backup in demo (resta la slide) → confronto checkpoint tra telefoni (resta la verifica della catena) → contestazione in UI (Charlie semplicemente non paga e va in insolvenza) → motore `wdk` (si torna a `rln-rest`, già verificato) → Lightning (modalità `onchain`, SPEC §10.4).
+**Ordine dei tagli se siamo in ritardo** (dal primo da tagliare): ripristino del backup in demo (resta la slide) → confronto checkpoint tra telefoni (resta la verifica della catena) → contestazione in UI (Charlie semplicemente non paga e va in insolvenza) → Lightning (modalità `onchain`, SPEC §10.4).
 
 ## 2. Squadra e proprietà
 
@@ -75,12 +75,12 @@ La **macchina della demo** è quella con più RAM. Da sabato sera tutte le prove
 ### Stream B
 | ID | Pri | Onda | Task | Fatto quando |
 |---|---|---|---|---|
-| B1 | P0 | ★1 | Infra nel nuovo repo: bitcoind, electrs, proxy RGB e server VSS (dallo spike 2), più i 4 nodi RLN come profilo opzionale per il motore `rln-rest`; porte su `127.0.0.1`; script `infra:*`; `.env.example` | `pnpm infra:reset` porta su lo stack; memoria misurata e scritta nello stato |
-| B2 | P0 | ★1 | Seed idempotente: un seed BIP-39 per membro (gitignored), wallet WDK, fondi BTC, emissione DUSD con `wdk-wallet-rgb` su Dave, on-ramp 100.00 a viaggiatore, canali da 1,000,000 sat (viaggio 50.00, liquidità 30.00); `pnpm demo:reset` | due esecuzioni di fila senza errori; canali usabili; saldi attesi stampati |
+| B1 | P0 | ★1 | Infra nel nuovo repo: bitcoind, electrs, proxy RGB e i 4 nodi RLN (alice, bob, charlie, dave); porte su `127.0.0.1`; script `infra:*`; `.env.example` | `pnpm infra:reset` porta su lo stack; memoria misurata e scritta nello stato |
+| B2 | P0 | ★1 | Seed idempotente: un nodo RLN per membro (mnemoniche gitignored), fondi BTC, emissione DUSD e on-ramp 100.00 a viaggiatore con `wdk-wallet-rgb` su Dave, canali da 1,000,000 sat (viaggio 50.00, liquidità 30.00); `pnpm demo:reset` | due esecuzioni di fila senza errori; canali usabili; saldi attesi stampati |
 | B3 | P0 | ★2 | `Wallet` reale (SPEC §14.2) con il motore scelto al gate 2, e `LightningRail` | test di integrazione: Alice crea invoice, Bob paga, prova verificata |
-| B4 | P0 | ★1 | `crypto.ts`: verifica delle firme in TypeScript puro nel formato del motore scelto (firma del nodo con `wdk`; ed25519 + invoice di legame con `rln-rest`), SPEC §9.1 | firma valida accettata, alterata rifiutata, firma di un altro nodo rifiutata |
+| B4 | P0 | ★1 | `crypto.ts`: verifica delle firme ed25519 in TypeScript puro + invoice di legame, SPEC §9.1 | firma valida accettata, alterata rifiutata, firma di un'altra chiave rifiutata, invoice di legame di un altro nodo rifiutato |
 | B5 | P1 | ★3 | `OnchainRail` (dal rail del vecchio progetto) per pagare membri esclusi, o come modalità `onchain` | pagamento on-chain con prova `txid` (diventa P0 se il gate sceglie `onchain`) |
-| B6 | P0 | ★3 | Backup: `backupNow` dopo ogni cambiamento di stato (VSS con `wdk`; lock-backup-unlock sul relay con `rln-rest`). Demo del ripristino `pnpm demo:lose-phone bob` = P1 | il backup parte da solo; dopo il ripristino il saldo di Bob è identico e un nuovo pagamento funziona |
+| B6 | P0 | ★3 | Backup: `backupNow` dopo ogni cambiamento di stato: lock → backup → unlock, blob cifrato sul relay. Demo del ripristino `pnpm demo:lose-phone bob` = P1 | il backup parte da solo; dopo il ripristino il saldo di Bob è identico e un nuovo pagamento funziona |
 | B9 | P0 | ★3 | `Wallet.openLiquidity` e loop dell'agente di Dave che esegue `liquidityPlan` (SPEC §10.5) | con L piccola apposta, un rimborso grande fa aprire un canale di liquidità prima del pagamento |
 | B7 | P0 | ★3 | `closeChannelsWith` per l'esclusione; mining automatico su regtest; link esplora | chiusura cooperativa con Charlie confermata e DUSD visibili sul suo nodo |
 | B8 | P0 | ★3 | `pnpm e2e:demo`: la demo senza UI, tramite l'API dell'agente, con asserzioni sui numeri di SPEC §16 | verde da `demo:reset`; si lancia prima di ogni merge rischioso |
@@ -122,7 +122,7 @@ La **macchina della demo** è quella con più RAM. Da sabato sera tutte le prove
 | Checkpoint | Esito | Note e tagli |
 |---|---|---|
 | Gate 1 (anticipato, ven 10:50) | ✅ spike verde | modalità rail: **`ln-2ch`** |
-| Gate 2 (ven, fine spike WDK) | | motore wallet: `wdk` / `rln-rest`; firma: ; backup: |
+| Gate 2 (ven, fine spike WDK) | ✅ opzione A | motore wallet: **`rln-rest`** (RLN `d4762ac`, `ln-2ch`) + `@utexo/wdk-wallet-rgb` solo per emissione e on-ramp dei DUSD di Dave (misto, Node 22); firma: **ed25519 + invoice di legame**; backup: **lock → backup → unlock sul relay** |
 | I1 ven 20:30 | | |
 | I2 sab 13:00 | | |
 | I3 sab 19:00 | | |
