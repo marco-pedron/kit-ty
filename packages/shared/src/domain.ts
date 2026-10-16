@@ -14,10 +14,17 @@ import { CurrencyCodeSchema, minorString, positiveMinorString } from './money.js
 
 // ---------- AI (SPEC §11) ----------
 
-// Amounts in minor units of the receipt currency (VND exponent 0, EUR/USD cents).
-// `quantity` is a whole number: receipts end up in signed events, whose canonical JSON
-// accepts integers only. A fractional quantity from the model fails this schema and takes
-// the normal path (retry with the error, then the pre-filled manual form), never a crash.
+/**
+ * One receipt line. Amounts in minor units of the receipt currency (VND exponent 0, EUR/USD
+ * cents).
+ *
+ * `quantity` is a whole number: receipts end up in signed events, whose canonical JSON accepts
+ * integers only. Rule for items sold by weight or volume (e.g. "0.73 kg"): `quantity = 1`, the
+ * measure goes in the label ("Bananas (0.73 kg)"), `unitPrice = total` of the line. The AI
+ * prompt (task A4) states this rule; a fractional quantity from the model fails this schema
+ * and takes the normal path (retry with the error, then the pre-filled manual form), never a
+ * crash. The split always uses the line `total`, never `quantity`.
+ */
 export const ReceiptItemSchema = z.object({
   label: z.string().min(1),
   quantity: z.number().int().positive(),
@@ -26,6 +33,7 @@ export const ReceiptItemSchema = z.object({
 });
 export type ReceiptItem = z.output<typeof ReceiptItemSchema>;
 
+/** A receipt as extracted by the AI and corrected by the payer (SPEC §11). */
 export const ReceiptSchema = z.object({
   merchant: z.string(),
   date: z.iso.date(),

@@ -157,7 +157,11 @@ export const MeViewSchema = z.object({
   autoPaidTodayCents: minorString,
   /** Lines where I am the debtor (Da approvare), every state, newest first. */
   debts: z.array(LineViewSchema),
-  /** Lines owed to me, every state, newest first. */
+  /**
+   * Lines another member owes me, symmetric to `debts`, every state (due, paid, guaranteed,
+   * overdue, voided…), newest first. `debtor` says who owes it; `paidBy` and `proof` say how it
+   * was settled, e.g. "Reimbursed 6.59: 3.09 from bob, 3.50 guaranteed by the operator".
+   */
   credits: z.array(LineViewSchema),
 });
 export type MeView = z.output<typeof MeViewSchema>;
@@ -282,29 +286,51 @@ export const RateViewSchema = z.object({
 });
 export type RateView = z.output<typeof RateViewSchema>;
 
-export const TripViewSchema = z.object({
-  as: ActorIdSchema,
-  role: RoleSchema,
-  /** KITTY_FAKES=1: the UI shows a banner on every screen. */
-  fakes: z.boolean(),
-  /** Server clock, so countdowns do not depend on the browser clock. */
-  serverNow: z.iso.datetime(),
-  /** null before TRIP_CREATED. */
-  trip: TripInfoSchema.nullable(),
-  rate: RateViewSchema.nullable(),
-  members: z.array(MemberViewSchema),
-  /** The traveler's own view; null for dave. */
-  me: MeViewSchema.nullable(),
-  /** dave's screens; null for travelers. */
-  coordinator: CoordinatorViewSchema.nullable(),
-  expenses: z.array(ExpenseViewSchema),
-  activity: z.array(ActivityItemSchema),
-  operations: z.array(OperationViewSchema),
-  ai: AiStatusSchema,
-  ledger: LedgerHealthSchema,
-  /** Esplora REST base, for `/tx/<txid>` links. */
-  explorerBaseUrl: z.string(),
-});
+export const TripViewSchema = z
+  .object({
+    as: ActorIdSchema,
+    role: RoleSchema,
+    /** KITTY_FAKES=1: the UI shows a banner on every screen. */
+    fakes: z.boolean(),
+    /** Server clock, so countdowns do not depend on the browser clock. */
+    serverNow: z.iso.datetime(),
+    /** null before TRIP_CREATED. */
+    trip: TripInfoSchema.nullable(),
+    rate: RateViewSchema.nullable(),
+    members: z.array(MemberViewSchema),
+    /** The traveler's own view; null for dave. */
+    me: MeViewSchema.nullable(),
+    /** dave's screens; null for travelers. */
+    coordinator: CoordinatorViewSchema.nullable(),
+    expenses: z.array(ExpenseViewSchema),
+    activity: z.array(ActivityItemSchema),
+    operations: z.array(OperationViewSchema),
+    ai: AiStatusSchema,
+    ledger: LedgerHealthSchema,
+    /** Esplora REST base, for `/tx/<txid>` links. */
+    explorerBaseUrl: z.string(),
+  })
+  // Privacy (SPEC §1): operator data (liquidity margins, guarantee, credits) is dave's only,
+  // and a traveler's own balances never reach dave's screens.
+  .superRefine((v, ctx) => {
+    const traveler = v.as !== 'dave';
+    if (v.role !== (traveler ? 'traveler' : 'coordinator'))
+      ctx.addIssue({ code: 'custom', path: ['role'], message: 'role does not match as' });
+    if (traveler && v.coordinator !== null)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['coordinator'],
+        message: 'travelers never get the coordinator view',
+      });
+    if (traveler && v.me?.memberId !== v.as)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['me'],
+        message: 'a traveler gets only their own view',
+      });
+    if (!traveler && v.me !== null)
+      ctx.addIssue({ code: 'custom', path: ['me'], message: 'dave has no traveler view' });
+  });
 export type TripView = z.output<typeof TripViewSchema>;
 
 // ---------- proof panel (SPEC §10.2) ----------
