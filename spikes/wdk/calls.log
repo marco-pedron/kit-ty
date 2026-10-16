@@ -321,3 +321,19 @@
 [2026-10-16T14:16:13.332Z] Q10-blocks-to-bob-dusd 14
 [2026-10-16T14:16:13.335Z] dave-channels-end [{"peer":"026dd530","asset":"2959/5041"}]
 [2026-10-16T14:16:13.336Z] STEP "done"
+[2026-10-16T14:20:56.613Z] STEP "open"
+[2026-10-16T14:20:58.475Z] bob-vssStatus {"configured":true,"url":"http://127.0.0.1:8081/vss","allowHttp":true,"lastBackupVersion":null}
+[2026-10-16T14:20:58.896Z] STEP "fund+issue"
+[2026-10-16T14:21:10.688Z] dave-dusd 25000
+[2026-10-16T14:21:10.689Z] STEP "channel dave->bob"
+[2026-10-16T14:21:31.501Z] pay-before-backup {"ms":2415,"status":"Succeeded","sendStatus":"Pending"}
+[2026-10-16T14:21:31.586Z] bob-before {"chans":[{"id":"b8990e3b9bfd62b7d19e02fe106adb2e48cddcbbcbb9bca07f8664f11461803f","asset":"4900/3100","sat":197000}],"dusd":{"settled":0,"future":0,"spendable":0,"offchain_outbound":4900,"offchain_inbound":3100}}
+[2026-10-16T14:21:31.587Z] STEP "vssBackup"
+[2026-10-16T14:21:31.638Z] vssBackup-1 {"v1":{"version":3},"ms":51}
+[2026-10-16T14:21:34.729Z] pay-after-backup {"ms":2985,"status":"Succeeded","sendStatus":"Pending"}
+[2026-10-16T14:21:34.795Z] vssBackup-2 {"v2":{"version":4},"ms":65}
+[2026-10-16T14:21:34.796Z] STEP "lose phone"
+[2026-10-16T14:21:37.826Z] STEP "restore"
+[2026-10-16T14:21:37.896Z] clearVssFence {"error":"Rln(NotInitialized): Wallet has not been initialized (hint: call init)"}
+[2026-10-16T14:31:29.928Z] init "ok"
+[2026-10-16T14:31:29.974Z] clearVssFence {"ok":true}
