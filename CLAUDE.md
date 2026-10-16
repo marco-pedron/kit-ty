@@ -7,8 +7,9 @@ Progetto **kit+ty**: cassa distribuita per viaggi di gruppo, con canali Lightnin
 - Task, priorità, proprietà delle cartelle, calendario: @docs/PLAN.md
 - Esito degli spike: `docs/spike-lightning.md` (RLN via REST) e `docs/spike-wdk.md` (moduli WDK). Il motore scelto è nel registro decisioni di SPEC §20. Leggili prima di scrivere codice che parla con un nodo.
 - Riferimenti API (leggili prima di scrivere codice di integrazione, mai a memoria):
-  - Wallet WDK (motore `wdk`): `docs/vendor/wdk-rgb-lightning.md` e `docs/vendor/wdk-wallet-rgb.md` (scritti dallo spike 2) e i `.d.ts` dei pacchetti. Versioni **esatte**: `@utexo/wdk-rgb-lightning` `0.1.0-beta.15`, `@utexo/rgb-lightning-node-nodejs` `0.1.0-beta.11`; se si installa un'altra versione, fermati e avvisa.
-  - rgb-lightning-node REST (motore `rln-rest`): `docs/vendor/rln-openapi.yaml`, tramite il client tipizzato in `packages/rln-client`.
+  - Nodi Lightning, rgb-lightning-node REST (motore `rln-rest`, scelto al gate 2): `docs/vendor/rln-openapi.yaml`, tramite il client tipizzato in `packages/rln-client`.
+  - Tesoreria WDK di dave (emissione e on-ramp dei DUSD): `docs/vendor/wdk-wallet-rgb.md` (scritto dallo spike 2) e i `.d.ts` del pacchetto. Versione **esatta**: `@utexo/wdk-wallet-rgb` `2.0.3`, su Node 22; se si installa un'altra versione, fermati e avvisa.
+  - `@utexo/wdk-rgb-lightning` e `@utexo/rgb-lightning-node-nodejs`: non usati in demo, vedi SPEC §20.
   - QVAC SDK: `docs/vendor/QVAC.md` (linea v0.21). È enorme: cercaci dentro con grep la sezione che serve, non leggerlo tutto. `@qvac/sdk` fissato a `~0.21.0`; se si installa un'altra versione, fermati e avvisa.
 - Codice del vecchio progetto: `_legacy/`. Si **copia e adatta**, non si importa mai da lì. La cartella viene cancellata domenica.
 
