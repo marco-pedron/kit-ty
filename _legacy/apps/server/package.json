@@ -1,0 +1,28 @@
+{
+  "name": "@settleup/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "ai:download": "tsx scripts/ai-download.ts",
+    "ai:smoke": "tsx scripts/ai-smoke.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "rgb:seed": "tsx scripts/rgb-seed.ts",
+    "rgb:e2e": "tsx scripts/rgb-e2e.ts"
+  },
+  "dependencies": {
+    "@qvac/sdk": "~0.21.0",
+    "@settleup/ledger": "workspace:*",
+    "@settleup/rgb-client": "workspace:*",
+    "@settleup/shared": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.12.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "tsx": "^4.23.15"
+  }
+}
