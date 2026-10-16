@@ -202,7 +202,7 @@ StoredEvent (scritto dal relay)
 | `TRIP_CLOSED` | Dave | `summary` |
 
 ### 9.3 Validazione
-Le stesse regole, in una funzione pura `validateEvent(stored, trip)` del ledger, girano **sia sul relay** (che rifiuta l'evento) **sia in ogni agente** (che non si fida del relay):
+Le stesse regole, in una funzione pura `validateEvent(stored, trip, verify)` del ledger (con il `SignatureVerifier` iniettato, così il ledger resta puro e testabile senza B), girano **sia sul relay** (che rifiuta l'evento) **sia in ogni agente** (che non si fida del relay):
 - firma valida per `author`; autore ammesso al viaggio (tranne `TRIP_CREATED` e `MEMBER_JOINED`); i tipi "Dave" solo da Dave;
 - `nonce` mai visto in quel viaggio;
 - `EXPENSE_SUBMITTED`: totale = righe + tasse + mancia (nella valuta dello scontrino); `Σ lines.cents + quota del pagatore = totalUsdCents`; i debitori sono membri attivi (non esclusi); `fingerprint` non duplicato; per ogni riga, l'invoice è decodificabile, intestato al pagatore, per l'asset del viaggio e per l'importo della riga;
