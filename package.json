@@ -12,7 +12,8 @@
     "test": "vitest run",
     "format": "prettier --write .",
     "dev": "pnpm -r --parallel --filter './apps/*' dev",
-    "rln:gen": "pnpm --filter @kitty/rln-client gen"
+    "rln:gen": "pnpm --filter @kitty/rln-client gen",
+    "dev:fakes": "KITTY_FAKES=1 pnpm dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
