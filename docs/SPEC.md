@@ -22,7 +22,7 @@ Non è contante spendibile sul posto: il ristorante in Vietnam si paga comunque 
 
 *Agentic Dollars on Bitcoin*, BLOX Torino, 17-18 ottobre 2026. Organizzatore RGB Protocol Association; sponsor Tether (WDK, QVAC) e Utexo; giuria Tether, KaleidoSwap, Utexo. **Submit domenica alle 13:00, pitch alle 16:00.**
 
-RGB e QVAC sono obbligatori; WDK è un bonus. Cinque criteri con lo stesso peso, voto 1-10. Ecco come li colpiamo:
+RGB e QVAC sono obbligatori; WDK dà un bonus, pieno se l'integrazione è "ben fatta e centrale": per questo in kit+ty WDK è il wallet di ogni membro (§14.0). Cinque criteri con lo stesso peso, voto 1-10. Ecco come li colpiamo:
 
 | Criterio | Come lo colpisce kit+ty |
 |---|---|
@@ -47,7 +47,7 @@ Oggi le spese comuni finiscono in due modi sbagliati: la **busta di contanti** d
 | Concetto | Cos'è |
 |---|---|
 | **Canale di viaggio** | Canale Lightning RGB aperto **dal viaggiatore** verso il nodo dell'operatore, con D dollari digitali suoi. È il suo budget impegnato per il viaggio. Solo lui può spenderlo, e può uscire chiudendo il canale. |
-| **Canale di liquidità** | Canale aperto **dall'operatore** verso il viaggiatore, con L dollari dell'operatore. Serve al viaggiatore per **ricevere** i rimborsi. I fondi restano dell'operatore finché non vengono instradati. [VERIFICA: due canali tra la stessa coppia di nodi] |
+| **Canale di liquidità** | Canale aperto **dall'operatore** verso il viaggiatore, con L dollari dell'operatore. Serve al viaggiatore per **ricevere** i rimborsi. I fondi restano dell'operatore finché non vengono instradati. (Due canali per coppia: verificato nello spike.) |
 | **Cassa distribuita** | La somma dei saldi dei viaggiatori nei loro canali. Nessuno la detiene e nessuno ne vede il totale: ognuno vede solo il proprio saldo. **Non si chiama "cassa comune" nel pitch.** |
 | **DUSD** | Asset NIA demo, precisione 2 (1 centesimo = 1 unità), al posto di USDT. Emesso nel seed dal nodo dell'operatore, che lo "vende" ai viaggiatori alla prenotazione (simulazione dell'on-ramp). |
 | **Agente** | Il software che agisce per un membro: ha accesso **solo** al nodo e alla chiave di quel membro, verifica il registro e paga secondo la policy del membro (§8). |
@@ -108,7 +108,7 @@ Oggi le spese comuni finiscono in due modi sbagliati: la **busta di contanti** d
 ### 6.7 Insolvenza, copertura, esclusione
 Una riga dovuta e non pagata oltre la scadenza diventa **scaduta** e compare tra le insolvenze di Dave. Dave ha due azioni, che in UI sono un unico bottone "Copri ed escludi":
 1. **Copertura (`GUARANTEE_PAID`)**: il nodo di Dave paga **lo stesso invoice** che il debitore avrebbe dovuto pagare, con la propria liquidità. La prova è identica (preimage). Il creditore è rimborsato; nasce un credito dell'operatore verso il debitore, mostrato nella vista di Dave.
-2. **Esclusione (`MEMBER_EXCLUDED`)**: Dave chiude in modo cooperativo i due canali con il membro [VERIFICA: chiusura cooperativa di un canale RGB e dove finiscono i DUSD]. Da quel momento:
+2. **Esclusione (`MEMBER_EXCLUDED`)**: Dave chiude in modo cooperativo i due canali con il membro. I DUSD tornano al membro on-chain con uno sweep circa 6 blocchi dopo la conferma della chiusura, visibili dopo `/refreshtransfers` (in demo: budget di 12 blocchi minati). Da quel momento:
    - il membro non può essere incluso in nuove spese (validazione);
    - le sue righe aperte diventano subito scadute, e Dave le copre fino al tetto G;
    - ciò che gli altri devono a lui viene pagato con il rail on-chain (§10.3), perché non ha più canali.
@@ -172,7 +172,11 @@ StoredEvent (scritto dal relay)
 ```
 
 - **canonical** = JSON canonico RFC 8785 (JCS); importi bigint serializzati come stringhe decimali.
-- **Identità = chiave pubblica del nodo RLN** del membro (da `/nodeinfo`); la firma usa `/signmessage` del nodo [VERIFICA: formato della firma e verifica in TypeScript]. Fallback [D]: chiave applicativa ed25519 per membro, collegata al nodo da `MEMBER_JOINED`, se la verifica di `/signmessage` non funziona entro un'ora di tentativi.
+- **Chi firma dipende dal motore del wallet (§14.0):**
+  - **motore `wdk` (preferito):** firma con l'identità del nodo Lightning, tramite la funzione di firma dei messaggi di `@utexo/wdk-rgb-lightning` (firmatore VLS in-process). L'`author` è il `nodePubkey`: identità della persona = identità del suo nodo, senza chiavi in più. [VERIFICA spike 2: messaggi diversi danno firme diverse e la verifica rifiuta una firma alterata.]
+  - **motore `rln-rest` (fallback, già verificato):** `/signmessage` di RLN (`d4762ac`) firma sempre la stringa vuota, quindi **non va mai usato**. Si usa una chiave ed25519 dell'app (`appPubkey`) come `author`, legata al nodo da un invoice: in `MEMBER_JOINED` il membro include un invoice creato dal **proprio nodo** con `description` = `kitty-bind:<sha256(appPubkey)>`; il `payee_pubkey` dell'invoice diventa il `nodePubkey` del membro, e Dave verifica il legame prima di `MEMBER_ADMITTED`.
+  - In entrambi i casi ogni controllo "invoice intestato al creditore" confronta il `payee_pubkey` con il `nodePubkey` del membro.
+  - Extra (P2): correzione di `/signmessage` in un fork di RLN, con link agli organizzatori e proposta upstream.
 - `nonce` + `tripId` + riferimenti espliciti (hash dell'evento della spesa, importi) rendono ogni firma inutilizzabile in un altro contesto (anti-replay).
 
 ### 9.2 Tipi di evento
@@ -181,7 +185,7 @@ StoredEvent (scritto dal relay)
 |---|---|---|
 | `TRIP_CREATED` | Dave | `name`, `assetId`, `params` (§15), `coordinatorPubkey` |
 | `RATE_SET` | Dave | `asOf`, `source`, `rates` (unità per 1 USD, stringhe) |
-| `MEMBER_JOINED` | membro | `displayName`, `memberId`, `policy` |
+| `MEMBER_JOINED` | membro | `displayName`, `memberId`, `appPubkey`, `nodePubkey`, `bindInvoice`, `policy` |
 | `MEMBER_ADMITTED` | Dave | `memberPubkey` |
 | `POLICY_UPDATED` | membro | `policy` |
 | `CHANNELS_READY` | Dave | `memberPubkey`, `tripChannelId`, `liquidityChannelId` |
@@ -220,9 +224,11 @@ Ogni telefono mostra: numero di eventi, firme valide su totali, catena valida, h
 
 ### 10.1 Rail Lightning (principale)
 - Il creditore crea l'invoice con `/lninvoice` (`asset_id`, `asset_amount`, `amt_msat` ≥ `rgb_htlc_min_msat`, `description`, `expiry_sec`).
-- Il debitore paga con `/sendpayment` e attende con `/getpayment` lo stato `Succeeded` o `Failed`; la `preimage` è nel campo `Payment.preimage` [VERIFICA: presente sul lato del pagatore].
-- Instradamento: canale di viaggio del debitore → Dave → canale di liquidità del creditore. Commissioni di instradamento 0 nella demo.
-- [VERIFICA] Ogni HTLC RGB porta con sé almeno `rgb_htlc_min_msat` di BTC (nell'esempio dell'API 3.000 sat), che si spostano dal pagatore al ricevente insieme ai DUSD. Non sono persi, ma vanno dimensionati nei canali e citati come limite.
+- Il debitore paga con `/sendpayment` e interroga `/getpayment` ogni 250 ms (timeout 30 s) fino a `Succeeded` o `Failed`; la `preimage` è in `Payment.preimage`, anche lato pagatore. Latenza misurata: 3,4 s, nessun blocco.
+- Instradamento: canale di viaggio del debitore → Dave → canale di liquidità del creditore. Commissioni di instradamento 0 nella demo. Canali **pubblici** (la ricezione su canale privato non è verificata).
+- **I sat che viaggiano con i DUSD.** In RGB su Lightning ogni pagamento in sospeso (HTLC) deve corrispondere a un output Bitcoin vero nella transazione di impegno del canale, perché è lì che RGB "appoggia" i DUSD se il canale viene chiuso in quel momento. Un output sotto la soglia di polvere non esiste on-chain, quindi RLN impone un minimo: `rgb_htlc_min_msat` = 3,000,000 msat = **3000 sat per pagamento**. Non sono commissioni né gas: passano dal pagatore al ricevente insieme ai DUSD (misurato nello spike) e seguono gli stessi flussi. Chi paga deve però avere BTC nel canale: un canale da C sat regge circa `C / 3000` pagamenti in uscita prima di dover ricevere qualcosa.
+- **Pagamenti in volo.** Il limite di 483 HTLC del protocollo è sul **numero**. Quello osservato nello spike è sul **valore**: LDK accetta in volo al massimo una percentuale della capacità del canale (10% per default; 10,000,000 msat su 100,000 sat, misurato). Con 3000 sat a HTLC fanno 3 pagamenti in volo. Dipende dalla capacità che scegliamo: con **1,000,000 sat** diventano 33 in volo e circa 330 pagamenti in uscita. In ogni caso l'agente mette in coda i pagamenti di uno stesso membro.
+- **Invoice scaduto:** `/sendpayment` risponde HTTP 200 con `status: "Failed"`. L'agente controlla `timestamp + expiry_sec` **prima** di pagare; se scaduto, il creditore pubblica `INVOICE_REISSUED`.
 
 ### 10.2 Prova di pagamento
 `{ rail: "ln", paymentHash, preimage, cents, payeePubkey }`. Verificabile da chiunque abbia l'invoice: `sha256(preimage) == paymentHash` e l'invoice è firmato dal nodo del creditore. Nel pannello Prova: "Verificato ✓" con i tre controlli esplicitati.
@@ -232,7 +238,7 @@ Il rail RGB on-chain già funzionante nel vecchio progetto (`/rgbinvoice` del ri
 - per pagare un membro escluso (che non ha più canali);
 - in **modalità on-chain** completa se lo spike Lightning fallisce (§19).
 
-### 10.4 Modalità di funzionamento [D, decisa al gate dello spike]
+### 10.4 Modalità di funzionamento [D: **`ln-2ch`**, scelta al gate del 16/10]
 | Modalità | Quando | Cosa cambia |
 |---|---|---|
 | `ln-2ch` (preferita) | Due canali tra la stessa coppia funzionano | Come descritto sopra. |
@@ -240,6 +246,22 @@ Il rail RGB on-chain già funzionante nel vecchio progetto (`/rgbinvoice` del ri
 | `onchain` | Il routing RGB Lightning non funziona entro il gate | Niente canali: ogni riga si paga con un trasferimento RGB on-chain diretto debitore → creditore. Resta tutto il resto (AI, registro, policy, garanzia, esclusione come blocco nel viaggio). Lightning va in roadmap. |
 
 Il codice usa un'interfaccia `Rail` unica, così la modalità è una variabile di configurazione (`KITTY_RAIL_MODE`).
+
+**Perché due canali e non uno con i fondi di entrambi.** Il protocollo Lightning prevede i canali a doppio finanziamento (entrambe le parti mettono fondi nella transazione di apertura), ma l'API di RLN non li espone: `/openchannel` accetta solo i fondi di chi apre, più un eventuale `push`, che però è un regalo all'altra parte. Per RGB servirebbe anche un'allocazione dell'asset da entrambi i lati nella stessa transazione. Fare un solo canale significherebbe quindi o un regalo, o un pagamento preventivo a Dave (custodia temporanea, la modalità `ln-lsp`). Due canali danno lo stesso risultato senza fiducia.
+
+### 10.5 Quanta liquidità deve mettere Dave [D]
+Dal punto di vista di un membro m, i suoi due canali con Dave si comportano come un unico serbatoio. Quanto m può **ricevere** in un dato momento è il saldo di Dave sui canali di m:
+
+`inbound(m, t) = L(m) + inviato(m, t) − ricevuto(m, t)`
+
+Ogni pagamento che m fa aumenta la parte di Dave sul suo canale di viaggio, quindi gli restituisce capacità di ricevere. Il fabbisogno è dunque **il credito netto di picco** di m: `L(m) ≥ max_t (ricevuto(m, t) − inviato(m, t))`. Le coperture della garanzia contano come "ricevuto".
+
+Questo valore è **deterministico e noto in anticipo**, perché il ledger conosce ogni spesa prima che venga pagata (tra l'invio e il pagamento c'è il silenzio-assenso). Regola dell'agente di Dave:
+1. `margine(m) = inbound(m) − daRicevere(m)`, dove `daRicevere(m)` è la somma delle righe aperte (non pagate, non annullate) a favore di m.
+2. Se `margine(m) < soglia`, Dave apre **subito** un nuovo canale di liquidità verso m, per `daRicevere(m) − margine(m) + soglia`. In produzione l'apertura richiede circa un'ora (6 conferme), meno delle 12 ore di silenzio-assenso; su regtest è immediata.
+3. La funzione `liquidityPlan(trip)` sta nel ledger (funzione pura, testata); l'agente di Dave la esegue a ogni evento.
+
+L iniziale è solo il punto di partenza: un tetto deterministico e prudente è la spesa di gruppo più grande prevedibile moltiplicata per (n−1)/n; con i dati storici dell'operatore (spese comuni dei viaggi passati) si sceglie il percentile 90 del credito netto di picco per viaggiatore e si lascia il resto alla regola 2. Il capitale immobilizzato da Dave è Σ L(m) più le aperture successive, e torna tutto a lui alla chiusura dei canali. Nella demo L = 30.00 basta (Alice riceve 6.59).
 
 ## 11. AI locale (QVAC)
 
@@ -263,9 +285,9 @@ Regole [D]:
 **Il problema:** con RGB la mnemonica non basta a recuperare i fondi. Lo dice la stessa API di RLN (`/init`): *"a mnemonic alone is not sufficient to recover RGB state, which also requires client-side data"*. Senza lo stash, chi perde il telefono perde i DUSD.
 
 **La soluzione:**
-1. **Backup cifrato automatico** dopo ogni cambiamento di stato del nodo (apertura canale, pagamento inviato o ricevuto). Usa `/backup` di RLN (`backup_path`, `password`) [VERIFICA: se richiede il nodo bloccato, se include lo stato dei canali, dove scrive nel container].
-2. Il file cifrato viene caricato sul relay (`PUT /backups/:memberPubkey`), che non può leggerlo. In produzione: anche sul cloud personale dell'utente.
-3. **Ripristino:** nuovo dispositivo → mnemonica + password del backup → `/restore` → `/unlock` → l'agente riscarica il registro dal relay e verifica tutto.
+1. **Motore `wdk` (preferito): VSS.** `@utexo/wdk-rgb-lightning` copia lo stato dei canali LDK e i dati RGB, cifrati lato client, su un server VSS (Versioned Storage Service). L'agente chiama `vssBackup()` dopo ogni cambiamento di stato. Il server VSS gira in `infra/` accanto al relay e non può leggere i dati. Il ripristino avviene all'avvio di un nodo nuovo con lo **stesso seed BIP-39** e lo stesso namespace VSS; un "recinto" (fence) impedisce che due nodi scrivano insieme, e va sbloccato solo dopo aver fermato per sempre il vecchio. [VERIFICA spike 2: quale server VSS si può far girare in locale, se il backup richiede di fermare il nodo, se il ripristino riporta canali e DUSD.]
+2. **Motore `rln-rest` (fallback, verificato):** `/backup` funziona **solo a nodo bloccato**: `/lock` → `/backup` → `/unlock`, rimandato finché il nodo è inattivo da 10 s, con i pagamenti in coda nel frattempo (per Dave mai durante un pagamento). Il file (≈440 KB, include i canali LDK) finisce in un volume condiviso `/backups` e l'agente lo carica sul relay (`PUT /backups/:pubkey`), che non può leggerlo. Ripristino su un nodo **mai inizializzato**: `/restore` → `/unlock` (verificato: stessa pubkey, canali usabili, instrada pagamenti).
+3. In entrambi i casi, dopo il ripristino l'agente riscarica il registro dal relay e verifica tutto. **Il nodo vecchio non deve mai tornare online.**
 4. **Rischio specifico di Lightning:** ripristinare uno stato di canale **vecchio** e usarlo può essere punito come frode. Per questo il backup si aggiorna a ogni pagamento, e il ripristino usa sempre l'ultimo. Alternativa sicura, sempre disponibile: chiedere a Dave la chiusura cooperativa dei canali. Dave ha interesse a collaborare.
 5. **Telefono rubato:** il danno massimo è limitato da `autoPayLimitCents` e `dailyCapCents`; un'approvazione sopra limite richiede sblocco del dispositivo (roadmap: biometria). Il viaggiatore può chiedere a Dave di chiudere subito i canali.
 
@@ -295,29 +317,46 @@ Priorità: **P0** = nella demo; **P1** = se c'è tempo, altrimenti nelle slide; 
 | 16 | Dave pubblica uno stato vecchio del canale | Watchtower indipendente dall'operatore | | R |
 | 17 | Dave rifiuta di instradare | Il viaggiatore chiude il canale ed esce; rail on-chain diretto | rail | P1 |
 | 18 | Dave vede tutti i pagamenti (sorveglianza) | Ammesso; più hub e percorsi ciechi | | R |
+| 20 | Firma del nodo riusata per impersonare un membro (`/signmessage` firma sempre la stringa vuota) | `/signmessage` mai usato; firme ed25519 dell'app legate al nodo da un invoice | `shared/crypto`, `ledger/validate` | P0 |
 | 19 | Modello AI manomesso | Hash dei file GGUF verificato all'avvio | `agent/ai` | P1 |
 
 Frase per la giuria: **"Dave può essere fastidioso, ma non può rubare."**
 
 ## 14. Architettura
 
+### 14.0 Il wallet di ogni membro: WDK nativo [D, motore confermato dallo spike 2]
+Ogni membro ha **un solo seed BIP-39**, gestito da WDK, da cui nascono:
+- **`@utexo/wdk-rgb-lightning`**: il nodo RGB Lightning (LDK + rgb-lib) **dentro il processo** dell'agente, con canali, invoice, pagamenti, firma dei messaggi con l'identità del nodo e backup VSS. Gira su Node.js (macOS arm64/x64, Linux) e su mobile (Bare), quindi lo stesso codice porta al prodotto su telefono; `@utexo/rgb-sdk-rn` è la strada per React Native.
+- **`@utexo/wdk-wallet-rgb`**: il wallet RGB **on-chain** (rgb-lib): riceve i DUSD dell'on-ramp, finanzia l'apertura dei canali, riceve i fondi dopo una chiusura, e per Dave emette il DUSD (il modulo Lightning non emette asset). Usa una `dataDir` separata dal modulo Lightning.
+
+| Motore | Cosa è | Stato |
+|---|---|---|
+| `wdk` | moduli WDK di UTEXO in-process, un nodo per membro | **preferito**, da verificare con lo spike 2 (beta `0.1.0-beta.15`, modulo della comunità) |
+| `rln-rest` | `rgb-lightning-node` in Docker via REST (`d4762ac`) | verificato nello spike 1; fallback |
+
+L'interfaccia `Wallet` (§14.2) nasconde il motore: ledger, relay, flussi e UI non cambiano. Variabile `KITTY_WALLET_ENGINE`.
+
+Punti da chiudere nello spike 2 (`docs/prompts/02-spike-wdk.md`): più nodi nello stesso processo Node o un processo per membro; canali RGB tra due nodi `wdk`; versione della libreria nativa; firma dei messaggi corretta; server VSS locale; come seed, `dataDir` e i due moduli convivono senza conflitti sugli UTXO.
+
 ```
  apps/web (React+Vite, ?as=alice|bob|charlie|dave)      tre finestre a larghezza telefono
         │ HTTP, polling 1 s
         ▼
- apps/agent (Fastify :4100)  ── un'istanza Agent per membro, ognuna con SOLO il suo nodo e la sua chiave
+ apps/agent (Fastify :4100)  ── un'istanza Agent per membro, ognuna con SOLO il suo wallet e il suo seed
    ├─ ai/      QVAC in-process (caricato una volta, usato dall'agente di chi paga)
-   ├─ wallet/  Wallet per membro sopra RLN: firma, invoice, pagamento, saldi, chiusure, backup
+   ├─ wallet/  Wallet per membro: motore wdk (moduli WDK in-process) o rln-rest (RLN in Docker)
    ├─ rail/    LightningRail | OnchainRail (KITTY_RAIL_MODE)
    ├─ flows/   spesa, decisioni, loop dell'agente (seen, policy, pagamento, checkpoint), azioni di Dave
    └─ routes/  API per la UI
         │ HTTP + SSE                                   │ REST
         ▼                                              ▼
  apps/relay (Fastify :4000)                    docker compose regtest: bitcoind, electrs (+ REST esplora :3010),
-   SQLite append-only, verifica firme,         rgb-proxy-server :3000, 4× rgb-lightning-node
-   catena di hash, SSE, blob dei backup        alice :3001, bob :3002, charlie :3003, dave :3004
-                                               (porte API su 127.0.0.1; porte peer LN solo nella rete docker)
+   SQLite append-only, verifica firme,         rgb-proxy-server :3000, server VSS;
+   catena di hash, SSE                         solo con il motore rln-rest: 4× rgb-lightning-node (3001-3004)
+                                               (porte su 127.0.0.1)
 ```
+
+Se i nodi `wdk` non possono convivere nello stesso processo, ogni membro ha il proprio processo agente (porte 4101-4104) e l'AI gira solo nel processo di chi la usa; la UI non cambia.
 
 **Onestà sulla demo:** i quattro agenti girano nello stesso processo per non caricare quattro volte i modelli AI, ma ogni istanza riceve soltanto il client del proprio nodo; i quattro nodi girano su un portatile. In produzione l'agente e il nodo stanno sul telefono del viaggiatore.
 
@@ -344,14 +383,21 @@ kit-ty/
 ### 14.2 Interfacce (fissate nella sessione contratto)
 ```ts
 interface Wallet {                         // B — apps/agent/src/wallet
+  engine: 'wdk' | 'rln-rest'
   nodePubkey(): Promise<string>
-  sign(message: string): Promise<string>
+  authorPubkey(): Promise<string>                    // = nodePubkey con wdk; = appPubkey ed25519 con rln-rest
+  sign(message: string): Promise<string>             // firma nativa del nodo (wdk) o ed25519 (rln-rest), §9.1
+  bindInvoice(appPubkey: string): Promise<string | null>   // solo rln-rest: invoice di legame; null con wdk
   createInvoice(p: { cents: bigint; description: string; expirySec: number }): Promise<{ bolt11: string; paymentHash: string }>
   decodeInvoice(bolt11: string): Promise<DecodedInvoice>      // payeePubkey, paymentHash, assetId, cents, description, expiresAt
   pay(bolt11: string, opts?: { timeoutMs?: number }): Promise<PaymentProof>
   balances(): Promise<{ tripOutboundCents: bigint; inboundCents: bigint; onchainCents: bigint }>
+  openLiquidity(peerPubkey: string, cents: bigint): Promise<{ channelId: string }>   // solo Dave, §10.5
   closeChannelsWith(peerPubkey: string): Promise<{ txids: string[] }>   // solo Dave
-  backup(): Promise<Uint8Array>                                         // P1
+  backupNow(): Promise<{ version: string }>                             // VSS (wdk) o lock-backup-unlock (rln-rest)
+}
+interface SignatureVerifier {              // B — packages/shared/src/crypto.ts; usato da relay e ledger
+  verify(authorPubkey: string, message: string, signature: string): boolean
 }
 interface AiService {                      // A — apps/agent/src/ai
   status(): 'loading' | 'ready' | 'error'
@@ -390,14 +436,16 @@ Ogni richiesta porta il ruolo nel percorso (`/api/:as/...`). Importi come string
 | Parametro | Demo | Produzione (indicativo) |
 |---|---|---|
 | D, canale di viaggio | 50.00 DUSD (5000 unità) | scelto dal viaggiatore |
-| L, liquidità di Dave per viaggiatore | 30.00 DUSD | dimensionata dall'operatore |
+| L, liquidità iniziale di Dave per viaggiatore | 30.00 DUSD | percentile 90 storico, poi regola di §10.5 |
 | On-ramp nel seed | 100.00 DUSD a viaggiatore | acquisto alla prenotazione |
 | Emissione DUSD | 10,000.00 sul nodo di Dave | USDT di Tether |
 | `SILENT_ASSENT_SECONDS` | 20 | 12 ore |
 | `PAYMENT_DEADLINE_SECONDS` | 30 | 24 ore |
 | `INVOICE_EXPIRY_SECONDS` | 3600 | 48 ore |
 | G, garanzia per membro | 50.00 | scelta dall'operatore |
-| Capacità BTC dei canali | 100,000 sat [VERIFICA] | |
+| Capacità BTC dei canali | 1,000,000 sat (≈330 pagamenti in uscita, 33 in volo) | dimensionata dall'operatore |
+| Blocchi per aprire i canali | 6 (si minano in un colpo dopo tutte le aperture) | |
+| Blocchi per chiudere e vedere i DUSD | 1 + ~6 di sweep, poi `/refreshtransfers` (budget 12) | |
 | Tasso | 26,350 VND per 1 USD (`infra/rates.json`, valori plausibili, non di mercato) | fonte pubblica |
 
 **La cena:** 255,000 VND = 9.68 USD. Quote: Alice 3.09, Bob 3.09, Charlie 3.50 (pho Alice + Bob, birre Charlie, acqua in tre, mancia proporzionale; numeri già testati nel vecchio ledger).
@@ -426,9 +474,13 @@ Saldi attesi dopo il passo 7: Alice 50.00 nel canale di viaggio + 6.59 ricevuti;
 
 ## 18. Fuori scope e roadmap
 
-Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion, invio cifrato della foto, nodo su mobile, multisig. **Bonus WDK** (P2, massimo 3 ore e solo dopo `demo-v1`): derivare i wallet dei viaggiatori con `@tetherto/wdk` e provare `@utexo/wdk-rgb-lightning` contro lo stesso regtest.
+Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion, invio cifrato della foto, app mobile (il percorso è `@utexo/rgb-sdk-rn` o il modulo WDK su Bare), multisig, LSP e canali virtuali di UTEXO. **WDK non è più un extra:** è il wallet di ogni membro (§14.0), se lo spike 2 lo conferma.
 
-## 19. Domande aperte (le chiude lo spike)
+## 19. Domande dello spike (chiuse il 16/10)
+
+Risposte complete, con le richieste esatte che funzionano, in `docs/spike-lightning.md`. Esito: 1-5, 7, 9, 10 ✅; 6 ⚠️ (`/signmessage` inutilizzabile → ed25519); 8 ⚠️ (backup solo a nodo bloccato). Non verificati: ricezione su canale privato, aperture parallele dal nodo di Dave, chiusura forzata.
+
+Domande originali:
 
 1. Apertura di un canale RGB con DUSD tra viaggiatore e Dave su regtest: parametri che funzionano, conferme necessarie.
 2. Due canali tra la stessa coppia di nodi (uno per verso)?
@@ -441,7 +493,11 @@ Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion,
 9. `rgb_htlc_min_msat`, BTC spostati per pagamento, quanti pagamenti regge un canale da 100,000 sat.
 10. Latenza di un pagamento; comportamento con invoice scaduto.
 
-**Regola del gate (venerdì 13:30):** 1, 3, 4 e 5 verdi → modalità Lightning (`ln-2ch` se anche 2 è verde, altrimenti `ln-lsp`). Altrimenti modalità `onchain`, senza discussioni.
+### Spike 2: motore WDK (venerdì pomeriggio, `docs/prompts/02-spike-wdk.md`)
+Domande: installazione dei moduli e delle librerie native sulla macchina della demo; più nodi in un processo; canale RGB e pagamento instradato tra nodi `wdk` (e, se serve, tra `wdk` e `rln-rest`); preimage e `payee_pubkey`; firma e verifica dei messaggi; server VSS locale, backup e ripristino; convivenza di `wdk-wallet-rgb` e `wdk-rgb-lightning` con lo stesso seed; emissione DUSD con `wdk-wallet-rgb` e trasferimento al nodo Lightning.
+**Regola del gate 2:** canale + pagamento instradato + preimage tra nodi `wdk` verdi → motore `wdk`. Firma o VSS rossi da soli non bastano a scartarlo: si usano i fallback di §9.1 e §12. Altrimenti motore `rln-rest`, già verificato.
+
+**Regola del gate 1 (venerdì 13:30):** 1, 3, 4 e 5 verdi → modalità Lightning (`ln-2ch` se anche 2 è verde, altrimenti `ln-lsp`). Altrimenti modalità `onchain`, senza discussioni.
 
 ## 20. Registro decisioni
 
@@ -453,4 +509,10 @@ Non si costruisce: watchtower, più hub, splicing, relay P2P via messaggi onion,
 | 16/10 | Silenzio-assenso da `LINE_SEEN`, solo sotto i limiti della policy | Difesa dall'abuso e dal "l'AI ha pagato al posto mio" |
 | 16/10 | Backup cifrato automatico dello stash sul relay | Con RGB la mnemonica non basta |
 | 16/10 | Repo nuovo `kit-ty`; il codice utile del vecchio progetto si copia da `_legacy/` | Più veloce che ristrutturare |
-| | *(gate spike: modalità scelta)* | |
+| 16/10 | Gate: modalità **`ln-2ch`** (canale di viaggio + canale di liquidità, pubblici) | Spike: apertura, routing in 3,4 s senza blocchi, preimage e payee verificati |
+| 16/10 | Pagamenti serializzati per membro; controllo della scadenza dell'invoice prima di pagare | Limite di valore in volo; invoice scaduto = `Failed` con HTTP 200 |
+| 16/10 | WDK nativo come wallet di ogni membro: `wdk-rgb-lightning` (canali, firma, VSS) + `wdk-wallet-rgb` (on-chain, emissione); `rln-rest` come fallback | Richiesta del team: WDK e VSS nativi, non aggiunti dopo; bonus WDK centrale |
+| 16/10 | Firma degli eventi con l'identità del nodo (motore `wdk`); ed25519 + invoice di legame solo con `rln-rest` | `/signmessage` REST di RLN firma la stringa vuota |
+| 16/10 | Backup con VSS (motore `wdk`); lock → backup → unlock solo con `rln-rest` | VSS è il meccanismo nativo; `/backup` REST richiede il nodo bloccato |
+| 16/10 | Liquidità di Dave calcolata dal ledger (`liquidityPlan`) e aperta just-in-time | Il fabbisogno è deterministico: credito netto di picco più righe aperte |
+| 16/10 | Canali da 1,000,000 sat in demo | 3 pagamenti in volo e 32 in uscita con 100,000 sat erano un effetto della capacità, non del protocollo |
