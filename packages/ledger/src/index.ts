@@ -1,1 +1,51 @@
-export {};
+// @kitty/ledger: pure money logic and the rules of kit+ty. No I/O.
+export {
+  ExpenseAllocationSchema,
+  ExpenseDraftSchema,
+  ExpenseExtrasSchema,
+  ExpenseItemSchema,
+  ExpenseSchema,
+  LockedRateSchema,
+  RateTableSchema,
+  SettlementSchema,
+  ShareSchema,
+  type Expense,
+  type ExpenseAllocation,
+  type ExpenseDraft,
+  type ExpenseExtras,
+  type ExpenseItem,
+  type LockedRate,
+  type RateTable,
+  type Settlement,
+  type Share,
+} from '@kitty/shared';
+export { allocateByWeight, splitEqually, type Weighted } from './allocate.js';
+export { ASSET_PRECISION, assetUnitsToUsdCents, usdCentsToAssetUnits } from './asset.js';
+export { computeBalances, type Balances, type NetPosition } from './balances.js';
+export { LedgerError, type LedgerErrorCode } from './errors.js';
+export { allocateExpense, approveExpense, splitOriginal, validateDraft } from './expense.js';
+export { convertToUsdCents, lockRate, manualRate, parseRateTable } from './fx.js';
+export {
+  CURRENCY_EXPONENTS,
+  assertCurrency,
+  formatMoney,
+  isCurrency,
+  minorPerMajor,
+  type CurrencyCode,
+  type Money,
+} from './money.js';
+export { divRoundHalfUp, parseDecimal, type Rational } from './rational.js';
+export {
+  decideAutoPay,
+  deriveTrip,
+  lineKey,
+  liquidityPlan,
+  validateEvent,
+  type ExpenseRecord,
+  type LineRecord,
+  type LiquidityNeed,
+  type MemberState,
+  type TripState,
+  type ValidationDeps,
+  type ValidationResult,
+} from './kitty.js';
