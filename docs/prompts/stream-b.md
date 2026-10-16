@@ -6,7 +6,7 @@
 
 Sei sullo **stream B** di kit+ty. Scrivi solo in: `infra/` (tranne `infra/fixtures`), `packages/rln-client`, `packages/shared/src/crypto.ts`, `apps/agent/src/{wallet,rail}`, `spikes/` e gli script `demo:*` ed `e2e:*` nel `package.json` radice. Tutto il resto è in sola lettura; se ti serve un cambiamento in `packages/shared`, descrivilo e fermati.
 
-**Prima di tutto leggi `docs/spike-wdk.md` e `docs/spike-lightning.md`** e il registro decisioni di SPEC §20: dicono quale motore del wallet è stato scelto al gate 2 (`wdk` o `rln-rest`) e quali chiamate funzionano davvero. Per il motore `wdk` le API sono in `docs/vendor/wdk-rgb-lightning.md` e `docs/vendor/wdk-wallet-rgb.md`, per `rln-rest` in `docs/vendor/rln-openapi.yaml`. Non usare parametri diversi da quelli verificati senza dirlo.
+**Prima di tutto leggi `docs/spike-wdk.md` e `docs/spike-lightning.md`** e il registro decisioni di SPEC §20: dicono quali chiamate funzionano davvero. Il gate 2 ha scelto il motore `rln-rest` (SPEC §20) per i nodi Lightning, più `wdk-wallet-rgb` per la tesoreria di dave (emissione e on-ramp dei DUSD). Le API sono in `docs/vendor/rln-openapi.yaml` per i nodi e in `docs/vendor/wdk-wallet-rgb.md` per la tesoreria. Non usare parametri diversi da quelli verificati senza dirlo.
 
 Lavora sul task indicato sotto, seguendo `PLAN.md` §4 (stream B) per il criterio "fatto quando". Proponi il piano e aspetta l'approvazione.
 
