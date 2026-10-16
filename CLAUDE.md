@@ -5,9 +5,10 @@ Progetto **kit+ty**: cassa distribuita per viaggi di gruppo, con canali Lightnin
 ## Fonti di verità
 - Prodotto, regole, eventi, sicurezza, architettura: @docs/SPEC.md
 - Task, priorità, proprietà delle cartelle, calendario: @docs/PLAN.md
-- Esito dello spike Lightning (richieste RLN che funzionano davvero): `docs/spike-lightning.md`, quando esiste. Leggilo prima di scrivere codice che parla con RLN.
+- Esito degli spike: `docs/spike-lightning.md` (RLN via REST) e `docs/spike-wdk.md` (moduli WDK). Il motore scelto è nel registro decisioni di SPEC §20. Leggili prima di scrivere codice che parla con un nodo.
 - Riferimenti API (leggili prima di scrivere codice di integrazione, mai a memoria):
-  - rgb-lightning-node REST: `docs/vendor/rln-openapi.yaml`, tramite il client tipizzato in `packages/rln-client`.
+  - Wallet WDK (motore `wdk`): `docs/vendor/wdk-rgb-lightning.md` e `docs/vendor/wdk-wallet-rgb.md` (scritti dallo spike 2) e i `.d.ts` dei pacchetti. Versioni **esatte**: `@utexo/wdk-rgb-lightning` `0.1.0-beta.15`, `@utexo/rgb-lightning-node-nodejs` `0.1.0-beta.11`; se si installa un'altra versione, fermati e avvisa.
+  - rgb-lightning-node REST (motore `rln-rest`): `docs/vendor/rln-openapi.yaml`, tramite il client tipizzato in `packages/rln-client`.
   - QVAC SDK: `docs/vendor/QVAC.md` (linea v0.21). È enorme: cercaci dentro con grep la sezione che serve, non leggerlo tutto. `@qvac/sdk` fissato a `~0.21.0`; se si installa un'altra versione, fermati e avvisa.
 - Codice del vecchio progetto: `_legacy/`. Si **copia e adatta**, non si importa mai da lì. La cartella viene cancellata domenica.
 

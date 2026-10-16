@@ -23,10 +23,13 @@ Revolut funziona se tutti hanno Revolut. Il nostro gruppo è italiano, tedesco e
 Splitwise calcola e spera. Noi paghiamo, in secondi, tra persone senza un sistema di pagamento comune, con un agente che rispetta limiti fissati dall'utente e una garanzia dell'operatore se qualcuno sparisce. E senza custode.
 
 **"Dove gira il nodo di Bob?"**
-Nella demo su questo portatile, uno per persona. Nel prodotto, nell'app sul telefono: wallet RGB su `rgb-lib` con l'operatore come LSP, che apre e mantiene i canali. È la direzione dell'ecosistema, non è fatto.
+Nella demo su questo portatile, uno per persona, dentro il wallet WDK di ciascuno. Lo stesso modulo (`@utexo/wdk-rgb-lightning`) gira anche su mobile, e `@utexo/rgb-sdk-rn` porta lo stesso nodo su iOS e Android: il passo verso l'app è un cambio di host, non di architettura.
 
 **"Lightning sul telefono non è self-custody vera: serve essere online, servono watchtower."**
 Vero. Per il rischio di stati vecchi: watchtower indipendente dall'operatore (roadmap). Per chi riceve offline: il pagamento riparte quando torna online; gli invoice durano 48 ore. Nessuno perde fondi nell'attesa.
+
+**"Quanti soldi deve immobilizzare l'operatore?"**
+Il giusto: il ledger sa in anticipo quanto ogni viaggiatore deve ricevere, quindi l'agente dell'operatore apre liquidità solo quando serve, prima che il pagamento arrivi. E torna tutta a lui a fine viaggio.
 
 **"Il coordinatore può rubare?"**
 No. Può instradare, decidere una contestazione, coprire un debito con i soldi dell'operatore ed escludere qualcuno. Non può muovere i fondi di un viaggiatore. Dave può essere fastidioso, ma non può rubare.
@@ -44,7 +47,7 @@ No: l'operatore paga con i soldi suoi e non tocca mai quelli dei viaggiatori.
 Alla prenotazione, insieme al viaggio, tramite l'operatore o un partner di emissione. Nella demo, il seed simula questo passaggio.
 
 **"Le fee on-chain si mangiano i debitucci."**
-I canali non si aprono per ogni viaggio: restano aperti con l'operatore e servono anche per i successivi. Il singolo rimborso viaggia su Lightning, senza blocchi. Limite onesto: ogni pagamento RGB su Lightning porta con sé una piccola quota di sat che si sposta con i dollari.
+I canali non si aprono per ogni viaggio: restano aperti con l'operatore e servono anche per i successivi. Il singolo rimborso viaggia su Lightning, senza blocchi. Limite onesto: ogni pagamento RGB su Lightning porta con sé 3000 sat (il minimo perché il pagamento in sospeso esista come output Bitcoin); non sono commissioni, passano a chi riceve, ma chi paga deve averli nel canale.
 
 **"E se l'AI sbaglia lo scontrino?"**
 L'AI propone, le persone approvano. Le righe sono modificabili, i totali vengono controllati dal codice, i soldi li calcola il ledger e non il modello. Ogni debitore vede e approva il proprio importo.
@@ -59,7 +62,7 @@ L'output è vincolato ai membri e alle righe esistenti, e il debitore approva l'
 Nessuno deve garantirlo. Ogni spesa è firmata da chi la fa, ogni approvazione da chi approva, ogni pagamento ha la sua ricevuta crittografica Lightning, e la catena di hash è la stessa su tutti i telefoni. Il server è solo un postino.
 
 **"Se perdo il telefono?"**
-Con RGB la mnemonica non basta: serve lo stato dei dati lato client. Per questo l'app fa un backup cifrato automatico dopo ogni pagamento, che il server conserva senza poterlo leggere. [Se pronto: lo mostriamo.]
+Con RGB la mnemonica non basta: serve lo stato dei dati lato client. Per questo il wallet fa un backup cifrato automatico (VSS, il meccanismo nativo del modulo WDK) dopo ogni pagamento; il server lo conserva senza poterlo leggere, e un recinto impedisce che il telefono vecchio e quello nuovo scrivano insieme. [Se pronto: lo mostriamo.]
 
 **"Un operatore che gestisce stablecoin dei clienti in UE è regolamentato."**
 L'operatore non custodisce i fondi dei clienti, e questo cambia molto la posizione. La garanzia è un impegno commerciale da inquadrare con un legale; il prodotto funziona con qualunque stablecoin su RGB. (Non va nelle slide; risposta prudente, non siamo avvocati.)

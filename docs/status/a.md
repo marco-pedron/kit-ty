@@ -9,6 +9,7 @@
 - [ ] A3 decideAutoPay
 - [ ] A4 AI con QVAC + ai:eval
 - [ ] A5 Flussi dell'agente (fake → reale)
+- [ ] A7 liquidityPlan (SPEC §10.5)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
 ## Bloccato da
