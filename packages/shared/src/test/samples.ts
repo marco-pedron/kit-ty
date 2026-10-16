@@ -5,18 +5,19 @@ export const HASH = (c: string) => c.repeat(64).slice(0, 64);
 export const NODE = (c: string) => `02${c.repeat(64).slice(0, 64)}`;
 export const AT = '2026-10-17T12:00:00.000Z';
 
-// The demo dinner (SPEC §15): 255,000 VND.
+// The demo dinner (SPEC §15): 255,000 VND, shares 3.09 / 3.09 / 3.50.
 export const dinner: Receipt = {
-  merchant: 'Pho Corner',
+  merchant: 'Pho restaurant, Hanoi',
   date: '2026-10-17',
   currency: 'VND',
   items: [
-    { label: 'Pho bo', quantity: 2, unitPrice: 75000n, total: 150000n },
-    { label: 'Beer', quantity: 2, unitPrice: 30000n, total: 60000n },
-    { label: 'Water', quantity: 3, unitPrice: 10000n, total: 30000n },
+    { label: 'Pho bo x2', quantity: 2, unitPrice: 65_000n, total: 130_000n },
+    { label: 'Bia Saigon x3', quantity: 3, unitPrice: 25_000n, total: 75_000n },
+    { label: 'Water', quantity: 3, unitPrice: 10_000n, total: 30_000n },
   ],
-  tip: 15000n,
-  total: 255000n,
+  subtotal: 235_000n,
+  tip: 20_000n,
+  total: 255_000n,
   warnings: [],
 };
 
