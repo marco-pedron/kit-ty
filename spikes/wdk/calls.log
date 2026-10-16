@@ -277,3 +277,47 @@
 [2026-10-16T14:14:29.221Z] Q8 {"s1":"ryuik1non1q8fjmw1gzosnimpfiysnc117aszmmydabnu318somfnm8g86jf4yium3j71zwg1d13uxm7xcyp3gdtwodr8ioe81uxaygn","s2":"d7jncjeywk9nap5sentesjjxrkhaasaetqhuwyywo7uoqf5h6cfzn9imfu35iewk7z4a5h6b4k48g9fodiwhqfdi5anbei4mgczc8kaz","different":true,"ok":true,"wrongMsg":false,"empty":false,"byBob":false}
 [2026-10-16T14:14:29.222Z] STEP "close"
 [2026-10-16T14:14:29.223Z] closing {"id":"0fdbdad8","pub":false,"asset":"3041/4959"}
+[2026-10-16T14:14:41.210Z] STEP "open nodes"
+[2026-10-16T14:14:42.403Z] pubkeys {"alice":"026dd5304358effa791ba6f4c9a32b9527c94e41068dffd9c6b073c0dc0b8d4dd4","bob":"03239342d3cc747dacd23b518a50f8f3a840d37701b671178a722680b2663e186a","dave":"03ba7fff850e1a1df99eb1db2bd9c7b5f914d2ad8730c5e7212878e2294a4c418f"}
+[2026-10-16T14:14:42.808Z] STEP "fund"
+[2026-10-16T14:14:48.698Z] STEP "issue"
+[2026-10-16T14:14:48.841Z] issued "rgb:ZfUYO5Cr-Rp_3oXd-eZZwd54-zLGX3Js-3liqx0G-D~eGyvQ"
+[2026-10-16T14:14:52.933Z] sent-onchain {"to":"dave","amount":25000,"txid":"087c890edb1f3327d4ede85743b06613b44c1ec3bfb5f8f7c8b987ce44ef2f58","bal":25000}
+[2026-10-16T14:14:57.074Z] sent-onchain {"to":"dave","amount":25000,"txid":"d3afff0ec40680a156fcbe8da4cac44c482eb66b6f84e6de3d28a3be5fd839bc","bal":50000}
+[2026-10-16T14:15:01.238Z] sent-onchain {"to":"dave","amount":25000,"txid":"517e6ccee02fdf1c5eb2eb119c63e59ddd74c2cabc229f2af3cbc2bdf9e61e5b","bal":75000}
+[2026-10-16T14:15:01.238Z] STEP "channels"
+[2026-10-16T14:15:02.333Z] open-lsp dave->alice {"temporary_channel_id":"3bc5dc58a3386d3415754241c4516b618d3e895726ba6ef1822c634edabbf901"}
+[2026-10-16T14:15:03.882Z] open-lsp dave->bob {"temporary_channel_id":"4221aa19d89bac07cc2795c80dbf9733677c12fffc354aad2b97532415ca7920"}
+[2026-10-16T14:15:20.245Z] Q5-blocks-to-usable 6
+[2026-10-16T14:15:20.253Z] dave-channels [{"peer":"026dd530","pub":false,"usable":true,"asset":"3000/5000","next":100000000},{"peer":"03239342","pub":false,"usable":true,"asset":"3000/5000","next":100000000}]
+[2026-10-16T14:15:20.254Z] STEP "pay"
+[2026-10-16T14:15:20.260Z] decode {"payee_is_bob":true,"asset_amount":309,"asset_id_ok":true}
+[2026-10-16T14:15:24.667Z] Q6-result {"ms":4406,"status":"Succeeded","preimage":"5e64565ef736bc4bf23d48c20f07918f5f084f9d4173d2dc4fb3bf8ce6b7feb9","blocksMinedDuring":0}
+[2026-10-16T14:15:24.668Z] Q6-sha256(preimage)==hash true
+[2026-10-16T14:15:24.668Z] bob-side {"amt_msat":3000000,"asset_amount":309,"asset_id":"rgb:ZfUYO5Cr-Rp_3oXd-eZZwd54-zLGX3Js-3liqx0G-D~eGyvQ","payment_hash":"5cdb1b0b28e80542c7c2b224c79d372cb449d9fcc041433a04b19305cd75245a","payment_type":"InboundAutoClaim","status":"Succeeded","created_at":1792160120,"updated_at":1792160123,"payee_pubkey":"03239342d3cc747dacd23b518a50f8f3a840d37701b671178a722680b2663e186a","preimage":"5e64565ef736bc4bf23d48c20f07918f5f084f9d4173d2dc4fb3bf8ce6b7feb9","description_hash":null}
+[2026-10-16T14:15:25.075Z] balances {"alice":{"settled":0,"future":0,"spendable":0,"offchain_outbound":4691,"offchain_inbound":3309},"bob":{"settled":0,"future":0,"spendable":0,"offchain_outbound":5309,"offchain_inbound":2691}}
+[2026-10-16T14:15:30.135Z] Q6b-bob-to-alice {"ms":5009,"status":"Succeeded","preimage":"a506b3fb6ca570c7feada28cb3aa0f03ccafd411cf6c165afb648ff93527ee4a"}
+[2026-10-16T14:15:30.701Z] balances-after-2 {"alice":{"settled":0,"future":0,"spendable":0,"offchain_outbound":5041,"offchain_inbound":2959},"bob":{"settled":0,"future":0,"spendable":0,"offchain_outbound":4959,"offchain_inbound":3041},"dave":{"settled":59000,"future":59000,"spendable":59000,"offchain_outbound":6000,"offchain_inbound":10000}}
+[2026-10-16T14:15:30.702Z] Q7 {"next_outbound_htlc_limit_msat":100000000,"outbound_balance_msat":187000000}
+[2026-10-16T14:15:30.702Z] STEP "sign"
+[2026-10-16T14:15:30.705Z] Q8 {"s1":"dhroggm15twhe461zqm1wdbdktjdsjdxdxy836iqgf1e7a6wrbgqr5ize86d4kffngsrqa8qb3wuozenijccaybroewnd8ti469gghme","s2":"d6njpr5bi7uzcgw79b5t6k31hz7ycjkz31eiajhyo3besbg57e9fnuhrkfrau8odes6b1x8accrc1bityqdiiiihde8qkaaqkurczcwb","different":true,"ok":true,"wrongMsg":false,"empty":false,"byBob":false}
+[2026-10-16T14:15:30.706Z] STEP "close"
+[2026-10-16T14:15:31.034Z] closing {"id":"ef76c84c","pub":false,"asset":"3041/4959"}
+[2026-10-16T14:15:32.846Z] Q10-mempool ["94f85ee140f6218ca2fabc5dc790de4d6a84da0628eeec63918cc8c097cfd6c2"]
+[2026-10-16T14:15:35.613Z] close-progress {"block":1,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:38.449Z] close-progress {"block":2,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:41.309Z] close-progress {"block":3,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:44.114Z] close-progress {"block":4,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:47.381Z] close-progress {"block":5,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:50.189Z] close-progress {"block":6,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:53.032Z] close-progress {"block":7,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:55.927Z] close-progress {"block":8,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:15:58.793Z] close-progress {"block":9,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:01.648Z] close-progress {"block":10,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:04.522Z] close-progress {"block":11,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:07.350Z] close-progress {"block":12,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:10.153Z] close-progress {"block":13,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:13.330Z] close-progress {"block":14,"bobSettled":0,"daveSettled":59000,"daveBefore":59000}
+[2026-10-16T14:16:13.332Z] Q10-blocks-to-bob-dusd 14
+[2026-10-16T14:16:13.335Z] dave-channels-end [{"peer":"026dd530","asset":"2959/5041"}]
+[2026-10-16T14:16:13.336Z] STEP "done"
