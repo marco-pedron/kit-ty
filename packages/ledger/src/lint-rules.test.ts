@@ -11,7 +11,8 @@ async function violations(code: string, file = 'packages/ledger/src/bad.ts'): Pr
   return result?.messages.filter((m) => m.ruleId === 'no-restricted-syntax').length ?? 0;
 }
 
-describe('money lint rules', () => {
+// The first lint loads typescript-eslint, which takes several seconds on a slow laptop.
+describe('money lint rules', { timeout: 30_000 }, () => {
   it.each([
     ['number amount field', 'export type X = { amount: number };'],
     ['number total field', 'export type X = { usdTotalCents: number };'],
@@ -24,7 +25,7 @@ describe('money lint rules', () => {
     expect(await violations(code)).toBeGreaterThan(0);
   });
 
-  it.each(['money.ts', 'canonical.ts', 'events.ts'])(
+  it.each(['money.ts', 'canonical.ts', 'ledger-types.ts'])(
     'flags any z.number() in shared/%s',
     async (file) => {
       const code = "import { z } from 'zod'; export const S = z.number();";
@@ -32,13 +33,18 @@ describe('money lint rules', () => {
     },
   );
 
-  it('flags z.number() on a money-named property in shared/domain.ts', async () => {
-    const code = "import { z } from 'zod'; export const S = z.object({ cents: z.number().int() });";
-    expect(await violations(code, 'packages/shared/src/domain.ts')).toBeGreaterThan(0);
-  });
+  it.each(['domain.ts', 'events.ts', 'views.ts', 'api.ts'])(
+    'flags z.number() on a money-named property in shared/%s',
+    async (file) => {
+      const code =
+        "import { z } from 'zod'; export const S = z.object({ cents: z.number().int() });";
+      expect(await violations(code, `packages/shared/src/${file}`)).toBeGreaterThan(0);
+    },
+  );
 
   it('allows z.number() for indexes in shared/domain.ts', async () => {
-    const code = "import { z } from 'zod'; export const S = z.object({ itemIndex: z.number().int() });";
+    const code =
+      "import { z } from 'zod'; export const S = z.object({ itemIndex: z.number().int() });";
     expect(await violations(code, 'packages/shared/src/domain.ts')).toBe(0);
   });
 

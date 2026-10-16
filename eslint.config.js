@@ -45,7 +45,6 @@ export default tseslint.config(
       'packages/ledger/src/**/*.ts',
       'packages/shared/src/money.ts',
       'packages/shared/src/canonical.ts',
-      'packages/shared/src/events.ts',
       'packages/shared/src/ledger-types.ts',
     ],
     ignores: ['**/*.test.ts', 'packages/ledger/src/test/**'],
@@ -58,10 +57,11 @@ export default tseslint.config(
     },
   },
   {
-    // Schemas that also carry indexes, counts and latencies: z.number() is allowed,
+    // Schemas that also carry indexes, sequence numbers, counts and latencies: z.number() is allowed,
     // except on a property whose name says it is money.
     files: [
       'packages/shared/src/domain.ts',
+      'packages/shared/src/events.ts',
       'packages/shared/src/views.ts',
       'packages/shared/src/api.ts',
     ],
