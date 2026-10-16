@@ -70,11 +70,14 @@ export const UNLOCK = (alias: string) => ({
 
 export type Node = { name: Name, manager: any, account: any, pubkey: string }
 
-export async function openNode (name: Name, opts: { dataDir?: string, vssUrl?: string } = {}): Promise<Node> {
+export async function openNode (name: Name, opts: { dataDir?: string, vssUrl?: string, extra?: Record<string, unknown> } = {}): Promise<Node> {
   const dataDir = opts.dataDir ?? join(HERE, 'data', name, 'ln')
   mkdirSync(dataDir, { recursive: true })
   const cfg: any = { network: 'regtest', dataDir, ldkPeerListeningPort: PEER_PORT[name] }
   if (opts.vssUrl) { cfg.vssUrl = opts.vssUrl; cfg.vssAllowHttp = true }
+  // dave forwards to private channels: RLN sets accept_forwards_to_priv_channels from this flag
+  if (name === 'dave') cfg.enableVirtualChannelsV0 = true
+  Object.assign(cfg, opts.extra)
   const manager = new WalletManagerRgbLightning(secrets()[name], cfg)
   const account = await manager.getAccount(0)
   await account.unlock(UNLOCK(name))
