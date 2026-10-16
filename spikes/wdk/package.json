@@ -1,0 +1,13 @@
+{
+  "name": "kitty-spike-wdk",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@utexo/rgb-lib-darwin-arm64": "0.3.0-beta.8",
+    "@utexo/rgb-lightning-node-nodejs": "0.1.0-beta.11",
+    "@utexo/wdk-rgb-lightning": "0.1.0-beta.15",
+    "@utexo/wdk-wallet-rgb": "2.0.3"
+  }
+}
