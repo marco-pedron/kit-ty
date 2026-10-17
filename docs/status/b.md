@@ -5,24 +5,31 @@
 ## Task
 - [x] B0 Spike Lightning → docs/spike-lightning.md (ven 10:35, modalità ln-2ch)
 - [x] B0b Spike 2: motore WDK → docs/spike-wdk.md (ven 16:35, consigliato `rln-rest` + `wdk-wallet-rgb` per i DUSD di dave; decide il gate 2)
-- [ ] B1 Infra (stack + VSS; RLN opzionale)
+- [x] B1 Infra: bitcoind, electrs, esplora, proxy RGB, 4 nodi RLN (niente VSS) (sab 17/10 12:00)
 - [x] B4 Verifica firme ed25519 in TS puro + invoice di legame (crypto.ts, sab 17/10 11:10)
 - [ ] B2 Seed e demo:reset
 - [ ] B3 Wallet reale e LightningRail
 - [ ] B7 Chiusura canali per l'esclusione
 - [ ] B8 e2e:demo
 - [ ] B5 (P1) Rail on-chain
-- [ ] B6 Backup automatico (VSS o lock-backup); demo:lose-phone = P1
+- [ ] B6 Backup automatico (lock → backup → unlock); demo:lose-phone = P1
 - [ ] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan)
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- B1 (infra con RLN), poi B2. In B3 `Wallet.sign` deve produrre il formato di B4 (sotto).
+- B2 (seed e `demo:reset`). In B3 `Wallet.sign` deve produrre il formato di B4 (sotto).
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B1, sab 17/10 12:00
+- Funziona: stack regtest in `infra/docker-compose.yml`, progetto compose `kitty` (volumi `kitty_*`, separati da quelli `settleup` del vecchio progetto): bitcoind (18443), electrs (50001), esplora REST (3010), rgb-proxy-server 0.3.0 (3000), 4 nodi RLN con l'immagine `settleup/rln:d4762ac`: alice 3001/9735, bob 3002/9736, charlie 3003/9737, dave 3004/9738. **Tutte le porte pubblicate sono legate a `127.0.0.1`** (verificato con `docker port` e `lsof`). Niente server VSS (gate 2: lock → backup → unlock).
+- Script in `infra/scripts/`: `up.sh` (controllo dell'immagine e delle porte libere, 103 blocchi iniziali, attesa dei servizi), `down.sh`, `reset.sh` (cancella i volumi), `check.sh`, `mine.sh <n>`, `fund.sh <addr> <btc>`, `build-rln.sh` (ricostruisce la stessa immagine dal commit fissato, 15-40 min). `infra/.env.example` elenca tutte le variabili, password e mnemoniche vuote.
+- Come si prova: `pnpm infra:reset && pnpm infra:check` → `all checks passed` (container attivi, altezza ≥ 103, esplora allineato, 4 RLN rispondono a `/nodeinfo`, proxy `server.info`, un blocco minato arriva a esplora, porte solo su 127.0.0.1). `pnpm infra:up` riavvia senza perdere dati, `pnpm infra:down` ferma.
+- Memoria (`docker stats --no-stream`, nodi appena avviati e ancora bloccati): **≈ 486 MiB in totale** su 3,8 GiB di Docker Desktop (esplora 139, proxy 132, bitcoind 98, electrs 37, rln-dave 56, altri RLN ≈ 8 ciascuno). Crescerà dopo `/unlock` e con i canali: da rimisurare dopo B2.
+- Problemi noti: i nodi rispondono 403 `LockedNode` finché il seed (B2) non fa `/init` + `/unlock`; è la risposta attesa. Nessun test Docker in `pnpm test`.
+
 ### B4, sab 17/10 11:10
 - Funziona: `signatureVerifier.verify` in `packages/shared/src/crypto.ts` con `@noble/curves` (niente `node:crypto` né `Buffer`, gira anche nel browser). Non lancia mai eccezioni: con un input malformato restituisce `false`. `checkBindInvoice(decoded, appPubkey, nodePubkey)` controlla l'invoice di legame già decodificato (non decodifica il bolt11). I fake restano invariati.
 - **Formato per B3 (`Wallet.sign`):** `authorPubkey` = chiave pubblica ed25519 di 32 byte, `sig` = 64 byte, entrambe in hex minuscolo; si firmano i byte UTF-8 di `message` (`canonical(inner)`). Verifica RFC 8032 rigorosa (`zip215: false`): una `s` non canonica viene rifiutata. Con `@noble/curves`: `bytesToHex(ed25519.sign(utf8ToBytes(msg), secret))`.

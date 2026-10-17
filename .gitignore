@@ -18,3 +18,6 @@ models/
 infra/data/
 backups/
 *.backup
+
+# RLN source checkout from infra/scripts/build-rln.sh
+infra/vendor/

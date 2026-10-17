@@ -13,7 +13,11 @@
     "format": "prettier --write .",
     "dev": "pnpm -r --parallel --filter './apps/*' dev",
     "rln:gen": "pnpm --filter @kitty/rln-client gen",
-    "dev:fakes": "KITTY_FAKES=1 pnpm dev"
+    "dev:fakes": "KITTY_FAKES=1 pnpm dev",
+    "infra:up": "./infra/scripts/up.sh",
+    "infra:down": "./infra/scripts/down.sh",
+    "infra:reset": "./infra/scripts/reset.sh",
+    "infra:check": "./infra/scripts/check.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
