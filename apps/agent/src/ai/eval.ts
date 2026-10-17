@@ -8,8 +8,14 @@ import { createQvacEngine } from './qvac-engine.js';
 // with at most 1 manual correction (date, currency, total, tax, tip, or one item's numbers;
 // labels and merchant are free text and not counted); the demo sentences must give the demo
 // split exactly. Run it with the network off: pnpm ai:eval:offline.
+// AI_EVAL_SET=hard (pnpm ai:eval:hard) runs the cluttered receipts of infra/fixtures/receipts/hard/
+// instead: a stress test, not a gate (failures there are findings, not regressions).
 
-const dir = fileURLToPath(new URL('../../../../infra/fixtures/receipts/', import.meta.url));
+const set = process.env.AI_EVAL_SET ?? '';
+if (!/^[a-z0-9-]*$/.test(set)) throw new Error(`AI_EVAL_SET must be a folder name, got "${set}"`);
+const dir = fileURLToPath(
+  new URL(`../../../../infra/fixtures/receipts/${set ? `${set}/` : ''}`, import.meta.url),
+);
 type ExpectedItem = { quantity: number; unitPrice: string; total: string };
 type Expected = {
   date: string;
