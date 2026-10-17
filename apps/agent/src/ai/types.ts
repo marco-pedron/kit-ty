@@ -1,5 +1,5 @@
-// On-device AI (SPEC §11), QVAC in-process, loaded once at agent start. Task A4;
-// dev-fakes/fake-ai.ts stands in until then (KITTY_FAKES=1).
+// On-device AI (SPEC §11), QVAC in-process, loaded once at agent start: ai-service.ts over
+// qvac-engine.ts (task A4); dev-fakes/fake-ai.ts with KITTY_FAKES=1.
 import type { AiResult, AiStatus, MemberId, Receipt, SplitProposal } from '@kitty/shared';
 
 export interface AiService {
@@ -22,11 +22,13 @@ export interface AiService {
    * or English → SplitProposal. A name not in `members` or an index out of range is a
    * validation error → retry → `ok: false`. `clarification` answers a previous
    * clarificationNeeded, passed back once. The sentence is untrusted data (SPEC §11, §13 #6).
+   * `payer` is who "I" / "io" means in the sentence.
    */
   proposeSplit(
     receipt: Receipt,
     members: MemberId[],
     text: string,
     clarification?: { question: string; answer: string },
+    payer?: MemberId,
   ): Promise<AiResult<SplitProposal>>;
 }
