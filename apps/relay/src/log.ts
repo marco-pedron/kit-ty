@@ -2,6 +2,7 @@ import { deriveTrip, LedgerError, type ValidationDeps, validateEvent } from '@ki
 import {
   apiError,
   GENESIS_HASH,
+  NotImplementedError,
   type ApiError,
   type SignedEvent,
   SignedEventSchema,
@@ -83,9 +84,12 @@ export function createEventLog(opts: EventLogOptions): EventLog {
     try {
       verdict = validate(stored, deriveTrip(previous, receivedAt), deps);
     } catch (e) {
-      if (e instanceof LedgerError && e.code === 'NOT_IMPLEMENTED') {
-        return { ok: false, status: 501, error: apiError('NOT_IMPLEMENTED', e.message) };
-      }
+      // Stubs still waiting for their task: validateEvent (A2), the verifier (B4), the
+      // invoice decoder (B). Nothing is stored.
+      const stub =
+        (e instanceof LedgerError && e.code === 'NOT_IMPLEMENTED') ||
+        e instanceof NotImplementedError;
+      if (stub) return { ok: false, status: 501, error: apiError('NOT_IMPLEMENTED', e.message) };
       if (e instanceof LedgerError) return reject(409, e.message);
       throw e;
     }
