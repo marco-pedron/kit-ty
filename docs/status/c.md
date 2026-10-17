@@ -7,24 +7,38 @@
 - [x] C1 Relay (branch `c/C1-relay`)
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [x] C2 RelayClient (branch `c/C2-relay-client`)
-- [ ] C3 Rotte dell'agente
+- [ ] C3 Rotte dell'agente: **C3a fatto** (branch `c/C3-agent-routes`: tutte le rotte dei viaggiatori, `/state` completo anche per Dave, `/proof`); C3b (azioni di Dave e collegamento al runtime) dopo A5b
 - [ ] C4 UI viaggiatore
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
 
 ## Bloccato da
-- niente
+- C3b: A5b non è ancora su `main` (`CoordinatorAgent` con `resolveDispute`, `coverAndExclude`, `setRate`; `startAgents`). Finché non arriva, le tre rotte di Dave rispondono 501 `NOT_IMPLEMENTED` e `index.ts` non passa gli agenti al server (viste vuote).
 
 ## TODO
 - C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
 
 ## Prossimo passo
-- **Per A (`apps/agent/src/index.ts`, non è mio):** creare il client una volta sola, `createRelayClient({ baseUrl: config.RELAY_URL })` da `./relay/http-client.js`, e passarlo ai flussi. Uso tipico: `const log = await relay.list()`, poi `relay.subscribe(onEvent, { sinceSeq: log.at(-1)?.seq ?? 0, onStatus })`. Gli errori sono `RelayError` (`./relay/errors.js`) con `toApiError()`, come `WalletError`. `onStatus` dà `connected` / `reconnecting` (con tentativo, attesa ed errore): serve a C7.
-- C3 rotte dell'agente.
+- **Per A (`apps/agent/src/index.ts`, non è mio), con A5b:** `buildAgentServer(config, { agents: runtime.agents, wallets, ai })`. `agents` = `runtime.agents` di `startAgents`; `wallets` = il wallet di ogni membro, per i saldi di `/state` (`MemberAgent` lo tiene privato: in alternativa A aggiunge `MemberAgent.balances()` e tolgo `wallets`); `ai` = l'`AiService` di A4 (senza, con `KITTY_FAKES=1` il server usa il `FakeAi`). Il server non costruisce più agenti né una sua rete finta.
+- C3b, appena A5b è su `main`: le rotte di Dave su `CoordinatorAgent` e la prova con `pnpm dev:fakes` passando dal relay vero.
+- Da pulire (non è mio, lo segnalo ad A): `apps/agent/src/agent.ts` (la classe `Agent` della sessione contratto) non lo usa più nessuno.
+
+## Decisioni del PM
+- Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C3a, sab 17/10 14:00
+- Funziona: `registerRoutes` (`apps/agent/src/routes/index.ts`) per le 11 rotte di SPEC §14.3, sopra `MemberAgent` (A5a).
+  - Ogni rotta: parametri e body validati con `routes` di `api.ts` (400 `VALIDATION_ERROR`, oppure 404 `NOT_FOUND` per un membro sconosciuto), ruolo dal percorso (`dave` su una rotta da viaggiatore → 403 `NOT_ALLOWED`, con un'azione), risposta con `z.encode` dello schema della rotta.
+  - Errori: `FlowError`/`WalletError`/`RelayError` → il loro `toApiError()`; `LedgerError` con il suo codice; zod → 400; `NotImplementedError` → 501; altro → 500 `INTERNAL`. Stato HTTP per codice (`AI_NOT_READY`/`*_UNREACHABLE` → 503, `TOPUP_REQUIRED` → 409…). Nel log finiscono solo i 500.
+  - `/state` (`routes/state.ts`, `buildTripView`): tutto il `TripView` dalla copia verificata dell'agente. Membri e stati; spese con righe e chi condivide ogni articolo; righe con conto alla rovescia, frase dell'agente (`decisionFor`), prova, scadenza dell'invoice dal nodo; `me` con saldo dal proprio nodo (`null` se il nodo non risponde, non un errore), devo e mi devono, pagato in automatico nelle 24 h. Vista di Dave: margini di `liquidityPlan`, garanzia usata e residua, contestazioni con gli articoli del debitore, insolvenze con `coverable`. Attività: decisioni dell'agente più una riga per evento del registro. Senza agente → viaggio vuoto, così la UI può dire cosa manca.
+  - `/proof/:paymentHash` (`routes/proof.ts`): sha256(preimage) = hash, payee dell'invoice = nodo del creditore, importo e asset = riga; per l'on-chain txid e link esplora.
+  - `extract` e `split` con l'`AiService` (`AI_NOT_READY` se non è pronto); l'anteprima delle quote la calcola il ledger (`previewSplit`), mai l'AI.
+  - `server.ts`: `buildAgentServer(config, { agents?, wallets?, ai?, now?, onchainFound? })` riceve gli agenti dal runtime invece di costruirne di suoi; `index.ts` (di A) non cambia finché non passa il runtime.
+- Come si prova: `pnpm test`, `apps/agent/src/routes/routes.test.ts` con il `demo()` di A (4 `MemberAgent`, relay in memoria con il vero `validateEvent`). Coperto: viste di ogni finestra; demo **dalle rotte**: split con quote 3.09/3.09/3.50, invio, charlie contesta, Dave vede la contestazione con gli articoli, bob paga da solo a 20 s, alice vede i crediti, prova verificata con i tre controlli verdi; policy, annullamento, estrazione; ruoli, validazione, 501 per Dave, agente o AI assenti, nodo che non risponde.
+- Problemi noti: `/state` mostra la copia dell'agente all'ultimo `tick()` (entro 1 s nel server). `liquidityMarginCents` non conta la liquidità aperta dopo il primo canale (`extraLiquidity` di A7, la conosce solo il nodo di Dave, B9).
 ### C2, sab 17/10 12:45
 - Funziona: `createRelayClient({ baseUrl, fetch?, timeoutMs?, backoff?, idleTimeoutMs? })` (`apps/agent/src/relay/http-client.ts`), che implementa `RelayClient`.
   - `append`, `list(since)`, `putBackup`, `getBackup` (404 → `null`). Timeout di 10 s per richiesta. Se il relay non risponde → `RelayError` `RELAY_UNREACHABLE`; se rifiuta → il suo `ApiError` (es. `INVALID_EVENT` con il motivo del ledger) con `httpStatus`.
