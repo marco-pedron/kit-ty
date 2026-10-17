@@ -18,6 +18,7 @@
 
 ## TODO
 - C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
+  - **Lo fa Marco (B), dopo B2** (serve un nodo sbloccato con UTXO colorabili, es. dave): `pnpm --filter @kitty/relay exec tsx src/tools/check-bolt11.ts http://127.0.0.1:3004`. Lo script usa un asset NIA del nodo con `_` o `~` nell'id, oppure ne emette di usa e getta ("Baid64 check", `CHK`, al massimo 8). Poi crea un `/lninvoice`, lo confronta campo per campo tra `/decodelninvoice` e `decodeBolt11` e stampa `PASS`/`FAIL` (exit 1 se fallisce), più l'invoice e il JSON del nodo. Va incollato a C, che ne fa un vettore dorato nei test.
 
 ## Prossimo passo
 - C2 `RelayClient` (`apps/agent/src/relay`): append su `POST /events`, list su `GET /events?since=`, subscribe su `GET /events/stream` con riconnessione da `Last-Event-ID`; backup su `PUT/GET /backups/:pubkey` (`application/octet-stream`).
