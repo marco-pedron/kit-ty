@@ -1,5 +1,6 @@
 import { formatCents, type ApiClientError } from '@kitty/shared';
 import type { ReactNode } from 'react';
+import { paymentMode } from './mode.js';
 import type { Screen } from './nav.js';
 
 // Small building blocks shared by every screen.
@@ -72,4 +73,34 @@ export function ScreenHeader({
 
 export function EmptyState({ children }: { children: ReactNode }) {
   return <p className="px-4 py-10 text-center text-sm text-gray-500">{children}</p>;
+}
+
+/** The group's payment mode as a pill: green "Auto mode", "Always ask" or "Limit X.XX". */
+export function LimitBadge({
+  limitCents,
+  channelCents,
+  onClick,
+}: {
+  limitCents: bigint;
+  channelCents: bigint;
+  onClick?: () => void;
+}) {
+  const mode = paymentMode(limitCents, channelCents);
+  const color =
+    mode.kind === 'auto'
+      ? 'bg-green-100 text-green-800'
+      : mode.kind === 'ask'
+        ? 'bg-gray-200 text-gray-700'
+        : 'bg-amber-100 text-amber-900';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={onClick === undefined}
+      aria-label={`${mode.long}. Change the limit`}
+      className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${color}`}
+    >
+      {mode.badge}
+    </button>
+  );
 }

@@ -114,6 +114,16 @@ function Phone({ as }: { as: MemberId }) {
         onPointerCancel={() => (start.current = null)}
       >
         {trip.state?.fakes && <FakesBanner />}
+        {trip.state?.ledger.chainValid === false && (
+          <div className="px-4 pt-3">
+            <div role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-900">
+              <p>The relay sent an entry this phone rejects.</p>
+              <p className="font-medium">
+                Your agent stopped trusting it and keeps its own copy. Tell the coordinator.
+              </p>
+            </div>
+          </div>
+        )}
         {trip.error && (
           <div className="px-4 pt-3">
             <ErrorBox error={trip.error} />
@@ -126,41 +136,29 @@ function Phone({ as }: { as: MemberId }) {
   );
 }
 
-/** Floating: the content scrolls behind it. Groups · camera (new expense) · QR. */
+/** Floating pill, three buttons of equal weight; the content scrolls behind it. */
 function BottomBar({ screen, go }: { screen: Screen; go: (s: Screen) => void }) {
-  const item = (s: Screen, label: string, icon: ReactNode, big = false) => (
-    <button
-      type="button"
-      onClick={() => go(s)}
-      aria-label={label}
-      aria-current={screen === s ? 'page' : undefined}
-      className={
-        big
-          ? 'grid size-14 -translate-y-3 place-items-center rounded-full bg-pink-500 text-2xl text-white shadow-lg ring-4 ring-gray-50'
-          : `flex w-16 flex-col items-center text-xs font-medium ${screen === s ? 'text-pink-700' : 'text-gray-600'}`
-      }
-    >
-      {icon}
-    </button>
-  );
+  const items: { to: Screen; label: string; icon: string }[] = [
+    { to: 'groups', label: 'Groups', icon: '🫂' },
+    { to: 'new', label: 'New expense', icon: '📷' },
+    { to: 'qr', label: 'QR', icon: '▦' },
+  ];
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-4 z-20 mx-auto flex max-w-[420px] justify-center px-4">
-      <div className="pointer-events-auto flex h-14 w-full max-w-xs items-center justify-around rounded-full border border-gray-200 bg-white/85 shadow-lg backdrop-blur">
-        {item(
-          'groups',
-          'Groups',
-          <>
-            <span className="text-lg">🫂</span>Groups
-          </>,
-        )}
-        {item('new', 'New expense', '📷', true)}
-        {item(
-          'qr',
-          'QR',
-          <>
-            <span className="text-lg">▦</span>QR
-          </>,
-        )}
+      <div className="pointer-events-auto grid w-full max-w-xs grid-cols-3 gap-1 rounded-full border border-gray-200 bg-white/85 p-1.5 shadow-lg backdrop-blur">
+        {items.map(({ to, label, icon }) => (
+          <button
+            key={to}
+            type="button"
+            onClick={() => go(to)}
+            aria-label={label}
+            aria-current={screen === to ? 'page' : undefined}
+            className={`flex h-12 flex-col items-center justify-center rounded-full text-xs font-medium ${screen === to ? 'bg-gray-900 text-white' : 'text-gray-700'}`}
+          >
+            <span className="text-lg leading-none">{icon}</span>
+            {label === 'New expense' ? 'New' : label}
+          </button>
+        ))}
       </div>
     </nav>
   );
