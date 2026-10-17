@@ -45,7 +45,16 @@ export interface BackupSettings {
   unlockBody: Record<string, unknown>;
   /** The host folder bind-mounted at /backups in this node's container. */
   hostDir: string;
+  /** Past this the node is considered stuck (default BACKUP_TIMEOUT_MS). */
+  timeoutMs?: number;
+  /** Quiet time after the unlock before any request (default BACKUP_SETTLE_MS). */
+  settleMs?: number;
 }
+
+/** After an unlock, no request for this long: LDK is still starting (B6). */
+const BACKUP_SETTLE_MS = 3_000;
+/** lock → backup → unlock takes ~6 s with the settle time (B6); past this the node is stuck. */
+const BACKUP_TIMEOUT_MS = 60_000;
 
 /** Where the node writes its backups, inside its container (infra/docker-compose.yml). */
 const BACKUP_CONTAINER_DIR = '/backups';
@@ -169,6 +178,14 @@ export class RlnWallet implements Wallet {
   private openQueue: Promise<unknown> = Promise.resolve();
   private readonly refreshEveryMs: number;
   private lastRefreshAt = -Infinity;
+  /**
+   * B6: while set, every request to the node but the backup's own waits. RLN d4762ac can hang
+   * for good when a request reaches it during or right after an unlock (reproduced in B6:
+   * immediately under load, 16/16 cycles fine with this gate and BACKUP_SETTLE_MS).
+   */
+  private gate: Promise<void> | null = null;
+  private releaseGate: () => void = () => undefined;
+  private inFlight = 0;
 
   constructor(private readonly opts: RlnWalletOptions) {
     if (!HEX32.test(opts.appSecretHex)) throw new Error('appSecretHex must be 32 bytes of hex');
@@ -183,6 +200,20 @@ export class RlnWallet implements Wallet {
 
   /** One REST call: network failure → RlnError 'Unreachable', non-2xx → RlnError from body. */
   private async call<T>(
+    endpoint: string,
+    send: () => Promise<{ data?: T; error?: unknown; response: Response }>,
+  ): Promise<T> {
+    while (this.gate !== null) await this.gate;
+    this.inFlight += 1;
+    try {
+      return await this.rawCall(endpoint, send);
+    } finally {
+      this.inFlight -= 1;
+    }
+  }
+
+  /** A request that ignores the backup gate: only the backup's own. */
+  private async rawCall<T>(
     endpoint: string,
     send: () => Promise<{ data?: T; error?: unknown; response: Response }>,
   ): Promise<T> {
@@ -719,7 +750,23 @@ export class RlnWallet implements Wallet {
    * the folder bind-mounted at /backups; it is read back, removed, and returned for upload.
    */
   backupNow(): Promise<{ version: string; blob: Uint8Array }> {
-    const run = Promise.all([this.payQueue, this.openQueue]).then(() => this.backupInner());
+    // A node that hangs after an unlock (seen once on dave's, B6) must not hold the payment
+    // queue forever: after BACKUP_TIMEOUT_MS the queue moves on and the backup fails.
+    const timeoutMs = this.opts.backup?.timeoutMs ?? BACKUP_TIMEOUT_MS;
+    const run = Promise.all([this.payQueue, this.openQueue]).then(() =>
+      Promise.race([
+        this.backupInner(),
+        sleep(timeoutMs).then(() => {
+          // the node is stuck: requests fail on their own from now, never wait forever
+          this.openGate();
+          throw new WalletError(
+            'NODE_UNREACHABLE',
+            `the node did not finish its backup in ${timeoutMs / 1000} s`,
+            'The node may be stuck: restart its container, then pnpm demo:unlock.',
+          );
+        }),
+      ]),
+    );
     const settled = run.catch(() => undefined);
     this.payQueue = settled;
     this.openQueue = settled;
@@ -731,16 +778,21 @@ export class RlnWallet implements Wallet {
     if (!b) throw new WalletError('NOT_ALLOWED', 'this wallet has no backup settings');
     const version = new Date(this.now()).toISOString();
     const file = `backup-${version.replace(/[^0-9]/gu, '')}.bin`;
+    this.gate = new Promise((r) => (this.releaseGate = r));
     try {
-      await this.call('/lock', () => this.rln.POST('/lock', {}));
+      // nothing else in flight to the node when it locks
+      while (this.inFlight > 0) await sleep(this.pollIntervalMs);
+      await this.rawCall('/lock', () => this.rln.POST('/lock', {}));
       try {
-        await this.call('/backup', () =>
+        await this.rawCall('/backup', () =>
           this.rln.POST('/backup', {
             body: { backup_path: `${BACKUP_CONTAINER_DIR}/${file}`, password: b.password },
           }),
         );
       } finally {
         await this.unlockAfterBackup(b);
+        // let LDK finish starting before any request reaches the node again
+        await sleep(b.settleMs ?? BACKUP_SETTLE_MS);
       }
       await this.waitChannelsUsable();
       const path = join(b.hostDir, file);
@@ -749,14 +801,23 @@ export class RlnWallet implements Wallet {
       return { version, blob };
     } catch (e) {
       throw toWalletError(e, 'other');
+    } finally {
+      this.openGate();
     }
+  }
+
+  private openGate(): void {
+    this.gate = null;
+    this.releaseGate();
   }
 
   /** Unlock, retried: a node left locked can neither pay nor receive. */
   private async unlockAfterBackup(b: BackupSettings): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       try {
-        await this.call('/unlock', () => this.rln.POST('/unlock', { body: b.unlockBody as never }));
+        await this.rawCall('/unlock', () =>
+          this.rln.POST('/unlock', { body: b.unlockBody as never }),
+        );
         return;
       } catch (e) {
         if (e instanceof RlnError && e.rlnName === 'AlreadyUnlocked') return;
@@ -775,7 +836,7 @@ export class RlnWallet implements Wallet {
   private async waitChannelsUsable(): Promise<void> {
     const deadline = this.now() + 15_000;
     while (this.now() < deadline) {
-      const i = await this.call('/nodeinfo', () => this.rln.GET('/nodeinfo')).catch(() => null);
+      const i = await this.rawCall('/nodeinfo', () => this.rln.GET('/nodeinfo')).catch(() => null);
       if (i && i.num_usable_channels >= i.num_channels) return;
       await sleep(this.pollIntervalMs * 2);
     }

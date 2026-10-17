@@ -16,6 +16,13 @@ if [ -z "$($COMPOSE ps -q 2>/dev/null)" ]; then
 fi
 
 # bitcoind first, so electrs and esplora don't fail on an unavailable RPC
+# demo:lose-phone stopped a node for good: starting it again would bring an old channel state
+# back online (SPEC §12). Only demo:reset clears it.
+for lost in "$INFRA_DIR"/.out/lost-*; do
+    if [ -e "$lost" ]; then
+        _die "$(basename "$lost" | sed 's/lost-//') lost their phone: run pnpm demo:reset, not infra:up"
+    fi
+done
 # B6: one backup folder per node, bind-mounted at /backups (gitignored, like all of infra/data)
 for m in alice bob charlie dave; do mkdir -p "$INFRA_DIR/data/backups/$m"; done
 $COMPOSE up -d bitcoind
