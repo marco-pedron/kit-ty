@@ -3,7 +3,7 @@
 > Aggiornato da Claude Code alla fine di ogni task. Solo lo stream C scrive qui.
 
 ## Task
-- [ ] K0 Sessione contratto (revisione)
+- [x] K0 Sessione contratto (revisione): `api.ts` e `views.ts` approvati dal PM; registro in `a.md`
 - [ ] C1 Relay
 - [ ] C2 RelayClient
 - [ ] C3 Rotte dell'agente
@@ -16,7 +16,7 @@
 - niente
 
 ## Prossimo passo
-- 
+- C1 relay: scegliere SQLite (`better-sqlite3` è nativo, oppure `node:sqlite` incluso in Node 22) in una PR di dipendenze dedicata.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
