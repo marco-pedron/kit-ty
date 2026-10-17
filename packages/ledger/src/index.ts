@@ -23,6 +23,7 @@ export { allocateByWeight, splitEqually, type Weighted } from './allocate.js';
 export { ASSET_PRECISION, assetUnitsToUsdCents, usdCentsToAssetUnits } from './asset.js';
 export { computeBalances, type Balances, type NetPosition } from './balances.js';
 export { LedgerError, type LedgerErrorCode } from './errors.js';
+export { expenseShares, type ShareInput, type ShareResult } from './shares.js';
 export { allocateExpense, approveExpense, splitOriginal, validateDraft } from './expense.js';
 export { convertToUsdCents, lockRate, manualRate, parseRateTable } from './fx.js';
 export {
