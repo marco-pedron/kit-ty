@@ -155,13 +155,8 @@ for (const w of ['dave-htlc', ...TRAVELERS.map((m) => `${m}-htlc`)]) await sendB
 await mine(1);
 log('setup: nodes, BTC, DUSD issued', { assetId, pk });
 
-await runCase('0. on-ramp 100.00 on-chain to each traveler (RLN → RLN)', async () => {
-  for (const m of TRAVELERS) await rlnSend('dave', m, assetId, 10_000);
-  for (const m of TRAVELERS) await waitFor(`${m} settled`, async () => (await refresh(m), (await settled(m)) === 10_000), 60_000, 1000);
-  return { note: TRAVELERS.map((m) => `${m} 100.00`).join(', ') };
-});
-
-await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side, push 300k sat)', async () => {
+await runCase('0a. ONE channel dave → each traveler (D + L = 80.00 on dave side, push 300k sat)', async () => {
+  log('dave allocations right before the opens', { utxos: await allocations() });
   const tx0 = (await mempool()).length;
   for (const m of TRAVELERS)
     await post('dave', '/openchannel', {
@@ -187,6 +182,12 @@ await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side
   const c = await chan('dave', 'alice');
   const a = await chan('alice', 'dave');
   return { sats: `per channel: dave ${c.local_balance_sat} sat, traveler ${a.local_balance_sat} sat (capacity ${CAPACITY_SAT})`, note: `3 opens back to back, ${funding.length} funding txs, 6 blocks at once + ${n} extra; dave asset ${c.asset_local_amount}, traveler ${c.asset_remote_amount}` };
+});
+
+await runCase('0b. on-ramp 100.00 on-chain to each traveler (RLN → RLN)', async () => {
+  for (const m of TRAVELERS) await rlnSend('dave', m, assetId, 10_000);
+  for (const m of TRAVELERS) await waitFor(`${m} settled`, async () => (await refresh(m), (await settled(m)) === 10_000), 60_000, 1000);
+  return { note: TRAVELERS.map((m) => `${m} 100.00`).join(', ') };
 });
 
 // ======================= 1. the atomic swap, for each traveler =======================
