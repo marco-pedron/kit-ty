@@ -54,6 +54,7 @@ const STATUS: Partial<Record<ErrorCode, number>> = {
   PAYMENT_FAILED: 502,
   NOT_IMPLEMENTED: 501,
   AI_NOT_READY: 503,
+  AGENT_NOT_READY: 503,
   RELAY_UNREACHABLE: 503,
   NODE_UNREACHABLE: 503,
   RECEIVER_UNREACHABLE: 503,
@@ -152,10 +153,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     });
   }
 
-  // No AGENT_NOT_READY in ErrorCodeSchema (shared, stream A): NODE_UNREACHABLE until it exists.
   const notRunning = (what: string) =>
     refuse(
-      'NODE_UNREACHABLE',
+      'AGENT_NOT_READY',
       `${what} not running yet`,
       'Start the agents (pnpm dev, or pnpm dev:fakes) and retry.',
     );

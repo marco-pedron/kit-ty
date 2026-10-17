@@ -26,7 +26,7 @@
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
 2. ~~**`MemberAgent.balances()`**~~ fatto in B8 (sab 17/10): `/state` riempie `me.balance` dal nodo del viaggiatore; `null` solo se il nodo non risponde.
 3. **`now?` in `startAgents`** (già nella #19): per ora il test di collegamento usa l'orologio vero, e i flussi temporizzati usano `demo()`.
-4. **Codice `AGENT_NOT_READY` in `ErrorCodeSchema`** (`packages/shared/src/errors.ts`), con un'azione. Paolo propone 503 `AGENT_NOT_READY` quando il runtime non c'è, ma il codice non esiste: per ora C3 usa `NODE_UNREACHABLE` con il messaggio "… not running yet" e l'azione "Start the agents (pnpm dev, or pnpm dev:fakes) and retry.". Quando esiste, è una riga in `routes/index.ts` (`notRunning`).
+4. ~~**Codice `AGENT_NOT_READY` in `ErrorCodeSchema`**~~ fatto (sab 17/10, PR #27 `[A-contract]`); le rotte rispondono 503 `AGENT_NOT_READY` quando gli agenti non sono partiti (`notRunning` in `routes/index.ts`). Paolo propone 503 `AGENT_NOT_READY` quando il runtime non c'è, ma il codice non esiste: per ora C3 usa `NODE_UNREACHABLE` con il messaggio "… not running yet" e l'azione "Start the agents (pnpm dev, or pnpm dev:fakes) and retry.". Quando esiste, è una riga in `routes/index.ts` (`notRunning`).
 - `apps/agent/src/agent.ts` cancellato in C3, con l'ok di Paolo: non lo importava più nessuno.
 
 ## Decisioni del PM
