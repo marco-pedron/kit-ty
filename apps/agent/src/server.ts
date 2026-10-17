@@ -1,38 +1,30 @@
-import {
-  ActorIdSchema,
-  ERROR_ACTIONS,
-  TripViewSchema,
-  apiError,
-  routes,
-  type ActorId,
-  type ApiErrorBody,
-} from '@kitty/shared';
+import { ERROR_ACTIONS, apiError, type ActorId, type ApiErrorBody } from '@kitty/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { z } from 'zod';
-import { Agent } from './agent.js';
+import type { AiService } from './ai/types.js';
 import type { Config } from './config.js';
 import { createFakeAi } from './dev-fakes/fake-ai.js';
-import { FakeLightningNetwork } from './dev-fakes/fake-wallet.js';
 import { FAKES_BANNER } from './dev-fakes/guard.js';
-import { emptyTripView } from './routes/state.js';
+import type { MemberAgent } from './flows/member-agent.js';
+import { registerRoutes } from './routes/index.js';
+import type { Wallet } from './wallet/types.js';
 
-export function buildAgents(config: Config): Map<ActorId, Agent> {
-  const agents = new Map<ActorId, Agent>();
-  // Fakes: one in-memory network and one fake AI, shared like the real node network and QVAC.
-  const net = config.KITTY_FAKES ? new FakeLightningNetwork() : null;
-  const ai = config.KITTY_FAKES ? createFakeAi() : null;
-  for (const actor of ActorIdSchema.options) {
-    agents.set(actor, new Agent(actor, net?.wallet(actor) ?? null, actor === 'dave' ? null : ai));
-  }
-  return agents;
+// The agent's HTTP server (SPEC §14.3). It does not build agents: the runtime of A5
+// (startAgents, started by index.ts) does, and passes them in; this file only serves them.
+
+export interface AgentServerDeps {
+  /** runtime.agents of startAgents (A5): one MemberAgent per actor. Default: none running. */
+  agents?: ReadonlyMap<ActorId, MemberAgent>;
+  /** Each member's own wallet, for balances. Default: none (balance shown as unknown). */
+  wallets?: ReadonlyMap<ActorId, Wallet>;
+  /** The travelers' on-device AI (A4). Default: the FakeAi with KITTY_FAKES=1, else none. */
+  ai?: AiService | null;
+  now?: () => Date;
+  /** Proof panel, on-chain rail. Default: GET <ESPLORA_URL>/tx/<txid>. */
+  onchainFound?: (txid: string) => Promise<boolean>;
 }
 
-export function buildAgentServer(
-  config: Config,
-  now: () => Date = () => new Date(),
-): FastifyInstance {
+export function buildAgentServer(config: Config, deps: AgentServerDeps = {}): FastifyInstance {
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
-  const agents = buildAgents(config);
   if (config.KITTY_FAKES) app.log.warn(FAKES_BANNER);
 
   const fail = (code: Parameters<typeof apiError>[0], message: string): ApiErrorBody => ({
@@ -55,17 +47,18 @@ export function buildAgentServer(
 
   app.get('/health', async () => ({ ok: true, service: 'agent', fakes: config.KITTY_FAKES }));
 
-  app.get(routes.getState.path, async (req, reply) => {
-    const params = routes.getState.params.safeParse(req.params);
-    if (!params.success) return reply.code(404).send(fail('NOT_FOUND', 'unknown member'));
-    const agent = agents.get(params.data.as);
-    if (!agent) return reply.code(404).send(fail('NOT_FOUND', 'unknown member'));
-    const view = emptyTripView(agent, {
-      fakes: config.KITTY_FAKES,
-      explorerBaseUrl: config.ESPLORA_URL,
-      now: now(),
-    });
-    return z.encode(TripViewSchema, view);
+  const esplora = config.ESPLORA_URL.replace(/\/+$/, '');
+  registerRoutes(app, {
+    agents: deps.agents ?? new Map(),
+    wallets: deps.wallets ?? new Map(),
+    ai: deps.ai !== undefined ? deps.ai : config.KITTY_FAKES ? createFakeAi() : null,
+    fakes: config.KITTY_FAKES,
+    explorerBaseUrl: config.ESPLORA_URL,
+    now: deps.now ?? (() => new Date()),
+    onchainFound:
+      deps.onchainFound ??
+      (async (txid) =>
+        (await fetch(`${esplora}/tx/${txid}`, { signal: AbortSignal.timeout(3_000) })).ok),
   });
 
   return app;
