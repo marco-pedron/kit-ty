@@ -94,6 +94,18 @@ Il resto è la scala neutra di iOS (sfondi raggruppati, etichette a opacità, se
 
 Nel CSS si usano **solo** queste variabili, mai un colore scritto a mano.
 
+**Token derivati** (in `apps/web/src/index.css`, calcolati dai token sopra con `color-mix`, mai scritti a mano):
+
+| Token | Light | Dark | Perché |
+|---|---|---|---|
+| `--accent-text` | `--accent` 80% + `--label` | `--accent` 50% + `--label` | l'accento usato come **testo** (back, link, conto alla rovescia, tab attiva): il rosa e il prugna puri non arrivano ad AA su testo piccolo |
+| `--danger-soft` | `--danger` al 12% | idem | fondo dell'azione distruttiva e dei messaggi d'errore |
+| `--scrim` | `--label` al 30% | `--bg-grouped` al 50% | fondo scurito dietro sheet e alert |
+| `--qr-ink` | `--label` | `--bg-grouped` | moduli del QR: sempre scuri, anche in dark, perché tutti i lettori lo leggano |
+| `--qr-paper` | `--on-accent` | `--on-accent` | fondo del QR: sempre bianco |
+
+Il **"+" del logo** `kit+ty` è sempre rosa, in entrambi i temi: usa `--kitty-cat-line`, come il gattino, non `--accent` (che in dark è prugna).
+
 **Ruoli**
 
 | Cosa | Stile |

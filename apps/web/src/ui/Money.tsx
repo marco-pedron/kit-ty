@@ -13,10 +13,13 @@ export function BalancePill({
   cents,
   hidden,
   onToggle,
+  caption = 'Only you can spend it',
 }: {
   cents: bigint | null;
   hidden: boolean;
   onToggle: () => void;
+  /** Under the pill: whose money this is. */
+  caption?: string;
 }) {
   return (
     <div>
@@ -36,7 +39,7 @@ export function BalancePill({
         </button>
       </div>
       <p className="mt-0.5 pl-1 text-footnote text-label-2">
-        {cents === null ? 'Your node is not answering' : 'Only you can spend it'}
+        {cents === null ? 'Your node is not answering' : caption}
       </p>
     </div>
   );
@@ -106,7 +109,7 @@ export function ApprovalCard({
   return (
     <article className="rounded-card bg-accent-soft p-4" data-noswipe>
       <div className="flex items-start gap-3">
-        <p className="min-w-0 flex-1 text-headline font-semibold">{title}</p>
+        <p className="min-w-0 flex-1 truncate text-headline font-semibold">{title}</p>
         {countdown !== null && (
           <span
             className="tabular text-headline font-semibold text-accent-text"

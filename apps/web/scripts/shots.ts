@@ -3,7 +3,9 @@
 //   rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes
 //   pnpm --filter @kitty/web shots [name-filter…]
 // It creates an expense through the agent API (alice pays dinner; charlie set to "Always ask")
-// so that approval cards, the dispute sheet and the +ty toast exist.
+// so that approval cards, the dispute sheet and the +ty toast exist; Charlie sends a dispute and
+// leaves another part overdue for Dave. The dark run ends with "Cover and exclude": Charlie is
+// excluded, so run it again only after resetting the relay.
 import { readFileSync, mkdirSync } from 'node:fs';
 import { webkit } from '@playwright/test';
 import type { Browser, Page } from '@playwright/test';
@@ -97,7 +99,9 @@ async function run(browser: Browser, scheme: 'light' | 'dark') {
     await charlie.getByRole('dialog').waitFor();
     await charlie.getByRole('textbox').fill('I only had water');
     await shot(charlie, 'charlie-dispute', scheme);
-    await charlie.keyboard.press('Escape');
+    // Sent for real: Dave gets a dispute to decide.
+    await charlie.getByRole('button', { name: 'Send dispute' }).click();
+    await charlie.getByRole('dialog').waitFor({ state: 'detached' });
   }
   await toast.catch(() => console.log('  (no +ty toast seen)'));
   await shot(alice, 'alice-toast', scheme);
@@ -134,6 +138,52 @@ async function run(browser: Browser, scheme: 'light' | 'dark') {
   await guide.screenshot({ path: `${OUT}styleguide-full-${scheme}.png`, fullPage: true });
   await guide.context().close();
   for (const p of [alice, bob, charlie]) await p.context().close();
+
+  await shootDave(browser, scheme, scheme === 'dark');
+}
+
+/** Dave: Home, Members, Log, Profile, a dispute, Cover and exclude (alert; run it if `cover`). */
+async function shootDave(browser: Browser, scheme: 'light' | 'dark', cover: boolean) {
+  const dave = await open(browser, scheme, 'dave');
+  await dave.getByText('Guarantee left', { exact: true }).waitFor({ timeout: 15_000 });
+  for (const s of ['home', 'members', 'log', 'profile'] as const) {
+    if (!wanted(`dave-${s}`)) continue;
+    await dave.goto(`${BASE}/?as=dave${s === 'home' ? '' : `#/${s}`}`);
+    await shot(dave, `dave-${s}`, scheme);
+  }
+  const state = (await api('dave/state')) as {
+    coordinator: {
+      disputes: { expenseId: string; debtor: string }[];
+      defaults: { expenseId: string; debtor: string }[];
+    };
+  };
+  const d = state.coordinator.disputes[0];
+  if (d && wanted('dave-dispute')) {
+    await dave.goto(`${BASE}/?as=dave#/dispute/${d.expenseId}/${d.debtor}`);
+    await shot(dave, 'dave-dispute', scheme);
+  }
+  const x = state.coordinator.defaults[0];
+  if (x && wanted('dave-cover')) {
+    await dave.goto(`${BASE}/?as=dave#/cover/${x.expenseId}/${x.debtor}`);
+    await shot(dave, 'dave-cover', scheme);
+    await dave.getByRole('button', { name: 'Cover and exclude' }).click();
+    await dave.getByRole('alertdialog').waitFor();
+    await shot(dave, 'dave-cover-alert', scheme);
+    if (cover) {
+      // Irreversible: the member is excluded. Last step of the run.
+      await dave
+        .getByRole('alertdialog')
+        .getByRole('button', { name: 'Cover and exclude' })
+        .click();
+      await dave.waitForTimeout(300);
+      await shot(dave, 'dave-cover-progress', scheme);
+      await dave.getByText('excluded. Group covered.').waitFor({ timeout: 120_000 });
+      await shot(dave, 'dave-cover-done', scheme);
+    } else {
+      await dave.keyboard.press('Escape');
+    }
+  }
+  await dave.context().close();
 }
 
 mkdirSync(OUT, { recursive: true });
@@ -142,6 +192,8 @@ await api('charlie/policy', {
   method: 'PUT',
   body: { policy: { autoPayLimitCents: '0', dailyCapCents: '6000', payUpheldDisputes: false } },
 });
+// An expense Charlie leaves alone: overdue after the payment deadline, an insolvency for Dave.
+await seedExpense();
 const browser = await webkit.launch();
 try {
   for (const scheme of ['light', 'dark'] as const) await run(browser, scheme);
