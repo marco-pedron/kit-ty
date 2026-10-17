@@ -28,6 +28,16 @@ export function toClientError(e: unknown): ApiClientError {
     : new ApiClientError('INTERNAL', String(e), 'Reload the page.', 0);
 }
 
+/** The browser clock, re-read every `ms`, for countdowns between two polls. */
+export function useNow(ms = 250): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(id);
+  }, [ms]);
+  return now;
+}
+
 export function useTripState(as: ActorId): TripState {
   const client = useMemo(() => createAgentClient('', as), [as]);
   const [state, setState] = useState<TripView | null>(null);
