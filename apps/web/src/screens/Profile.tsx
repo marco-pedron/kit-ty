@@ -1,5 +1,5 @@
 import { formatCents } from '@kitty/shared';
-import { CircleHelp, LifeBuoy, Wallet } from 'lucide-react';
+import { CircleHelp, LifeBuoy, ShieldCheck, Wallet } from 'lucide-react';
 import { cap } from '../history.js';
 import { Avatar } from '../ui/Avatar.js';
 import { NavBar } from '../ui/Bars.js';
@@ -40,6 +40,17 @@ export function ProfileScreen({ trip, as, go }: ScreenProps) {
             }
             chevron
             onClick={() => go('home')}
+          />
+          <Row
+            leading={
+              <Tile>
+                <ShieldCheck {...icon} />
+              </Tile>
+            }
+            title="Verified log"
+            subtitle="Every event, checked on this phone"
+            chevron
+            onClick={() => go('log')}
           />
           <Row
             leading={

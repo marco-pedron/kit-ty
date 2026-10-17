@@ -25,6 +25,9 @@ describe("Dave's routes", () => {
       '#/cover/x1/charlie',
     );
     expect(daveHash({ name: 'home' })).toBe('');
+    const h = 'cd'.repeat(32);
+    expect(daveRouteFromHash(`#/proof/${h}`)).toEqual({ name: 'proof', paymentHash: h });
+    expect(daveHash({ name: 'proof', paymentHash: h })).toBe(`#/proof/${h}`);
   });
 
   it('swipes left to Members and right to Log, and back', () => {

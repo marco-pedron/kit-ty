@@ -17,7 +17,7 @@
   - [x] C4f Visual identity di `docs/DESIGN.md` (branch `c/C4f-design`)
   - [x] C4f UI del viaggiatore in stile iPhone (branch `c/C4f-ui`)
 - [x] C5 UI Dave (branch `c/C5-dave`)
-- [ ] C6 Prova e Registro verificato
+- [x] C6 Prova e Registro verificato (branch `c/C6-proof-log`)
 - [ ] C7 Attese ed errori
 
 ## Bloccato da
@@ -27,7 +27,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C6 Prova e Registro verificato, poi C7 attese ed errori.
+- C7 attese ed errori.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -49,13 +49,21 @@
 - **C5, saldi in Members.** Il wireframe di Dave mostra il saldo di ogni membro, ma SPEC §1 e `TripViewSchema` vietano all'operatore di vedere i saldi dei viaggiatori. Members mostra lo stato e la **garanzia residua** di ciascuno; la pillola in alto di Dave è la **garanzia residua totale** (Σ G − usata), con la didascalia "Guarantee left".
 - **C5, tasso del giorno.** `/state` dà le unità di valuta per 1 USD: mostro "1 DUSD = 0.86 EUR" invece del "1 EUR = x DUSD" del wireframe, per non invertire il numero nel browser. "Set" apre uno sheet che firma un `RATE_SET` con tutti i tassi, la data di oggi e la fonte "Set by the coordinator".
 - **C5, pulsanti delle contestazioni.** In Home "Cancel" annulla **solo la parte** del debitore (`line_voided`, con alert di conferma) e "Confirm" la conferma (`upheld`). Nella schermata Dispute "Cancel expense" annulla **tutta la spesa** (`expense_voided`, con alert). Note fisse: "Confirmed by the coordinator", "Part cancelled by the coordinator", "Expense cancelled by the coordinator".
-- **C5, Log.** Nel wireframe è "(built in C6)": in C5 c'è una versione provvisoria (riepilogo del registro e attività dal `/state` di Dave); C6 la sostituisce.
+- **C5, Log.** Nel wireframe è "(built in C6)": in C5 c'era una versione provvisoria, sostituita in C6.
+- **C6, firme con i fake.** `fakeVerify` di `packages/shared` si rifiuta di girare senza `KITTY_FAKES=1`, apposta: le firme finte sono falsificabili. Nel browser non aggiro il controllo: con `fakes` la schermata Log verifica solo la catena di hash e dice "hash chain only (fakes)"; sui nodi reali verifica ogni firma ed25519 con `signatureVerifier`. Niente da chiedere a Marco.
+- **C6, accesso al Log per i viaggiatori.** Riga "Verified log" nel Profilo; la Prova si apre toccando una riga dello storico che ha un pagamento (Home) o un evento `PAYMENT_MADE`/`GUARANTEE_PAID` nel Log. Per Dave il Log è la tab a destra.
+- **C6, relay nel browser.** Il proxy di Vite inoltra `/relay/*` al relay (sola lettura, `GET /events`), così la UI ricontrolla il registro senza fidarsi dell'agente; prima la UI parlava solo con l'agente.
 
 ## Decisioni del PM
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C6, sab 17/10 23:30
+- Funziona: schermata **Log** condivisa (`screens/shared/Log.tsx`) per Dave (tab a destra) e per i viaggiatori (Profilo → Verified log). Legge `GET /events` del relay tramite il proxy `/relay` di Vite e **ricalcola tutto nel browser** (`verify.ts`): schema del contratto, `seq` consecutivi, `prevHash`, `hash = sha256(canonical({seq, prevHash, signed}))` con `storedEventHash` di shared, firma ed25519 di ogni autore con `signatureVerifier` (con i fake solo la catena, vedi decisioni). In cima "Chain verified ✓ · N events · N/N signatures valid" oppure "Chain broken at #N" con la spiegazione; sotto gli eventi (seq, tipo, autore, ora, hash abbreviato in mono, txid di chiusura per `MEMBER_EXCLUDED`). "Equal on N/N" non fatto (P1). Schermata **Proof** (`screens/shared/Proof.tsx`) da `GET /api/proof/:paymentHash`: importo, chi ha pagato chi, "Verified ✓", tre spunte (verde se verificate, accento con la spiegazione se no), dettagli in mono con Copy; on-chain txid e link all'esplora; se la prova non è ancora nel registro (404 per ~1 s dopo il pagamento) aspetta e riprova. Si apre toccando un pagamento nello storico (viaggiatori) o nel Log (Dave e viaggiatori).
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, `?as=alice#/log`, oppure `pnpm --filter @kitty/web shots`. Test: `verify.test.ts` (catena valida, corpo alterato, evento omesso, firma falsa, evento illeggibile, fake), `nav.test.ts`, `dave.test.ts`.
+- Problemi noti: con i fake le firme non si possono verificare nel browser (per scelta, vedi decisioni).
+
 ### C5, sab 17/10 22:45
 - Funziona: `?as=dave` apre l'app dell'operatore (`apps/web/src/screens/dave/`), con la barra Members · Home · Log e gli swipe (sinistra Members, destra Log). Home: pillola della garanzia residua con l'occhio, logo → Profile; DISPUTES (motivo, Cancel / Confirm, "opened x ago"), INSOLVENT ("Cover and exclude" destructive, "approval expired x ago", garanzia residua), TODAY'S RATE ("Set" → sheet). Members (stato e garanzia, Dave come operator). Dispute (righe dello scontrino, motivo, divisione, Cancel expense / Confirm). Cover and exclude: alert che spiega cosa succede, poi i tre passi con spunte, barra di avanzamento, gattino e tempo trascorso; la richiesta vive in `DaveApp`, quindi si può uscire dalla schermata e rientrare; alla fine "Charlie excluded. Group covered." con i txid di chiusura. Profile (ruolo, garanzia, FAQ e Assistance "soon"). Correzioni a C4f: titoli delle card su una riga; DESIGN.md §3 documenta i token derivati e il "+" del logo sempre rosa. Nuovi primitivi: `AlertDialog` (pulsanti impilati se l'etichetta è lunga), `Steps`, `ProgressBar`.
 - Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi `pnpm --filter @kitty/web shots` (crea contestazione e insolvenza vere sul fake; il giro dark finisce con "Cover and exclude", quindi rilanciarlo solo dopo aver ripulito il relay). Test: `dave.test.ts`.

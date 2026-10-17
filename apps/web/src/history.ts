@@ -16,10 +16,14 @@ export interface HistoryRow {
   sign: '+' | '-' | null;
   at: string;
   muted: boolean;
+  /** Payment hash or txid of the payment this row shows, for the Proof screen. */
+  proof: string | null;
 }
 
 export const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
 const SETTLED = (l: LineView) => l.state === 'paid' || l.state === 'guaranteed';
+const proofOf = (l: LineView | undefined) =>
+  l?.proof == null ? null : l.proof.rail === 'ln' ? l.proof.paymentHash : l.proof.txid;
 const OPEN = (l: LineView) => !SETTLED(l) && l.state !== 'voided';
 
 function names(list: readonly string[]): string {
@@ -82,6 +86,7 @@ export function historyRows(
           cents: l.cents,
           sign: '+',
           muted: false,
+          proof: proofOf(l),
         });
       rows.push({
         ...base,
@@ -93,6 +98,7 @@ export function historyRows(
         cents: e.totalUsdCents,
         sign: null,
         muted: e.status === 'voided',
+        proof: null,
       });
       continue;
     }
@@ -108,6 +114,7 @@ export function historyRows(
       cents: mine?.cents ?? e.totalUsdCents,
       sign: mine === undefined || mine.state === 'voided' ? null : '-',
       muted: mine?.state === 'voided' || e.status === 'voided',
+      proof: proofOf(mine),
     });
   }
   return rows;
