@@ -11,7 +11,7 @@ import type { Wallet } from '../wallet/types.js';
 import { CoordinatorAgent } from './dave.js';
 import { apiErrorOf } from './errors.js';
 import { MemberAgent } from './member-agent.js';
-import type { TripChannels } from './seed-state.js';
+import { loadRates, type TripChannels } from './seed-state.js';
 
 // The running agents of the process (SPEC §14): one per actor, each with ONLY its own wallet,
 // all on the same relay client, ticking every second. The routes (task C3) read and act through
@@ -117,4 +117,12 @@ export function fakeTripChannels(): TripChannels {
   for (const id of MEMBER_IDS)
     c[id] = { tripChannelId: `fake-trip-${id}`, liquidityChannelId: `fake-liq-${id}` };
   return c;
+}
+
+/**
+ * @deprecated Use {@link seedTrip} with {@link fakeTripChannels}: same trip, one code path for
+ * the fakes and the real seed. Kept so existing callers compile.
+ */
+export function seedFakeTrip(rt: AgentRuntime, assetId: string, log: Log): Promise<void> {
+  return seedTrip(rt, { assetId, channels: fakeTripChannels(), rate: loadRates() }, log);
 }
