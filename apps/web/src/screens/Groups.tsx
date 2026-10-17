@@ -1,15 +1,24 @@
 import { DEFAULT_POLICY, formatCents, type ApiClientError } from '@kitty/shared';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Avatar, Badge, EmptyState, ErrorBox, LimitBadge, ScreenHeader } from '../components.js';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
+import { cap } from '../history.js';
 import { paymentMode } from '../mode.js';
 import { limitFromStep, memberStanding, sliderSteps, stepFromLimit } from '../slider.js';
 import { toClientError } from '../state.js';
-import { DEMO_SECOND_GROUP } from './group-history.js';
+import { Avatar } from '../ui/Avatar.js';
+import { Badge, LimitBadge } from '../ui/Badge.js';
+import { NavBar } from '../ui/Bars.js';
+import { Button } from '../ui/Button.js';
+import { Slider } from '../ui/Controls.js';
+import { Row, Section } from '../ui/List.js';
+import { ErrorNote } from '../ui/Notes.js';
+import { StateView } from '../ui/Overlays.js';
 import type { ScreenProps } from './types.js';
 
-// Groups (PM prototype): each group with my balance and its limit badge (tap: the slider), "Join group" not available
-// yet. Group settings: the one limit slider, the daily cap read-only, the members.
+// Groups (wireframe, bottom left): each group with my balance and its limit badge; Group 2 dashed
+// and inactive; "Join group" later. Group settings (bottom right): the one limit slider, the
+// daily cap read-only, the members.
 
 export function GroupsScreen({ trip, go }: ScreenProps) {
   const s = trip.state;
@@ -17,37 +26,50 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
   const limit = (s?.me?.policy ?? DEFAULT_POLICY).autoPayLimitCents;
   return (
     <>
-      <ScreenHeader title="Groups" back="home" go={go} />
+      <NavBar title="Groups" large back={{ label: 'Home', onClick: () => go('home') }} />
       <div className="space-y-3 px-4">
         {s?.trip == null ? (
-          <EmptyState>Your groups appear here.</EmptyState>
+          <StateView kind="loading" title="Looking for your groups" />
         ) : (
-          <div className="card flex items-center gap-3">
-            <button type="button" onClick={() => go('group')} className="min-w-0 flex-1 text-left">
-              <p className="truncate font-slab text-amount font-bold">{s.trip.name}</p>
-              <p className="amount mt-1 text-ink-muted">
-                {balance === null ? '—' : formatCents(balance.tripOutboundCents)} DUSD
-              </p>
-            </button>
-            <LimitBadge
-              limitCents={limit}
-              channelCents={s.trip.params.tripChannelCents}
+          <div className="rounded-card bg-bg-cell">
+            <button
+              type="button"
               onClick={() => go('group')}
-            />
+              className="pressable flex w-full items-center gap-3 px-4 pt-3.5 pb-1 text-left"
+            >
+              <span className="flex-1 text-headline font-semibold">{s.trip.name}</span>
+              <ChevronRight size={18} strokeWidth={1.75} className="text-label-3" />
+            </button>
+            <div className="flex items-center justify-between px-4 pb-3.5">
+              <span className="tabular text-title2 font-bold">
+                {balance === null ? '—' : formatCents(balance.tripOutboundCents)}
+                <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
+              </span>
+              <LimitBadge
+                limitCents={limit}
+                channelCents={s.trip.params.tripChannelCents}
+                onClick={() => go('group')}
+              />
+            </div>
           </div>
         )}
         {SHOW_DEMO_SECOND_GROUP && (
-          <div aria-hidden className="card pointer-events-none text-ink-muted select-none">
-            <p className="flex items-center justify-between font-slab text-amount font-bold">
-              {DEMO_SECOND_GROUP.name}
-              <span className="badge bg-line text-ink-muted">Limit</span>
-            </p>
-            <p className="mt-2 h-3 w-20 rounded-full bg-line" />
+          <div
+            aria-label="Group 2, not active yet"
+            className="rounded-card border border-dashed border-separator px-4 py-3.5 text-label-3"
+          >
+            <p className="text-headline font-semibold">Group 2</p>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-subhead">not active yet</span>
+              <Badge kind="muted">Limit 10.00</Badge>
+            </div>
           </div>
         )}
-        <button type="button" disabled className="btn btn-secondary w-full py-3">
-          Join group… <span className="text-small">(soon)</span>
-        </button>
+        <div className="flex justify-center pt-3">
+          <Button variant="gray" disabled>
+            Join group… (soon)
+          </Button>
+        </div>
       </div>
     </>
   );
@@ -55,60 +77,64 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
 
 export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
   const s = trip.state;
-  if (s?.trip == null || s.me === null) {
+  if (s?.trip == null || s.me === null)
     return (
       <>
-        <ScreenHeader title="Group" back="groups" go={go} />
-        <EmptyState>Waiting for dave to set up the trip.</EmptyState>
+        <NavBar title="Group" back={{ label: 'Groups', onClick: () => go('groups') }} />
+        <StateView kind="loading" title="Waiting for the trip" />
       </>
     );
-  }
   const { params } = s.trip;
   return (
     <>
-      <ScreenHeader title={s.trip.name} back="groups" go={go} />
-      <div className="space-y-3 px-4">
-        <LimitSlider trip={trip} as={as} go={go} />
-        <section className="card">
-          <h2 className="text-amount">Members</h2>
-          <ul className="mt-2 divide-y-[1.5px] divide-line">
-            {s.members.map((m) => {
-              const st = memberStanding(m, s.expenses);
-              return (
-                <li key={m.memberId} className="flex items-center justify-between py-2">
-                  <span className="flex items-center gap-3 capitalize">
-                    <Avatar m={m.memberId} size={32} />
-                    {m.displayName}
-                    {m.memberId === as && <span className="text-ink-muted"> (you)</span>}
-                  </span>
-                  <Badge kind={st}>{st}</Badge>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        <p className="px-1 text-small text-ink-muted">
-          Disputes are open for {params.silentAssentSeconds} s after you see an expense; parts above
-          your limit wait for your approval up to {params.paymentDeadlineSeconds} s.
-        </p>
+      <NavBar title={s.trip.name} back={{ label: 'Groups', onClick: () => go('groups') }} />
+      <div className="space-y-6 px-4 pt-4">
+        <LimitSlider
+          trip={trip}
+          channelCents={params.tripChannelCents}
+          windowSeconds={params.silentAssentSeconds}
+        />
+        <Section header="Members">
+          {s.members.map((m) => {
+            const st = memberStanding(m, s.expenses);
+            return (
+              <Row
+                key={m.memberId}
+                leading={<Avatar name={m.displayName} me={m.memberId === as} size={32} />}
+                title={`${cap(m.displayName)}${m.memberId === as ? ' (you)' : ''}`}
+                value={<Badge kind={st}>{st}</Badge>}
+              />
+            );
+          })}
+          <Row
+            leading={<Avatar name="dave" size={32} />}
+            title="Dave"
+            subtitle="Coordinator"
+            value={<Badge kind="operator">operator</Badge>}
+            last
+          />
+        </Section>
       </div>
     </>
   );
 }
 
 /** Saved on release, as one signed POLICY_UPDATED; the daily cap is sent back unchanged. */
-function LimitSlider({ trip }: ScreenProps) {
-  const s = trip.state!;
-  const policy = s.me!.policy;
-  const d = s.trip!.params.tripChannelCents;
-  const [step, setStep] = useState(() => stepFromLimit(policy.autoPayLimitCents, d));
+function LimitSlider({
+  trip,
+  channelCents,
+  windowSeconds,
+}: Pick<ScreenProps, 'trip'> & { channelCents: bigint; windowSeconds: number }) {
+  const s = trip.state;
+  const policy = s?.me?.policy ?? DEFAULT_POLICY;
+  const [step, setStep] = useState(() => stepFromLimit(policy.autoPayLimitCents, channelCents));
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [error, setError] = useState<ApiClientError | null>(null);
-  const excluded = s.members.find((m) => m.memberId === s.me!.memberId)?.status === 'excluded';
-  const mode = paymentMode(limitFromStep(step), d);
+  const excluded = s?.members.find((m) => m.memberId === s.me?.memberId)?.status === 'excluded';
+  const limit = limitFromStep(step);
+  const mode = paymentMode(limit, channelCents);
 
   const save = () => {
-    const limit = limitFromStep(step);
     if (limit === policy.autoPayLimitCents) return;
     setSaving('saving');
     setError(null);
@@ -124,61 +150,51 @@ function LimitSlider({ trip }: ScreenProps) {
       });
   };
 
-  const max = sliderSteps(d);
-  const filled = max === 0 ? 0 : (step / max) * 100;
+  const explain =
+    mode.kind === 'auto'
+      ? `Pays every part after ${windowSeconds} s unless you dispute.`
+      : mode.kind === 'ask'
+        ? 'Asks you before paying any part.'
+        : `Pays parts up to ${formatCents(limit)} after ${windowSeconds} s unless you dispute. Above it, asks you.`;
+
   return (
-    <section className="card">
-      <h2 className="text-amount">Payments by your agent</h2>
-      <p className="mt-2 flex h-7 items-center">
-        {mode.kind === 'auto' ? (
-          <Badge kind="auto">Auto mode</Badge>
-        ) : (
-          <span className="font-semibold">{mode.long}</span>
-        )}
-      </p>
-      <div className="relative mt-3 h-7" data-noswipe>
-        <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-line" />
-        <div
-          className="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-teal"
-          style={{ width: `${filled}%` }}
-        />
-        <input
-          type="range"
-          min={0}
-          max={max}
-          step={1}
-          value={step}
-          disabled={excluded || saving === 'saving'}
-          onChange={(e) => {
-            setStep(e.target.valueAsNumber);
-            setSaving('idle');
-          }}
-          onPointerUp={save}
-          onKeyUp={save}
-          aria-label="Limit"
-          aria-valuetext={mode.long}
-          className="range-input relative"
-        />
-      </div>
-      <div className="mt-1 flex justify-between text-small text-ink-muted">
-        <span>Always ask me</span>
-        <span>Automatic payment</span>
-      </div>
-      <p className="mt-3 text-ink-muted">
-        and at most{' '}
-        <span className="font-semibold text-ink">{formatCents(policy.dailyCapCents)} DUSD</span> a
-        day
-      </p>
-      <p className="mt-2 h-4 text-small text-ink-muted">
-        {excluded
+    <Section
+      footer={
+        excluded
           ? 'You were excluded from this trip.'
           : saving === 'saving'
             ? 'Saving…'
             : saving === 'saved'
               ? 'Saved: signed and shared with your agent.'
-              : ''}
-      </p>
-      {error && <ErrorBox error={error} />}
-    </section>
+              : explain
+      }
+    >
+      <div className="px-4 pt-3 pb-3">
+        <div className="flex min-h-11 items-center justify-between gap-3">
+          <span className="text-body">Pay automatically</span>
+          <LimitBadge limitCents={limit} channelCents={channelCents} />
+        </div>
+        <Slider
+          value={step}
+          max={sliderSteps(channelCents)}
+          onChange={(v) => {
+            setStep(v);
+            setSaving('idle');
+          }}
+          onCommit={save}
+          disabled={excluded || saving === 'saving'}
+          label="Limit"
+          valueText={mode.long}
+        />
+        <div className="flex justify-between text-footnote text-label-2">
+          <span>always ask</span>
+          <span>auto mode</span>
+        </div>
+        <p className="mt-3 inline-flex rounded-full bg-bg-fill px-3 py-1 text-subhead text-label-2">
+          and at most {formatCents(policy.dailyCapCents)} a day
+        </p>
+        {error && <ErrorNote error={error} className="mt-3" />}
+      </div>
+    </Section>
   );
 }

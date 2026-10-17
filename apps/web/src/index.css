@@ -1,207 +1,277 @@
-@import url('https://fonts.googleapis.com/css2?family=Fira+Mono&family=Fira+Sans:wght@400;600&family=Zilla+Slab:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@700&family=Inter:wght@400;600;700&display=swap');
 @import 'tailwindcss';
 
-/* Visual identity: docs/DESIGN.md §3 (palette) and §4 (type). Every colour in the app is one of
-   these variables; Tailwind's own palette is switched off below, so nothing else can creep in. */
+/* Tokens: docs/DESIGN.md §3, copied as they are (light, then dark). Every colour in the app is
+   one of these variables; Tailwind's own palette is switched off below. */
 :root {
-  /* base neutra (bianco caldo, tinto verso il rosa della palette) */
-  --bg:         #F7F1EE;  /* sfondo dell'app */
-  --surface:    #FFFBF8;  /* card */
-  --line:       #EADDE0;  /* bordi e divisori */
-  --ink:        #2B1B28;  /* testo principale (prugna quasi nera) */
-  --ink-muted:  #7D6A78;  /* testo secondario, date */
+  /* sfondi stile iOS (grouped) */
+  --bg-grouped:    #F6F2F4;   /* systemGroupedBackground, appena caldo */
+  --bg-cell:       #FFFEFE;   /* celle e card: il bianco che domina */
+  --bg-fill:       rgba(120,110,116,0.12);  /* fill di controlli e campi */
+  --separator:     rgba(60,50,58,0.18);     /* 0.5px */
 
-  /* palette del progetto */
-  --plum:       #81366F;  /* primario: pulsanti principali, barra in basso, titoli forti */
-  --pink:       #F25481;  /* accento: il "+" del logo, notifiche, cose che chiedono attenzione */
-  --mint:       #9CE7AB;  /* successo: Auto mode, active, pagato */
-  --teal:       #42848A;  /* informazione: importi in entrata, link, limite, avanzamento */
+  /* etichette */
+  --label:         #1C1A1C;
+  --label-2:       rgba(28,26,28,0.60);
+  --label-3:       rgba(28,26,28,0.30);
 
-  /* tinte chiare per sfondi di badge e banner (stessa tinta, più chiara) */
-  --plum-soft:  #EBD9E5;
-  --pink-soft:  #FDDCE6;
-  --mint-soft:  #DDF6E3;
-  --teal-soft:  #D6E8E9;
+  /* identità */
+  --accent:        #F25481;
+  --accent-soft:   #FDE7EE;
+  --on-accent:     #FFFFFF;
+  --positive:      #9CE7AB;
+  --positive-soft: #E9F9ED;
+  --on-positive:   #1F3B27;
+  --danger:        #FF3B30;
 
-  /* type (§4) */
-  --ff-slab: 'Zilla Slab', serif;
-  --ff-text: 'Fira Sans', sans-serif;
-  --ff-code: 'Fira Mono', monospace;
-  --fs-balance: 40px;
-  --fs-title: 22px;
-  --fs-amount: 17px;
-  --fs-body: 15px;
-  --fs-small: 12px;
+  --kitty-cat-line: #F25481;
+  --kitty-cat-fill: #FFFFFF;
+}
 
-  /* shapes (§5) */
-  --radius-card: 16px;
-  --radius-button: 12px;
-  --border: 1.5px;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-grouped:    #000000;
+    --bg-cell:       #1C1C1E;
+    --bg-fill:       rgba(120,120,128,0.24);
+    --separator:     rgba(84,84,88,0.65);
+
+    --label:         #FFFFFF;
+    --label-2:       rgba(235,235,245,0.60);
+    --label-3:       rgba(235,235,245,0.30);
+
+    --accent:        #81366F;
+    --accent-soft:   #3A2034;
+    --on-accent:     #FFFFFF;
+    --positive:      #42848A;
+    --positive-soft: #1E3335;
+    --on-positive:   #FFFFFF;
+    --danger:        #FF453A;
+
+    --kitty-cat-line: #F25481;   /* il gattino resta rosa e bianco */
+    --kitty-cat-fill: #FFFFFF;
+  }
+}
+
+/* Derived from the tokens above, never written by hand (§3 roles, §5 shapes, §7 sheet). */
+:root {
+  --danger-soft: color-mix(in srgb, var(--danger) 12%, transparent);
+  --scrim: color-mix(in srgb, var(--label) 30%, transparent);
+  /* The accent as text: darker in light, lighter in dark, so small text passes AA. */
+  --accent-text: color-mix(in srgb, var(--accent) 80%, var(--label));
+  /* A QR must stay dark on white in both themes to scan. */
+  --qr-ink: var(--label);
+  --qr-paper: var(--on-accent);
+
+  --ff-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+  --ff-brand: 'Zilla Slab', serif;
+  --ff-code: ui-monospace, 'SF Mono', 'Fira Mono', monospace;
+
+  --r-control: 10px;
+  --r-card: 14px;
+  --r-sheet: 24px;
+  --r-tile: 7px;
+
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --tab-bar-space: 104px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scrim: color-mix(in srgb, var(--bg-grouped) 50%, transparent);
+    --qr-ink: var(--bg-grouped);
+    --accent-text: color-mix(in srgb, var(--accent) 50%, var(--label));
+  }
 }
 
 @theme inline {
   --color-*: initial;
-  --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-line: var(--line);
-  --color-ink: var(--ink);
-  --color-ink-muted: var(--ink-muted);
-  --color-plum: var(--plum);
-  --color-pink: var(--pink);
-  --color-mint: var(--mint);
-  --color-teal: var(--teal);
-  --color-plum-soft: var(--plum-soft);
-  --color-pink-soft: var(--pink-soft);
-  --color-mint-soft: var(--mint-soft);
-  --color-teal-soft: var(--teal-soft);
-
   --shadow-*: initial;
-  --font-sans: var(--ff-text);
-  --font-slab: var(--ff-slab);
+  --color-bg-grouped: var(--bg-grouped);
+  --color-bg-cell: var(--bg-cell);
+  --color-bg-fill: var(--bg-fill);
+  --color-separator: var(--separator);
+  --color-label: var(--label);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-on-positive: var(--on-positive);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-scrim: var(--scrim);
+  --color-accent-text: var(--accent-text);
+  --color-qr-ink: var(--qr-ink);
+  --color-qr-paper: var(--qr-paper);
+  --color-cat-line: var(--kitty-cat-line);
+  --color-cat-fill: var(--kitty-cat-fill);
+
+  --font-sans: var(--ff-ui);
+  --font-brand: var(--ff-brand);
   --font-mono: var(--ff-code);
-  --text-big: var(--fs-balance);
-  --text-title: var(--fs-title);
-  --text-amount: var(--fs-amount);
-  --text-body: var(--fs-body);
-  --text-small: var(--fs-small);
+
+  /* HIG type scale (§4): size / line height */
+  --text-large-title: 34px;
+  --text-large-title--line-height: 41px;
+  --text-large-title--letter-spacing: -0.4px;
+  --text-title2: 22px;
+  --text-title2--line-height: 28px;
+  --text-headline: 17px;
+  --text-headline--line-height: 22px;
+  --text-body: 17px;
+  --text-body--line-height: 22px;
+  --text-subhead: 15px;
+  --text-subhead--line-height: 20px;
+  --text-footnote: 13px;
+  --text-footnote--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+
+  --radius-control: var(--r-control);
+  --radius-card: var(--r-card);
+  --radius-sheet: var(--r-sheet);
+  --radius-tile: var(--r-tile);
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
-    background: var(--bg);
-    color: var(--ink);
-    font-family: var(--ff-text);
-    font-size: var(--fs-body);
+    background: var(--bg-grouped);
+    color: var(--label);
+    font-family: var(--ff-ui);
+    font-size: 17px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
   }
-  h1,
-  h2,
-  h3 {
-    font-family: var(--ff-slab);
-    font-weight: 700;
+  :focus-visible {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 2px;
   }
-}
-
-/* ---------- components (§5, §7) ---------- */
-
-@utility card {
-  background: var(--surface);
-  border: var(--border) solid var(--line);
-  border-radius: var(--radius-card);
-  padding: 16px;
-}
-
-/* A part waiting for me, an insolvency: pink border on pink-soft. */
-@utility card-attention {
-  background: var(--pink-soft);
-  border: var(--border) solid var(--pink);
-  border-radius: var(--radius-card);
-  padding: 16px;
-}
-
-@utility btn {
-  border-radius: var(--radius-button);
-  padding: 10px 16px;
-  font-weight: 600;
-  border: var(--border) solid transparent;
-  &:disabled {
-    background: var(--line);
-    border-color: var(--line);
-    color: var(--ink-muted);
+  button,
+  a {
+    cursor: pointer;
   }
 }
 
-@utility btn-primary {
-  background: var(--plum);
-  color: var(--surface);
-}
-
-@utility btn-secondary {
-  background: transparent;
-  border-color: var(--plum);
-  color: var(--plum);
-}
-
-@utility badge {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--ink);
-  border: var(--border) solid transparent;
-}
-
-@utility field {
-  background: var(--surface);
-  border: var(--border) solid var(--line);
-  border-radius: var(--radius-button);
-  padding: 8px 12px;
-  color: var(--ink);
-  &[aria-invalid='true'] {
-    border-color: var(--pink);
+/* §6: on touch, scale 0.97 and opacity 0.7, with a spring. */
+@utility pressable {
+  transition:
+    transform 350ms var(--spring),
+    opacity 350ms var(--spring);
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+    opacity: 0.7;
   }
 }
 
-@utility amount {
-  font-family: var(--ff-slab);
-  font-weight: 500;
-  font-size: var(--fs-amount);
+@utility hairline-b {
+  border-bottom: 0.5px solid var(--separator);
+}
+@utility hairline-t {
+  border-top: 0.5px solid var(--separator);
+}
+@utility hairline {
+  border: 0.5px solid var(--separator);
+}
+
+@utility tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- limit slider (§7): track --line, filled --teal, round --plum thumb ---------- */
+/* Screen push and sheet, §6 (spring 300-450 ms). */
+@keyframes push-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(-120%);
+  }
+  to {
+    transform: none;
+  }
+}
+@utility animate-push {
+  animation: push-in 380ms var(--spring) both;
+}
+@utility animate-sheet {
+  animation: sheet-up 420ms var(--spring) both;
+}
+@utility animate-fade {
+  animation: fade-in 300ms var(--spring) both;
+}
+@utility animate-toast {
+  animation: toast-in 400ms var(--spring) both;
+}
 
-@utility range-input {
+/* The kitten's paw (docs/design/kitty-mascot.svg) is still when asked to, or with reduced motion. */
+.mascot-still #paw {
+  animation: none;
+}
+
+@utility range-ios {
   appearance: none;
   background: transparent;
   width: 100%;
-  height: 28px;
+  height: 44px;
   margin: 0;
   &::-webkit-slider-runnable-track {
-    height: 28px;
+    height: 44px;
     background: transparent;
   }
   &::-webkit-slider-thumb {
     appearance: none;
-    width: 24px;
-    height: 24px;
-    margin-top: 2px;
+    width: 28px;
+    height: 28px;
+    margin-top: 8px;
     border-radius: 999px;
-    background: var(--plum);
-    border: 3px solid var(--surface);
+    background: var(--on-accent);
+    border: 0.5px solid var(--separator);
   }
   &::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+    width: 28px;
+    height: 28px;
     border-radius: 999px;
-    background: var(--plum);
-    border: 3px solid var(--surface);
+    background: var(--on-accent);
+    border: 0.5px solid var(--separator);
   }
   &::-moz-range-track {
     background: transparent;
   }
 }
 
-/* ---------- mascot (§8): the paw waves, pivot on the shoulder ---------- */
-
-@keyframes paw-wave {
-  0%,
-  100% {
-    transform: rotate(-10deg);
-  }
-  50% {
-    transform: rotate(10deg);
-  }
-}
-
-.mascot-paw {
-  transform-box: view-box;
-  transform-origin: 68px 58px;
-  animation: paw-wave 0.8s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .mascot-paw {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }

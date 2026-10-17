@@ -1,13 +1,6 @@
-import type { ExpenseView, LineView } from '@kitty/shared';
+import type { LineView } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
-import {
-  canApprove,
-  canDispute,
-  formatCountdown,
-  needsMe,
-  secondsLeft,
-  transactionRows,
-} from './lines.js';
+import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from './lines.js';
 
 const line = (over: Partial<LineView>): LineView => ({
   expenseId: 'x1',
@@ -80,29 +73,5 @@ describe('what a debtor can do on a part', () => {
     const approved = line({ state: 'due', resolution: upheld, agent: { pay: true, reason: '' } });
     expect(canApprove(approved)).toBe(false);
     expect(canApprove(line({ state: 'due' }))).toBe(false);
-  });
-});
-
-describe('history rows seen by one member', () => {
-  const expense = {
-    expenseId: 'x1',
-    merchant: 'Pho restaurant',
-    submittedAt: '2026-10-17T12:00:00.000Z',
-    lines: [
-      line({ debtor: 'bob', state: 'paid' }),
-      line({ debtor: 'charlie', cents: 350n, state: 'contested' }),
-    ],
-  } as unknown as ExpenseView;
-
-  it('is + for the payer, − for the debtor, unsigned for others', () => {
-    const alice = transactionRows([expense], 'alice');
-    expect(alice.map((r) => [r.who, r.sign, r.cents])).toEqual([
-      ['bob', '+', 309n],
-      ['charlie', '+', 350n],
-    ]);
-    const bob = transactionRows([expense], 'bob');
-    expect(bob[0]).toMatchObject({ who: 'alice', title: 'alice', sign: '-' });
-    expect(bob[1]).toMatchObject({ who: 'charlie', title: 'charlie → alice', sign: null });
-    expect(bob[0]?.description).toBe('Pho restaurant · Paid');
   });
 });

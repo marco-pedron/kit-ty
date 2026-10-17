@@ -1,4 +1,4 @@
-import type { ExpenseView, LineState, LineView, MemberId } from '@kitty/shared';
+import type { LineState, LineView } from '@kitty/shared';
 
 // What a traveler can do on one of their parts, and how to show it. Mirrors the ledger rules
 // (packages/ledger/src/validate.ts, LINE_DECIDED): the agent refuses anything else anyway.
@@ -47,42 +47,4 @@ export function secondsLeft(
 export function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
   return `${m}:${String(seconds % 60).padStart(2, '0')}`;
-}
-
-/**
- * One row of a group's history, seen by `me`: the other person, what for, and the amount with
- * + (owed or paid to me) or − (mine to pay); no sign for parts between two other members.
- */
-export interface TransactionRow {
-  key: string;
-  /** The person shown in the avatar: the other side for me, the debtor otherwise. */
-  who: MemberId;
-  title: string;
-  description: string;
-  cents: bigint;
-  sign: '+' | '-' | null;
-  state: LineState;
-  at: string;
-  line: LineView;
-}
-
-/** Every part of every expense, newest expense first, in the order of its lines. */
-export function transactionRows(expenses: readonly ExpenseView[], me: MemberId): TransactionRow[] {
-  return expenses.flatMap((e) =>
-    e.lines.map((l) => {
-      const toMe = l.payer === me;
-      const fromMe = l.debtor === me;
-      return {
-        key: `${e.expenseId}:${l.debtor}`,
-        who: toMe ? l.debtor : fromMe ? l.payer : l.debtor,
-        title: toMe ? l.debtor : fromMe ? l.payer : `${l.debtor} → ${l.payer}`,
-        description: `${e.merchant} · ${LINE_LABEL[l.state]}`,
-        cents: l.cents,
-        sign: toMe ? '+' : fromMe ? '-' : null,
-        state: l.state,
-        at: e.submittedAt,
-        line: l,
-      };
-    }),
-  );
 }
