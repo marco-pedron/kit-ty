@@ -5,6 +5,7 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { sha256Hex } from './canonical.js';
+import type { DecodedInvoice } from './domain.js';
 import { apiError } from './errors.js';
 
 /** Used by relay and ledger (validateEvent); pure TypeScript, no node needed (SPEC §14.2). */
@@ -40,6 +41,23 @@ export const signatureVerifier: SignatureVerifier = {
     }
   },
 };
+
+/**
+ * The bind invoice of MEMBER_JOINED (SPEC §9.1): created by the member's own node with
+ * description `kitty-bind:<sha256Hex(appPubkey)>`, so its payee_pubkey ties the app key to
+ * the node. The caller decodes the bolt11; this only checks the decoded fields.
+ */
+export function checkBindInvoice(
+  decoded: DecodedInvoice,
+  appPubkey: string,
+  nodePubkey: string,
+): boolean {
+  if (typeof appPubkey !== 'string' || !PUBKEY_HEX.test(appPubkey)) return false;
+  return (
+    decoded.description === `kitty-bind:${sha256Hex(appPubkey)}` &&
+    decoded.payeePubkey === nodePubkey
+  );
+}
 
 // ---------- dev fakes (KITTY_FAKES=1 only) ----------
 // A fake signature is sha256("kitty-fake-sig:" + pubkey + ":" + message): anyone can forge it,

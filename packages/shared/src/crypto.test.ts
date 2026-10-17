@@ -1,7 +1,9 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fakeSign, fakeVerify, signatureVerifier } from './crypto.js';
+import { sha256Hex } from './canonical.js';
+import { checkBindInvoice, fakeSign, fakeVerify, signatureVerifier } from './crypto.js';
+import type { DecodedInvoice } from './domain.js';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -87,6 +89,55 @@ describe('signatureVerifier (ed25519, SPEC §9.1)', () => {
       expect(() => verify(pub, msg, s)).not.toThrow();
       expect(verify(pub, msg, s)).toBe(false);
     }
+  });
+});
+
+describe('checkBindInvoice (SPEC §9.1)', () => {
+  const aliceNode = `02${'a1'.repeat(32)}`;
+  const otherNode = `03${'b2'.repeat(32)}`;
+  const invoice = (description: string, payeePubkey = aliceNode): DecodedInvoice => ({
+    bolt11: 'lnbcrt1bind',
+    payeePubkey,
+    paymentHash: '00'.repeat(32),
+    assetId: null,
+    cents: null,
+    amtMsat: null,
+    description,
+    expiresAt: '2026-10-18T12:00:00.000Z',
+  });
+  const good = `kitty-bind:${sha256Hex(alicePub)}`;
+
+  it('accepts an invoice from the member node committing to the app key', () => {
+    expect(checkBindInvoice(invoice(good), alicePub, aliceNode)).toBe(true);
+  });
+
+  it('rejects an invoice from another node', () => {
+    expect(checkBindInvoice(invoice(good, otherNode), alicePub, aliceNode)).toBe(false);
+    expect(checkBindInvoice(invoice(good), alicePub, otherNode)).toBe(false);
+  });
+
+  it('rejects a description for another app key', () => {
+    expect(checkBindInvoice(invoice(`kitty-bind:${sha256Hex(bobPub)}`), alicePub, aliceNode)).toBe(
+      false,
+    );
+  });
+
+  it('rejects descriptions that are close but not exact', () => {
+    for (const d of [
+      `kitty-bind:${alicePub}`,
+      `kitty-bind:${sha256Hex(alicePub).toUpperCase()}`,
+      `${good} `,
+      ` ${good}`,
+      `KITTY-BIND:${sha256Hex(alicePub)}`,
+      sha256Hex(alicePub),
+      '',
+    ])
+      expect(checkBindInvoice(invoice(d), alicePub, aliceNode)).toBe(false);
+  });
+
+  it('rejects a malformed app key, even with a matching description', () => {
+    for (const key of [alicePub.toUpperCase(), alicePub.slice(2), `${alicePub}00`, ''])
+      expect(checkBindInvoice(invoice(`kitty-bind:${sha256Hex(key)}`), key, aliceNode)).toBe(false);
   });
 });
 
