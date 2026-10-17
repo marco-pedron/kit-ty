@@ -16,6 +16,8 @@ if [ -z "$($COMPOSE ps -q 2>/dev/null)" ]; then
 fi
 
 # bitcoind first, so electrs and esplora don't fail on an unavailable RPC
+# B6: one backup folder per node, bind-mounted at /backups (gitignored, like all of infra/data)
+for m in alice bob charlie dave; do mkdir -p "$INFRA_DIR/data/backups/$m"; done
 $COMPOSE up -d bitcoind
 echo "waiting for bitcoind RPC"
 _wait_until "bitcoind RPC" $BITCOIN_CLI getblockchaininfo || { $COMPOSE logs bitcoind; exit 1; }
