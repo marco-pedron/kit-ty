@@ -27,7 +27,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- Giro visivo finale ([C-polish]), poi fermarsi.
+- Stream C fermo dopo il giro visivo: in attesa della revisione del PM (vedi "Report della sessione autonoma").
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -44,6 +44,19 @@
 - R3 (contestare una parte sopra limite dopo la finestra) **non serve**: è già permesso finché la parte non scade (`packages/ledger/src/validate.ts:285-291`, `kitty.ts:266-283`).
 
 5. **R5, non bloccante (C4e, sab 17/10): `pnpm dev:fakes` non riparte su un relay già usato.** Causa verificata con curl: `FakeWallet.decodeInvoice` (`apps/agent/src/dev-fakes/fake-wallet.ts:117`) conosce solo le invoice create nel processo corrente; dopo un riavvio l'agente rifiuta il `MEMBER_JOINED` (seq 3) del run precedente, si congela (`chainValid: false`, 3 eventi), e `seedTrip` ripubblica `MEMBER_JOINED` ogni 2 s: il relay in modalità finta (`apps/relay/src/fake-validate.ts`) li accetta tutti (468 eventi in un caso). Sintomi in UI: nessun membro, nessuna spesa, QR vuoto, "alice is not a member of the trip" sullo slider. Proposte: (a) `dev:fakes` cancella `apps/relay/data/relay.sqlite*` prima di partire, oppure usa un `RELAY_DB` temporaneo (script in `package.json` della root); (b) il relay finto rifiuta un secondo `MEMBER_JOINED` dello stesso autore, come quello reale. Intanto: istruzioni nel README (sezione Development) e avviso rosso in UI quando `ledger.chainValid` è false.
+
+## Report della sessione autonoma (dom 18/10, notte)
+| Task | PR | Stato | Cosa |
+|---|---|---|---|
+| C5 | #42 | mergiata | UI di Dave: Home (garanzia, contestazioni, insolventi, tasso), Members, Dispute, Cover and exclude con passi e avanzamento, Profile |
+| C6 | #43 | mergiata | Log verificato nel browser (catena e firme) e Proof con tre spunte, per Dave e viaggiatori |
+| C7 | #44 | mergiata | Mappa errori → frasi umane, attese con gattino e tempo, banner di riconnessione, vuoti col gattino |
+| C-polish | vedi sotto | | Giro visivo su tutte le schermate: titolo della card con l'importo prima, "DUSD" non separabile |
+
+- **Decisioni prese in autonomia:** sezione qui sotto (C5 saldi/tasso/pulsanti, C6 firme con i fake/accesso al Log/relay nel browser, C7 riconnessione/dettaglio errori).
+- **Richieste aperte ad A/B:** R5 (dev:fakes su un relay già usato) resta aperta per B. Facoltativa, non bloccante: esporre in `TripView` lo stato del relay visto dall'agente (A), per un banner più preciso.
+- **Difetti noti:** pulsante filled in light 3.3:1 (AA solo testo grande; serve una decisione su `--accent`); negli screenshot WebKit il mono non è SF Mono; con i fake "Cover and exclude" è istantaneo (l'avanzamento si vede solo sui nodi reali); la prova C7 con `rln-dave` spento va fatta sui nodi reali.
+- **Rivedere gli screenshot:** `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi in un altro terminale `pnpm --filter @kitty/web shots` (≈10 min, 82 PNG in `apps/web/.shots/`, light e dark; il giro dark finisce con "Cover and exclude", quindi per rilanciarlo serve ripulire il relay). Filtri: `pnpm --filter @kitty/web shots dave proof` ecc.
 
 ## Decisioni prese in autonomia (da rivedere dal PM)
 - **C5, saldi in Members.** Il wireframe di Dave mostra il saldo di ogni membro, ma SPEC §1 e `TripViewSchema` vietano all'operatore di vedere i saldi dei viaggiatori. Members mostra lo stato e la **garanzia residua** di ciascuno; la pillola in alto di Dave è la **garanzia residua totale** (Σ G − usata), con la didascalia "Guarantee left".

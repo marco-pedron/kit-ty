@@ -70,7 +70,8 @@ export function DisputeScreen({
       <NavBar title="Dispute" back={back} />
       <div className="space-y-6 px-4 pt-4">
         <p className="px-4 text-subhead text-label-2">
-          {e.merchant} · paid by {cap(e.payer)} · {formatCents(e.totalUsdCents)} DUSD
+          {e.merchant} · paid by {cap(e.payer)} · {formatCents(e.totalUsdCents)}
+          {'\u00a0'}DUSD
         </p>
         <Section
           header="Receipt"

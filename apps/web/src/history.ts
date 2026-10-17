@@ -138,7 +138,8 @@ export function approvalText(
   limitCents: bigint,
   secondsLeft: number | null,
 ): { title: string; sentence: string } {
-  const title = `${merchant} · ${cap(l.payer)} paid · ${formatCents(l.cents)}`;
+  // The amount first: on a narrow screen the merchant is what gets cut.
+  const title = `${cap(l.payer)} paid · ${formatCents(l.cents)} · ${merchant}`;
   const askAlways = limitCents <= 0n;
   let sentence: string;
   if (l.resolution?.outcome === 'upheld') sentence = 'Dave upheld it: I need your OK';

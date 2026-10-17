@@ -84,7 +84,7 @@ describe('history rows as the wireframe draws them', () => {
 describe('approval card text', () => {
   it('counts down under the limit, asks above it', () => {
     expect(approvalText(line({ cents: 210n }), 'Coffee', 2000n, 38)).toEqual({
-      title: 'Coffee · Alice paid · 2.10',
+      title: 'Alice paid · 2.10 · Coffee',
       sentence: 'Paying in 0:38 unless you dispute',
     });
     expect(approvalText(line({}), 'Taxi', 1000n, 102).sentence).toBe(
