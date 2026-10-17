@@ -10,7 +10,7 @@
 - [x] C3 Rotte dell'agente (branch `c/C3-agent-routes`)
 - [ ] C4 UI viaggiatore (piano ridotto, 4 PR)
   - [x] C4a shell, polling, navigazione, QR, Profile (branch `c/C4a-shell`)
-  - [ ] C4b Home con Approve/Dispute
+  - [x] C4b Home con Approve/Dispute (branch `c/C4b-home`)
   - [ ] C4c New expense
   - [ ] C4d Groups e Group settings
 - [ ] C5 UI Dave
@@ -24,7 +24,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C4b Home con le card Approve/Dispute.
+- C4c New expense.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -45,6 +45,11 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4b, sab 17/10 19:20
+- Funziona: Home con lo storico del gruppo (spese dalla più recente, chi paga chi, stato di ogni parte, le mie evidenziate). Una parte che aspetta me si apre inline con la frase dell'agente (`LineView.agent.reason`), il conto alla rovescia sull'orologio del server (finestra di contestazione o scadenza di approvazione), "Dispute" (campo motivo obbligatorio) e "Approve" (`POST /expenses/:id/decision`). Approve compare anche su una parte confermata da Dave e non ancora approvata. Due layout con `SHOW_DEMO_SECOND_GROUP`: true = card del gruppo reale più "Group 2" simulato, in grigio e non interattivo; false = titolo e storico a tutta pagina, che scorre dietro la barra.
+- Come si prova: `pnpm dev:fakes`, alice invia una spesa (C4c, oppure `POST /api/alice/expenses`), poi `?as=charlie` → Dispute; `?as=dave` conferma con la rotta; charlie → Approve. Verificato con le rotte sul runtime finto. Test: `lines.test.ts` (conto alla rovescia, regole Approve/Dispute).
+- Problemi noti: nessuna verifica visiva automatica (Chrome assente).
+
 ### C4a, sab 17/10 19:10
 - Funziona: app a larghezza telefono (max 420 px, centrata), `?as=alice|bob|charlie`, polling di `/state` ogni secondo (`apps/web/src/state.ts`, con lo scarto tra orologio del server e del browser per i conti alla rovescia). Barra in basso flottante Groups · 📷 · QR; swipe da Home (sinistra → New expense, destra → QR) e ritorno; schermata nell'hash dell'URL (`#/qr`). Home con barra in alto (saldo del canale di viaggio, occhio per nasconderlo, modalità di pagamento, logo → Profile). QR della pubkey del membro ("Your kit+ty ID", libreria `uqr` 0.1.3). Profile con nome e modalità. New expense, Groups e Group settings sono gusci navigabili. Costante `SHOW_DEMO_SECOND_GROUP` in `apps/web/src/config.ts` (usata da C4b e C4d).
 - Come si prova: `pnpm dev:fakes`, poi `http://127.0.0.1:5173/?as=bob`. Test: `nav.test.ts` (hash, swipe), `mode.test.ts` (etichetta dello slider).
