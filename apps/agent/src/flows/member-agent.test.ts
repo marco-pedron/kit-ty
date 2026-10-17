@@ -209,6 +209,16 @@ describe('MemberAgent (A5a)', () => {
     expect((await lineOf(d, alice, 'bob')).line.state).toBe('paid');
   });
 
+  it('overlapping ticks do not publish twice', async () => {
+    const d = await demo();
+    await Promise.all([d.agents.bob.tick(), d.agents.bob.tick(), d.agents.bob.tick()]);
+    const bobKey = await d.agents.bob.authorPubkey();
+    const mine = d.relay.events.filter(
+      (e) => e.signed.inner.type === 'CHECKPOINT' && e.signed.inner.author === bobKey,
+    );
+    expect(mine).toHaveLength(1);
+  });
+
   it('publishes a CHECKPOINT every 10 new events', async () => {
     const d = await demo();
     await d.tickAll(); // 11 seeded events: one checkpoint per agent

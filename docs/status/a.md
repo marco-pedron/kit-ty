@@ -34,7 +34,7 @@ new MemberAgent({
   checkpointEvery?,      // default 10 eventi
 })
 ```
-- **Loop:** il server chiama `await agent.tick()` ogni secondo per ogni agente (non in parallelo con se stesso: se il tick precedente non è finito, si salta). `tick()` = sync con il relay e validazione locale, `LINE_SEEN`, pagamenti automatici (uno alla volta, in background), `INVOICE_REISSUED` degli invoice scaduti, `CHECKPOINT`. `await agent.idle()` aspetta i pagamenti in volo (test, spegnimento).
+- **Loop:** il server chiama `agent.tick()` ogni secondo per ogni agente (un tick chiamato mentre il precedente è ancora in corso ritorna subito, lo garantisce l'agente). `tick()` = sync con il relay e validazione locale, `LINE_SEEN`, pagamenti automatici (uno alla volta, in background), `INVOICE_REISSUED` degli invoice scaduti, `CHECKPOINT`. `await agent.idle()` aspetta i pagamenti in volo (test, spegnimento).
 - **Lettura per `GET /state`:**
   - `agent.trip()` → `TripState | null` (dalla copia verificata, all'ora corrente): membri, spese, righe, `defaults`, `rate`.
   - `agent.me()` → `MemberState | null` (null per Dave); `agent.policy()`.

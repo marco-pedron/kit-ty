@@ -88,6 +88,7 @@ export class MemberAgent {
   private readonly ops: OperationView[] = [];
   private opCounter = 0;
   private lastCheckpointSeq = 0;
+  private ticking = false;
 
   constructor(opts: MemberAgentOptions) {
     this.actor = opts.actor;
@@ -154,8 +155,21 @@ export class MemberAgent {
 
   // ---------- the loop ----------
 
-  /** Sync with the relay, then act: LINE_SEEN, payments, reissues, checkpoints. */
+  /**
+   * Sync with the relay, then act: LINE_SEEN, payments, reissues, checkpoints. A tick called
+   * while the previous one is still running returns at once (the server ticks every second).
+   */
   async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.step();
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async step(): Promise<void> {
     await this.sync();
     const trip = this.trip();
     if (trip === null) return;
