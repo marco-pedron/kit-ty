@@ -17,8 +17,7 @@
 - niente
 
 ## TODO
-- C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
-  - **Lo fa Marco (B), dopo B2** (serve un nodo sbloccato con UTXO colorabili, es. dave): `pnpm --filter @kitty/relay exec tsx src/tools/check-bolt11.ts http://127.0.0.1:3004`. Lo script usa un asset NIA del nodo con `_` o `~` nell'id, oppure ne emette di usa e getta ("Baid64 check", `CHK`, al massimo 8). Poi crea un `/lninvoice`, lo confronta campo per campo tra `/decodelninvoice` e `decodeBolt11` e stampa `PASS`/`FAIL` (exit 1 se fallisce), più l'invoice e il JSON del nodo. Va incollato a C, che ne fa un vettore dorato nei test.
+- niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
 - **Per A (`apps/agent/src/index.ts`, non è mio):** creare il client una volta sola, `createRelayClient({ baseUrl: config.RELAY_URL })` da `./relay/http-client.js`, e passarlo ai flussi. Uso tipico: `const log = await relay.list()`, poi `relay.subscribe(onEvent, { sinceSeq: log.at(-1)?.seq ?? 0, onStatus })`. Gli errori sono `RelayError` (`./relay/errors.js`) con `toApiError()`, come `WalletError`. `onStatus` dà `connected` / `reconnecting` (con tentativo, attesa ed errore): serve a C7.
@@ -26,6 +25,9 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C1b, verifica sul nodo reale, sab 17/10 13:30
+- Invoice di dave su DUSD dello stack B1/B2 (`rgb:16sDAWsj-ep2RC7o-g5r2e81-LslCiVR-bK_ZRhg-ohfPz7w`, contiene `_`), con 3,000,000 msat, 309, 3600 s. `decodeBolt11` dà esattamente i campi del `/decodelninvoice` del nodo, e l'id fa andata e ritorno. Con `_` = 62 confermato, anche `~` = 63 è fissato (l'alfabeto ha solo quei due caratteri oltre a `A-Za-z0-9`). Nessun asset di test emesso. Diventato vettore dorato in `apps/relay/src/bolt11.test.ts`.
+- `apps/relay/src/tools/check-bolt11.ts` resta per ripetere il controllo su un nodo vivo.
 ### C2, sab 17/10 12:45
 - Funziona: `createRelayClient({ baseUrl, fetch?, timeoutMs?, backoff?, idleTimeoutMs? })` (`apps/agent/src/relay/http-client.ts`), che implementa `RelayClient`.
   - `append`, `list(since)`, `putBackup`, `getBackup` (404 → `null`). Timeout di 10 s per richiesta. Se il relay non risponde → `RelayError` `RELAY_UNREACHABLE`; se rifiuta → il suo `ApiError` (es. `INVALID_EVENT` con il motivo del ledger) con `httpStatus`.
