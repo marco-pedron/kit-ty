@@ -1,0 +1,375 @@
+import { checkBindInvoice, PaymentProofSchema, sha256Hex, signatureVerifier } from '@kitty/shared';
+import { describe, expect, it } from 'vitest';
+import { LightningRail } from '../rail/lightning-rail.js';
+import { WalletError } from './errors.js';
+import { deriveAppSecretHex, normalizeMnemonic, RlnWallet } from './rln-wallet.js';
+import {
+  ALICE_NODE,
+  ASSET,
+  decoded,
+  FakeRln,
+  PAYMENT_HASH,
+  payment,
+  PREIMAGE,
+  rlnError,
+} from './test/fake-rln.js';
+
+// BIP-39 test mnemonic (never a real wallet). Expected values computed once and cross-checked:
+// the secret against an independent HKDF-SHA256 in Python, the public key with @noble/curves.
+const TEST_MNEMONIC =
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const TEST_APP_SECRET = 'cf92a79ac618944a5cb76c837e9189da1d825ec4b5d766e131472331cfdddce4';
+const TEST_APP_PUBKEY = 'e33fe1b9405c076379116fa854c93edd006a36076d3e687c68b94362c7fbd14b';
+
+function setup(rln = new FakeRln(), over: { payTimeoutMs?: number } = {}) {
+  const wallet = new RlnWallet({
+    nodeUrl: 'http://127.0.0.1:3001',
+    appSecretHex: TEST_APP_SECRET,
+    assetId: ASSET,
+    fetch: rln.fetch,
+    pollIntervalMs: 1,
+    ...over,
+  });
+  return { rln, wallet };
+}
+
+async function codeOf(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    expect(e).toBeInstanceOf(WalletError);
+    return (e as WalletError).code;
+  }
+  throw new Error('expected a WalletError, the call succeeded');
+}
+
+describe('app key (decision B3, option A)', () => {
+  it('derives the expected key from the test mnemonic', async () => {
+    expect(deriveAppSecretHex(TEST_MNEMONIC)).toBe(TEST_APP_SECRET);
+    expect(await setup().wallet.authorPubkey()).toBe(TEST_APP_PUBKEY);
+  });
+
+  it('normalizes the mnemonic first: trim, single spaces, lowercase, NFKD', () => {
+    const messy = `  ${TEST_MNEMONIC.toUpperCase().replaceAll(' ', ' \t\n ')}\n`;
+    expect(deriveAppSecretHex(messy)).toBe(TEST_APP_SECRET);
+    expect(normalizeMnemonic('café  BAR')).toBe(normalizeMnemonic(' café bar'));
+    expect(deriveAppSecretHex('café x')).toBe(deriveAppSecretHex('café x'));
+    expect(deriveAppSecretHex(`${TEST_MNEMONIC} abandon`)).not.toBe(TEST_APP_SECRET);
+    expect(() => deriveAppSecretHex('   ')).toThrow();
+  });
+});
+
+describe('RlnWallet identity and signing', () => {
+  it('signs with ed25519 (the B4 format), never via the node', async () => {
+    const { rln, wallet } = setup();
+    const sig = await wallet.sign('{"type":"LINE_SEEN"}');
+    expect(signatureVerifier.verify(TEST_APP_PUBKEY, '{"type":"LINE_SEEN"}', sig)).toBe(true);
+    expect(signatureVerifier.verify(TEST_APP_PUBKEY, '{"type":"LINE_DECIDED"}', sig)).toBe(false);
+    expect(rln.calls).toHaveLength(0);
+  });
+
+  it('reads nodePubkey from /nodeinfo once, and retries after a failure', async () => {
+    const rln = new FakeRln();
+    let first = true;
+    rln.on('/nodeinfo', () => {
+      if (first) {
+        first = false;
+        return rlnError(403, 'LockedNode');
+      }
+      return { json: { pubkey: ALICE_NODE, rgb_htlc_min_msat: 3_000_000 } };
+    });
+    const { wallet } = setup(rln);
+    expect(await codeOf(wallet.nodePubkey())).toBe('NODE_UNREACHABLE');
+    expect(await wallet.nodePubkey()).toBe(ALICE_NODE);
+    expect(await wallet.nodePubkey()).toBe(ALICE_NODE);
+    expect(rln.count('/nodeinfo')).toBe(2);
+  });
+
+  it('bindInvoice uses the FakeWallet description and passes checkBindInvoice', async () => {
+    const rln = new FakeRln();
+    const desc = `kitty-bind:${sha256Hex(TEST_APP_PUBKEY)}`;
+    rln.on('/decodelninvoice', () => ({ json: decoded({ asset_amount: 1, description: desc }) }));
+    const { wallet } = setup(rln);
+    const bolt11 = await wallet.bindInvoice(TEST_APP_PUBKEY);
+    expect(rln.calls.find((c) => c.endpoint === '/lninvoice')?.body.description).toBe(desc);
+    const d = await wallet.decodeInvoice(bolt11);
+    expect(checkBindInvoice(d, TEST_APP_PUBKEY, ALICE_NODE)).toBe(true);
+  });
+});
+
+describe('RlnWallet invoices and balances', () => {
+  it('creates an RGB invoice with amt_msat = rgb_htlc_min_msat (spike Q9)', async () => {
+    const { rln, wallet } = setup();
+    const r = await wallet.createInvoice({
+      cents: 309n,
+      description: 'kitty:t:e:bob',
+      expirySec: 3600,
+    });
+    expect(r).toEqual({ bolt11: 'lnbcrt30u1fake', paymentHash: PAYMENT_HASH });
+    expect(rln.calls.find((c) => c.endpoint === '/lninvoice')?.body).toEqual({
+      amt_msat: 3_000_000,
+      expiry_sec: 3600,
+      asset_id: ASSET,
+      asset_amount: 309,
+      description: 'kitty:t:e:bob',
+    });
+  });
+
+  it('refuses an invoice the node created for another amount or payee', async () => {
+    const rln = new FakeRln().on('/decodelninvoice', () => ({
+      json: decoded({ asset_amount: 310 }),
+    }));
+    expect(
+      await codeOf(
+        setup(rln).wallet.createInvoice({ cents: 309n, description: 'x', expirySec: 60 }),
+      ),
+    ).toBe('INTERNAL');
+  });
+
+  it('rejects zero or negative amounts before calling the node', async () => {
+    const { rln, wallet } = setup();
+    expect(await codeOf(wallet.createInvoice({ cents: 0n, description: 'x', expirySec: 60 }))).toBe(
+      'VALIDATION_ERROR',
+    );
+    expect(rln.count('/lninvoice')).toBe(0);
+  });
+
+  it('decodes expiresAt = timestamp + expiry_sec', async () => {
+    const rln = new FakeRln().on('/decodelninvoice', () => ({
+      json: decoded({ timestamp: 1_792_138_948, expiry_sec: 3600 }),
+    }));
+    const d = await setup(rln).wallet.decodeInvoice('lnbcrt30u1fake');
+    expect(d).toMatchObject({
+      payeePubkey: ALICE_NODE,
+      cents: 309n,
+      amtMsat: 3_000_000n,
+      assetId: ASSET,
+    });
+    expect(d.expiresAt).toBe(new Date((1_792_138_948 + 3600) * 1000).toISOString());
+  });
+
+  it('maps /assetbalance to the three balances (spike, surprise 9)', async () => {
+    expect(await setup().wallet.balances()).toEqual({
+      tripOutboundCents: 5000n,
+      inboundCents: 3000n,
+      onchainCents: 5000n,
+    });
+  });
+});
+
+describe('RlnWallet.pay', () => {
+  it('sends, polls until Succeeded and returns a verifiable proof', async () => {
+    const rln = new FakeRln();
+    let polls = 0;
+    rln.on('/getpayment', () => ({ json: payment(++polls < 3 ? 'Pending' : 'Succeeded') }));
+    const proof = await setup(rln).wallet.pay('lnbcrt30u1fake');
+    expect(PaymentProofSchema.safeParse({ ...proof, cents: String(proof.cents) }).success).toBe(
+      true,
+    );
+    expect(proof).toEqual({
+      rail: 'ln',
+      paymentHash: PAYMENT_HASH,
+      preimage: PREIMAGE,
+      cents: 309n,
+      payeePubkey: ALICE_NODE,
+    });
+    expect(polls).toBe(3);
+  });
+
+  it('refuses an expired invoice without sending anything', async () => {
+    const rln = new FakeRln().on('/decodelninvoice', () => ({
+      json: decoded({ timestamp: Math.floor(Date.now() / 1000) - 100, expiry_sec: 60 }),
+    }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('INVOICE_EXPIRED');
+    expect(rln.count('/sendpayment')).toBe(0);
+  });
+
+  it('refuses an invoice of another asset or with no amount', async () => {
+    for (const over of [{ asset_id: 'rgb:other' }, { asset_amount: null }]) {
+      const rln = new FakeRln().on('/decodelninvoice', () => ({ json: decoded(over) }));
+      expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('VALIDATION_ERROR');
+      expect(rln.count('/sendpayment')).toBe(0);
+    }
+  });
+
+  it('asks for a top-up when the channel cannot send the amount, without sending', async () => {
+    const rln = new FakeRln().on('/assetbalance', () => ({
+      json: { settled: 0, future: 0, spendable: 0, offchain_outbound: 308, offchain_inbound: 0 },
+    }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('TOPUP_REQUIRED');
+    expect(rln.count('/sendpayment')).toBe(0);
+  });
+
+  it('fails when /sendpayment answers Failed with HTTP 200 (spike Q10)', async () => {
+    const rln = new FakeRln().on('/sendpayment', () => ({
+      json: { payment_id: PAYMENT_HASH, status: 'Failed' },
+    }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('PAYMENT_FAILED');
+    expect(rln.count('/getpayment')).toBe(0);
+  });
+
+  it('fails when the payment ends Failed', async () => {
+    const rln = new FakeRln().on('/getpayment', () => ({ json: payment('Failed') }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('PAYMENT_FAILED');
+  });
+
+  it('times out on a payment that stays Pending, saying it may still complete', async () => {
+    const rln = new FakeRln().on('/getpayment', () => ({ json: payment('Pending') }));
+    const p = setup(rln, { payTimeoutMs: 30 }).wallet.pay('lnbcrt30u1fake');
+    await expect(p).rejects.toMatchObject({
+      code: 'PAYMENT_FAILED',
+      action: expect.stringMatching(/Do not pay again/),
+    });
+  });
+
+  it('keeps polling through transient errors while the payment moves', async () => {
+    const rln = new FakeRln();
+    let polls = 0;
+    rln.on('/getpayment', () => (++polls === 1 ? 'network-error' : { json: payment('Succeeded') }));
+    expect((await setup(rln).wallet.pay('lnbcrt30u1fake')).preimage).toBe(PREIMAGE);
+  });
+
+  it('is idempotent: DuplicatePayment resolves through /getpayment', async () => {
+    const rln = new FakeRln().on('/sendpayment', () => rlnError(400, 'DuplicatePayment'));
+    expect((await setup(rln).wallet.pay('lnbcrt30u1fake')).preimage).toBe(PREIMAGE);
+    const failed = new FakeRln()
+      .on('/sendpayment', () => rlnError(400, 'DuplicatePayment'))
+      .on('/getpayment', () => ({ json: payment('Failed') }));
+    expect(await codeOf(setup(failed).wallet.pay('lnbcrt30u1fake'))).toBe('PAYMENT_FAILED');
+  });
+
+  it('an ambiguous /sendpayment answer is resolved by asking the node', async () => {
+    for (const reply of [
+      'network-error',
+      { status: 500, text: 'oops' },
+      { status: 200, text: 'x' },
+    ] as const) {
+      const left = new FakeRln().on('/sendpayment', () => reply);
+      expect((await setup(left).wallet.pay('lnbcrt30u1fake')).preimage).toBe(PREIMAGE);
+      const notSent = new FakeRln()
+        .on('/sendpayment', () => reply)
+        .on('/getpayment', () => rlnError(400, 'PaymentNotFound'));
+      expect(await codeOf(setup(notSent).wallet.pay('lnbcrt30u1fake'))).toBe('PAYMENT_FAILED');
+    }
+  });
+
+  it.each([
+    ['a wrong preimage', { preimage: 'ff'.repeat(32) }],
+    ['no preimage', { preimage: null }],
+    ['another payment hash', { payment_hash: 'ee'.repeat(32) }],
+    ['another amount', { asset_amount: 1 }],
+    ['another asset', { asset_id: 'rgb:other' }],
+    ['another payee', { payee_pubkey: `02${'11'.repeat(32)}` }],
+    ['an inbound payment', { inbound: true }],
+  ])('never reports success on a Succeeded payment with %s', async (_label, over) => {
+    const rln = new FakeRln().on('/getpayment', () => ({ json: payment('Succeeded', over) }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('INTERNAL');
+  });
+
+  it('runs one payment at a time per wallet', async () => {
+    const rln = new FakeRln();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let polls = 0;
+    rln.on('/sendpayment', () => {
+      maxInFlight = Math.max(maxInFlight, ++inFlight);
+      return { json: { payment_id: PAYMENT_HASH, status: 'Pending' } };
+    });
+    rln.on('/getpayment', () => {
+      if (++polls % 3 !== 0) return { json: payment('Pending') };
+      inFlight--;
+      return { json: payment('Succeeded') };
+    });
+    const { wallet } = setup(rln);
+    await Promise.all([wallet.pay('a'), wallet.pay('b'), wallet.pay('c')]);
+    expect(maxInFlight).toBe(1);
+    expect(rln.count('/sendpayment')).toBe(3);
+  });
+
+  it('a failed payment does not block the next one', async () => {
+    const rln = new FakeRln();
+    let n = 0;
+    rln.on('/sendpayment', () => ({
+      json: { payment_id: PAYMENT_HASH, status: ++n === 1 ? 'Failed' : 'Pending' },
+    }));
+    const { wallet } = setup(rln);
+    const [a, b] = await Promise.allSettled([wallet.pay('a'), wallet.pay('b')]);
+    expect(a.status).toBe('rejected');
+    expect(b.status).toBe('fulfilled');
+  });
+});
+
+describe('RLN errors become WalletError codes', () => {
+  it.each([
+    ['LockedNode', 403, 'NODE_UNREACHABLE'],
+    ['NotInitialized', 403, 'NODE_UNREACHABLE'],
+    ['InsufficientCapacity', 400, 'TOPUP_REQUIRED'],
+    ['InsufficientAssets', 400, 'TOPUP_REQUIRED'],
+    ['InvalidInvoice', 400, 'VALIDATION_ERROR'],
+    ['NoAvailableUtxos', 400, 'NO_AVAILABLE_UTXOS'],
+    ['SomethingNew', 400, 'PAYMENT_FAILED'],
+  ])('/sendpayment %s → %s', async (name, status, code) => {
+    const rln = new FakeRln().on('/sendpayment', () => rlnError(status, name));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe(code);
+  });
+
+  it('an unreachable node is NODE_UNREACHABLE', async () => {
+    const rln = new FakeRln().on('/assetbalance', () => 'network-error');
+    expect(await codeOf(setup(rln).wallet.balances())).toBe('NODE_UNREACHABLE');
+  });
+
+  it.each([
+    ['plain text', { status: 500, text: 'Internal Server Error' }],
+    ['an empty body', { status: 502, text: '' }],
+    ['a body of another shape', { status: 400, json: { message: 'nope' } }],
+    ['a partial RLN body', { status: 403, json: { error: 'locked', name: 'LockedNode' } }],
+    ['a 200 that is not JSON', { status: 200, text: 'not json' }],
+  ])(
+    'a malformed error (%s) gets a generic code, never a crash or a success',
+    async (_l, reply) => {
+      const pay = new FakeRln()
+        .on('/sendpayment', () => reply)
+        .on('/getpayment', () => rlnError(400, 'PaymentNotFound'));
+      expect(await codeOf(setup(pay).wallet.pay('lnbcrt30u1fake'))).toBe('PAYMENT_FAILED');
+      const bal = new FakeRln().on('/assetbalance', () => reply);
+      expect(await codeOf(setup(bal).wallet.balances())).toBe('INTERNAL');
+    },
+  );
+
+  it('a 200 with an unexpected body is INTERNAL, not a value', async () => {
+    const rln = new FakeRln().on('/assetbalance', () => ({ json: { settled: 'lots' } }));
+    expect(await codeOf(setup(rln).wallet.balances())).toBe('INTERNAL');
+  });
+
+  it('B6, B7 and B9 methods say they are not implemented yet', async () => {
+    const { wallet } = setup();
+    expect(await codeOf(wallet.openLiquidity())).toBe('NOT_IMPLEMENTED');
+    expect(await codeOf(wallet.closeChannelsWith())).toBe('NOT_IMPLEMENTED');
+    expect(await codeOf(wallet.backupNow())).toBe('NOT_IMPLEMENTED');
+  });
+});
+
+describe('LightningRail', () => {
+  it('requests with an invoice and pays it, returning the matching proof', async () => {
+    const { wallet } = setup();
+    const rail = new LightningRail(wallet);
+    const req = await rail.requestPayment({
+      cents: 309n,
+      description: 'kitty:t:e:bob',
+      expirySec: 3600,
+    });
+    expect(req).toMatchObject({ rail: 'ln', bolt11: 'lnbcrt30u1fake', paymentHash: PAYMENT_HASH });
+    expect((await rail.pay(req)).paymentHash).toBe(PAYMENT_HASH);
+  });
+
+  it('refuses an on-chain request', async () => {
+    const rail = new LightningRail(setup().wallet);
+    const req = {
+      rail: 'onchain' as const,
+      invoice: 'rgb:x',
+      recipientId: 'r',
+      expiresAt: new Date(),
+    };
+    expect(await codeOf(rail.pay(req))).toBe('VALIDATION_ERROR');
+  });
+});
