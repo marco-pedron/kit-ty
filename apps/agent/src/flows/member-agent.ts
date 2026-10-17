@@ -2,6 +2,7 @@ import {
   FINAL_LINE_STATES as FINAL,
   DEFAULT_POLICY,
   formatCents,
+  isMemberId,
   type ActivityItem,
   type ActorId,
   type ApiError,
@@ -26,9 +27,8 @@ import {
   type TripState,
 } from '@kitty/ledger';
 import type { RelayClient } from '../relay/types.js';
-import { WalletError } from '../wallet/errors.js';
 import type { Wallet } from '../wallet/types.js';
-import { FlowError } from './errors.js';
+import { FlowError, apiErrorOf } from './errors.js';
 import { planExpense, previewOf } from './expense.js';
 import { LocalLog } from './local-log.js';
 import { publishEvent } from './publish.js';
@@ -55,22 +55,13 @@ export interface MemberAgentOptions {
 const OPEN = (l: LineRecord) => !FINAL.includes(l.state);
 const MAX_KEPT = 50;
 
-const errorOf = (err: unknown): ApiError =>
-  err instanceof WalletError || err instanceof FlowError
-    ? err.toApiError()
-    : {
-        code: 'INTERNAL',
-        message: String(err),
-        action: 'Retry; if it persists, restart the agent.',
-      };
-
 export class MemberAgent {
   readonly actor: ActorId;
   readonly log: LocalLog;
-  private readonly wallet: Wallet;
+  protected readonly wallet: Wallet;
   private readonly relay: RelayClient;
-  private readonly now: () => Date;
-  private readonly tripIdOption: string;
+  protected readonly now: () => Date;
+  protected readonly tripIdOption: string;
   private readonly retryMs: number;
   private readonly checkpointEvery: number;
 
@@ -169,7 +160,7 @@ export class MemberAgent {
     }
   }
 
-  private async step(): Promise<void> {
+  protected async step(): Promise<void> {
     await this.sync();
     const trip = this.trip();
     if (trip === null) return;
@@ -244,7 +235,7 @@ export class MemberAgent {
       if (trip !== null) await this.publishProofs(trip);
     } catch (err) {
       this.retryAt.set(key, this.now().getTime() + this.retryMs);
-      const error = errorOf(err);
+      const error = apiErrorOf(err);
       this.endOp(op, 'failed', error);
       this.addActivity(
         `Payment of ${formatCents(line.cents)} to ${to} failed: ${error.message}. ${error.action}`,
@@ -377,7 +368,7 @@ export class MemberAgent {
       this.endOp(op, 'done');
       return stored;
     } catch (err) {
-      this.endOp(op, 'failed', errorOf(err));
+      this.endOp(op, 'failed', apiErrorOf(err));
       throw err;
     }
   }
@@ -410,6 +401,30 @@ export class MemberAgent {
     if (expense.payerPubkey !== me.pubkey)
       throw new FlowError('NOT_ALLOWED', 'only the payer can void an expense');
     await this.publish(trip, 'EXPENSE_VOIDED', { expenseEventHash: expense.eventHash });
+  }
+
+  /**
+   * MEMBER_JOINED (SPEC §6.1): name, policy and the bind invoice from this member's own node,
+   * whose payee ties the app key to the node (SPEC §9.1). Does nothing if already joined.
+   */
+  async joinTrip(policy: Policy = DEFAULT_POLICY): Promise<MemberState> {
+    await this.sync();
+    const trip = this.requireTrip();
+    if (!isMemberId(this.actor)) throw new FlowError('NOT_ALLOWED', 'only travelers join a trip');
+    const existing = this.me(trip);
+    if (existing !== null) return existing;
+    const appPubkey = await this.authorPubkey();
+    await this.publish(trip, 'MEMBER_JOINED', {
+      displayName: this.actor,
+      memberId: this.actor,
+      appPubkey,
+      nodePubkey: await this.wallet.nodePubkey(),
+      bindInvoice: await this.wallet.bindInvoice(appPubkey),
+      policy,
+    });
+    const me = this.me();
+    if (me === null) throw new FlowError('INTERNAL', 'MEMBER_JOINED not in the verified log');
+    return me;
   }
 
   /** PUT /policy. */
@@ -449,7 +464,7 @@ export class MemberAgent {
     } catch (err) {
       this.sent.delete(key);
       this.addActivity(
-        `Could not publish (${key.split(':')[0]}): ${errorOf(err).message}`,
+        `Could not publish (${key.split(':')[0]}): ${apiErrorOf(err).message}`,
         null,
         null,
       );
@@ -462,13 +477,13 @@ export class MemberAgent {
     return run;
   }
 
-  private requireTrip(): TripState {
+  protected requireTrip(): TripState {
     const trip = this.trip();
     if (trip === null) throw new FlowError('NOT_FOUND', 'no trip yet');
     return trip;
   }
 
-  private requireMember(): { trip: TripState; me: MemberState } {
+  protected requireMember(): { trip: TripState; me: MemberState } {
     const trip = this.requireTrip();
     const me = this.me(trip);
     if (me === null)
@@ -476,19 +491,19 @@ export class MemberAgent {
     return { trip, me };
   }
 
-  private expenseOf(trip: TripState, expenseId: string) {
+  protected expenseOf(trip: TripState, expenseId: string) {
     const expense = [...trip.expenses.values()].find((e) => e.body.expenseId === expenseId);
     if (expense === undefined) throw new FlowError('NOT_FOUND', `no expense ${expenseId}`);
     return expense;
   }
 
-  private lineOf(trip: TripState, expenseId: string, debtor: string): LineRecord {
+  protected lineOf(trip: TripState, expenseId: string, debtor: string): LineRecord {
     const line = trip.lines.get(lineKey(this.expenseOf(trip, expenseId).eventHash, debtor));
     if (line === undefined) throw new FlowError('NOT_FOUND', `you owe nothing on ${expenseId}`);
     return line;
   }
 
-  private memberName(pubkey: string): string {
+  protected memberName(pubkey: string): string {
     return this.trip()?.members.get(pubkey)?.memberId ?? 'the payer';
   }
 
@@ -498,7 +513,7 @@ export class MemberAgent {
     if (!decision.pay) this.addActivity(decision.reason, line, null);
   }
 
-  private addActivity(text: string, line: LineRecord | null, proof: PaymentProof | null): void {
+  protected addActivity(text: string, line: LineRecord | null, proof: PaymentProof | null): void {
     this.activityItems.unshift({
       at: this.now().toISOString(),
       kind: 'AGENT',
@@ -514,7 +529,7 @@ export class MemberAgent {
     this.activityItems.length = Math.min(this.activityItems.length, MAX_KEPT);
   }
 
-  private startOp(kind: OperationView['kind'], text: string): OperationView {
+  protected startOp(kind: OperationView['kind'], text: string): OperationView {
     const op: OperationView = {
       id: `${this.actor}-${++this.opCounter}`,
       kind,
@@ -529,7 +544,11 @@ export class MemberAgent {
     return op;
   }
 
-  private endOp(op: OperationView, status: 'done' | 'failed', error: ApiError | null = null): void {
+  protected endOp(
+    op: OperationView,
+    status: 'done' | 'failed',
+    error: ApiError | null = null,
+  ): void {
     op.status = status;
     op.finishedAt = this.now().toISOString();
     op.error = error;

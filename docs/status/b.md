@@ -8,7 +8,7 @@
 - [x] B1 Infra: bitcoind, electrs, esplora, proxy RGB, 4 nodi RLN (niente VSS) (sab 17/10 12:00)
 - [x] B4 Verifica firme ed25519 in TS puro + invoice di legame (crypto.ts, sab 17/10 11:10)
 - [x] B2 Seed e demo:reset (sab 17/10 12:45)
-- [ ] B3 Wallet reale e LightningRail
+- [x] B3 Wallet reale e LightningRail (sab 17/10 13:40)
 - [ ] B7 Chiusura canali per l'esclusione
 - [ ] B8 e2e:demo
 - [ ] B5 (P1) Rail on-chain
@@ -19,10 +19,31 @@
 - niente
 
 ## Prossimo passo
-- B3 (`Wallet` reale e `LightningRail`). Leggere `infra/.out/seed-state.json` (asset id, pubkey, canali) e usare `pnpm demo:unlock` dopo un riavvio dei container. `Wallet.sign` deve produrre il formato di B4 (sotto).
+- **Per chi gestisce `server.ts`/`config.ts` (A o C), collegare il wallet reale** quando `KITTY_FAKES=0`:
+  ```ts
+  import { RlnWallet } from './wallet/rln-wallet.js';
+  import { loadMemberWalletOptions } from './wallet/secrets.js';
+  const url = nodeUrls(config)[actor];
+  const wallet = new RlnWallet(loadMemberWalletOptions(actor, { nodeUrl: url }));
+  ```
+  Ogni agente riceve solo il proprio wallet. Variabile opzionale `KITTY_SECRETS_FILE` (default `infra/.secrets/nodes.json`); l'asset id viene da `infra/.out/seed-state.json`. Se serve un rail: `new LightningRail(wallet)` (`apps/agent/src/rail/lightning-rail.ts`).
+- B7 (`closeChannelsWith`), poi B8 (`e2e:demo`).
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B3, sab 17/10 13:40
+- Funziona: `RlnWallet` (`apps/agent/src/wallet/rln-wallet.ts`), motore `rln-rest`, un'istanza per membro con **solo** `{ nodeUrl, appSecretHex, assetId }` del proprio membro (`loadMemberWalletOptions` in `wallet/secrets.ts` legge i file del seed e restituisce solo quei tre campi). `LightningRail` in `rail/lightning-rail.ts` (modalità `ln-2ch`, rifiuta richieste on-chain).
+  - `nodePubkey`: `/nodeinfo` (in cache; dopo un errore riprova). `authorPubkey`/`sign`: ed25519 con `ed25519PublicKeyHex`/`ed25519Sign`, nuove in `crypto.ts`, formato B4. Mai `/signmessage`.
+  - **Chiave dell'app (opzione A):** `HKDF-SHA256(mnemonica normalizzata, salt "kitty-app-key-v1", info "ed25519", 32 byte)`. Normalizzazione: NFKD, trim, spazi singoli, minuscole. Test con la mnemonica BIP-39 di prova (`abandon … about`) e `appPubkey` attesa scritta nel test (segreto verificato con un HKDF indipendente in Python).
+  - `bindInvoice`: invoice da 1 centesimo con `kitty-bind:<sha256Hex(appPubkey)>` (come il FakeWallet), 3600 s; passa `checkBindInvoice` anche decodificato dal nodo di un altro membro.
+  - `createInvoice`: `/lninvoice` con `amt_msat` = `rgb_htlc_min_msat` di `/nodeinfo`; controlla con `/decodelninvoice` che payee e importo tornino. `decodeInvoice`: `expiresAt = timestamp + expiry_sec`. `balances`: `/assetbalance` (`offchain_outbound`, `offchain_inbound`, `settled`).
+  - `pay`: un pagamento alla volta per wallet; prima di inviare controlla scadenza (margine 5 s) → `INVOICE_EXPIRED`, asset e importo → `VALIDATION_ERROR`, `offchain_outbound` → `TOPUP_REQUIRED`; poi `/sendpayment` e `/getpayment` ogni 250 ms, timeout 30 s. `Failed` → `PAYMENT_FAILED`; timeout ancora `Pending` → `PAYMENT_FAILED` con l'azione "potrebbe ancora completarsi, non pagare di nuovo". Una risposta ambigua di `/sendpayment` (rete, 5xx, corpo illeggibile) o `DuplicatePayment` si risolve con `/getpayment` (`PaymentNotFound` = non partito): **ripagare lo stesso invoice restituisce la stessa prova**, verificato su regtest. Su `Succeeded` verifica hash, `sha256(preimage)`, asset, importo, payee e verso; se qualcosa non torna → `INTERNAL`, mai un successo.
+  - Errori RLN (`{error, code, name}`, nomi di `error.rs` a `d4762ac`): rete/`LockedNode`/`NotInitialized` → `NODE_UNREACHABLE`; `InsufficientAssets`/`InsufficientCapacity` → `TOPUP_REQUIRED`; `InvalidInvoice`/`InvalidAmount`/`InvalidAssetID`/`IncompleteRGBInfo` → `VALIDATION_ERROR`; `NoAvailableUtxos` → `NO_AVAILABLE_UTXOS`; qualunque altro nome o corpo di forma diversa → `PAYMENT_FAILED` durante un pagamento, `INTERNAL` altrove. Mai un'eccezione grezza.
+  - `openLiquidity`, `closeChannelsWith`, `backupNow`: `WalletError('NOT_IMPLEMENTED', '… not implemented in B3')`.
+- `@kitty/rln-client`: `createRlnClient(url, { fetch })` con fetch iniettabile; `RlnError`/`toRlnError` (corpo non conforme → nome `Unknown`).
+- Come si prova: `pnpm test` (46 test del wallet con un nodo RLN finto, 8 del client, 3 nuovi in `crypto.test.ts`, 2 del loader). Con lo stack acceso e sbloccato: **`pnpm e2e:wallet`** (fuori da `pnpm test`; prima controlla che alice e bob rispondano e abbiano 2 canali usabili, altrimenti dice di lanciare `pnpm infra:up && pnpm demo:unlock`): identità e invoice di legame; alice chiede 0.01, bob paga via dave, prova verificata (schema, `sha256(preimage)`, payee = nodo di alice); stesso invoice ripagato = stessa prova; invoice scaduto e importo oltre il saldo rifiutati senza inviare. **Ogni pagamento viene restituito**: dopo il test i saldi DUSD dei 4 nodi sono identici a quelli del seed (verificato). Verde in 14 s.
+- Problemi noti: ogni esecuzione di `e2e:wallet` fa 6 pagamenti alice ⇄ bob da 3000 sat per hop (DUSD invariati, sat che si spostano; capacità ≈ 330 pagamenti per canale). Il wallet non è ancora collegato in `server.ts` (fuori dalle cartelle di B, istruzioni sopra). Le chiavi dell'app dipendono dalla mnemonica: dopo un `demo:reset` cambiano, come le pubkey dei nodi.
+
 ### B2, sab 17/10 12:45
 - Funziona: `pnpm demo:reset` = `assertNoFakes()` (quello vero di `apps/agent/src/dev-fakes/guard.ts`, importato da Node 22 con type stripping) → `infra:reset` (cancella i volumi) → cancella `infra/data/treasury` → seed. **Tre esecuzioni di fila verdi**, 68-70 s di seed (circa 80 s in tutto), nessun tentativo ripetuto nelle ultime due. Con `KITTY_FAKES=1` si ferma prima di toccare lo stack.
 - Seed (`infra/treasury/seed.ts`): `/init` + `/unlock` dei 4 nodi; 1 BTC a ciascun nodo e alla tesoreria; `/createutxos`; emissione di 10,000.00 DUSD (NIA, precisione 2) con `wdk-wallet-rgb` sulla tesoreria di dave; on-ramp uno alla volta: 100.00 ad alice, bob e charlie, e al nodo RLN di dave **4 allocazioni separate** (3 × 30.00 per i canali di liquidità + 200.00 di riserva per le aperture just-in-time di B9); 6 canali da 1,000,000 sat pubblici con anchor (viaggio 50.00 aperto dal viaggiatore, liquidità 30.00 aperta da dave); mining fino a 6/6 `ready && is_usable`; stampa dei saldi e controllo dei valori attesi (esce con errore se non tornano).
