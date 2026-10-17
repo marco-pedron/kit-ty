@@ -1,7 +1,11 @@
 // OWNED BY STREAM B (PLAN.md §2). Stream A wrote only the interface and the dev fakes.
 // Format chosen at gate 2 (SPEC §9.1, §20): ed25519 signatures of the app key, bound to the
 // node by an invoice. Never RLN /signmessage (it signs the empty string in d4762ac).
+// Re-exported by index.ts and bundled into the web app: no node:crypto, no Buffer.
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { sha256Hex } from './canonical.js';
+import type { DecodedInvoice } from './domain.js';
 import { apiError } from './errors.js';
 
 /** Used by relay and ledger (validateEvent); pure TypeScript, no node needed (SPEC §14.2). */
@@ -14,12 +18,46 @@ export class NotImplementedError extends Error {
   readonly error = apiError('NOT_IMPLEMENTED', this.message);
 }
 
-/** The real verifier (task B4). */
+const PUBKEY_HEX = /^[0-9a-f]{64}$/;
+const SIG_HEX = /^[0-9a-f]{128}$/;
+
+/**
+ * The real verifier. Wire format: `authorPubkey` = 32-byte ed25519 key and `signature` =
+ * 64 bytes, both lowercase hex; the signed bytes are the UTF-8 of `message`. Strict RFC 8032
+ * (no ZIP-215 leniency), so relay, agents and web accept exactly the same signatures.
+ * Never throws: malformed input is just an invalid signature.
+ */
 export const signatureVerifier: SignatureVerifier = {
-  verify(): boolean {
-    throw new NotImplementedError('signatureVerifier.verify: task B4');
+  verify(authorPubkey: string, message: string, signature: string): boolean {
+    try {
+      if (typeof authorPubkey !== 'string' || typeof message !== 'string') return false;
+      if (typeof signature !== 'string') return false;
+      if (!PUBKEY_HEX.test(authorPubkey) || !SIG_HEX.test(signature)) return false;
+      return ed25519.verify(hexToBytes(signature), utf8ToBytes(message), hexToBytes(authorPubkey), {
+        zip215: false,
+      });
+    } catch {
+      return false;
+    }
   },
 };
+
+/**
+ * The bind invoice of MEMBER_JOINED (SPEC §9.1): created by the member's own node with
+ * description `kitty-bind:<sha256Hex(appPubkey)>`, so its payee_pubkey ties the app key to
+ * the node. The caller decodes the bolt11; this only checks the decoded fields.
+ */
+export function checkBindInvoice(
+  decoded: DecodedInvoice,
+  appPubkey: string,
+  nodePubkey: string,
+): boolean {
+  if (typeof appPubkey !== 'string' || !PUBKEY_HEX.test(appPubkey)) return false;
+  return (
+    decoded.description === `kitty-bind:${sha256Hex(appPubkey)}` &&
+    decoded.payeePubkey === nodePubkey
+  );
+}
 
 // ---------- dev fakes (KITTY_FAKES=1 only) ----------
 // A fake signature is sha256("kitty-fake-sig:" + pubkey + ":" + message): anyone can forge it,
