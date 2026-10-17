@@ -11,7 +11,7 @@
 - [ ] C4 UI viaggiatore (piano ridotto, 4 PR)
   - [x] C4a shell, polling, navigazione, QR, Profile (branch `c/C4a-shell`)
   - [x] C4b Home con Approve/Dispute (branch `c/C4b-home`)
-  - [ ] C4c New expense
+  - [x] C4c New expense (branch `c/C4c-new-expense`)
   - [ ] C4d Groups e Group settings
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
@@ -24,7 +24,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C4c New expense.
+- C4d Groups e Group settings.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -45,6 +45,11 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4c, sab 17/10 19:35
+- Funziona: New expense da 📷 (pulsante centrale) o swipe. Foto (JPEG/PNG/WebP) → sha256 calcolato nel browser per `receiptImageSha256` → `POST /expenses/extract` con il tempo trascorso → righe modificabili (esercente, etichette, importi nella valuta dello scontrino come `bigint`, tasse, mancia, totale; scarto mostrato, mai corretto da solo) → frase → `POST /expenses/split` (con la domanda di chiarimento mandata una volta) → parti dall'anteprima del ledger → `POST /expenses` → ritorno alla Home. 🎤 disattivato con "soon".
+- Come si prova: `pnpm dev:fakes`, `?as=alice#/new`, una foto qualsiasi (con i fake l'AI dà sempre la cena: 3.09 / 3.09 / 3.50). Verificato sulle rotte con `infra/fixtures/receipts/vnd-dinner.png`. Test: `receipt-edit.test.ts`.
+- Problemi noti: modulo manuale (assegnazioni a mano con `expenseShares`) = P1; senza anteprima valida "Send" resta disattivato.
+
 ### C4b, sab 17/10 19:20
 - Funziona: Home con lo storico del gruppo (spese dalla più recente, chi paga chi, stato di ogni parte, le mie evidenziate). Una parte che aspetta me si apre inline con la frase dell'agente (`LineView.agent.reason`), il conto alla rovescia sull'orologio del server (finestra di contestazione o scadenza di approvazione), "Dispute" (campo motivo obbligatorio) e "Approve" (`POST /expenses/:id/decision`). Approve compare anche su una parte confermata da Dave e non ancora approvata. Due layout con `SHOW_DEMO_SECOND_GROUP`: true = card del gruppo reale più "Group 2" simulato, in grigio e non interattivo; false = titolo e storico a tutta pagina, che scorre dietro la barra.
 - Come si prova: `pnpm dev:fakes`, alice invia una spesa (C4c, oppure `POST /api/alice/expenses`), poi `?as=charlie` → Dispute; `?as=dave` conferma con la rotta; charlie → Approve. Verificato con le rotte sul runtime finto. Test: `lines.test.ts` (conto alla rovescia, regole Approve/Dispute).
