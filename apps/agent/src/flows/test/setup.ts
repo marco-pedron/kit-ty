@@ -2,23 +2,23 @@ import {
   DEMO_TRIP_PARAMS,
   MEMBER_IDS,
   fakeVerifier,
-  type ActorId,
   type MemberId,
+  type TripParams,
 } from '@kitty/shared';
 import { FakeLightningNetwork } from '../../dev-fakes/fake-wallet.js';
+import { CoordinatorAgent } from '../dave.js';
 import { MemberAgent } from '../member-agent.js';
-import { publishEvent } from '../publish.js';
 import { MemoryRelay } from './memory-relay.js';
 
 // TESTS ONLY: four agents on one fake Lightning network and one in-memory relay, a manual
-// clock, and the trip of SPEC §6.1-6.2 already set up (the A5b flows will publish this).
-
-export const TRIP_ID = 'vietnam-2026';
+// clock, and the trip of SPEC §6.1-6.2 set up through the flows themselves (what the seed of
+// task B2 calls): dave creates the trip and the rate, each traveler joins, dave admits them
+// and attests their channels.
 
 export interface Demo {
   net: FakeLightningNetwork;
   relay: MemoryRelay;
-  agents: Record<ActorId, MemberAgent>;
+  agents: Record<MemberId, MemberAgent> & { dave: CoordinatorAgent };
   /** Moves the clock forward. */
   advance: (seconds: number) => void;
   now: () => Date;
@@ -26,58 +26,35 @@ export interface Demo {
   tickAll: () => Promise<void>;
 }
 
-export async function demo(opts: { strict?: boolean; retryMs?: number } = {}): Promise<Demo> {
+export async function demo(
+  opts: { strict?: boolean; retryMs?: number; params?: Partial<TripParams> } = {},
+): Promise<Demo> {
   const net = new FakeLightningNetwork();
   let t = Date.now();
   const now = () => new Date(t);
   const relay = new MemoryRelay(net, now, { strict: opts.strict ?? true });
-  const wallets = Object.fromEntries(
-    (['alice', 'bob', 'charlie', 'dave'] as const).map((a) => [a, net.wallet(a)]),
-  ) as Record<ActorId, ReturnType<FakeLightningNetwork['wallet']>>;
-  const agents = Object.fromEntries(
-    Object.entries(wallets).map(([actor, wallet]) => [
-      actor,
-      new MemberAgent({
-        actor: actor as ActorId,
-        wallet,
-        relay,
-        verifier: fakeVerifier,
-        now,
-        ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
-      }),
-    ]),
-  ) as Record<ActorId, MemberAgent>;
+  const common = {
+    relay,
+    verifier: fakeVerifier,
+    now,
+    ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
+  };
+  const dave = new CoordinatorAgent({ ...common, wallet: net.wallet('dave') });
+  const travelers = Object.fromEntries(
+    MEMBER_IDS.map((id) => [id, new MemberAgent({ ...common, actor: id, wallet: net.wallet(id) })]),
+  ) as Record<MemberId, MemberAgent>;
+  const agents = { ...travelers, dave };
 
-  const pub = (actor: ActorId) => ({ wallet: wallets[actor], relay, now });
-  const dave = await wallets.dave.authorPubkey();
-  await publishEvent(pub('dave'), TRIP_ID, 'TRIP_CREATED', {
+  await dave.createTrip({
     name: 'Vietnam 2026',
     assetId: net.assetId,
-    params: DEMO_TRIP_PARAMS,
-    coordinatorPubkey: dave,
+    params: { ...DEMO_TRIP_PARAMS, ...opts.params },
   });
-  await publishEvent(pub('dave'), TRIP_ID, 'RATE_SET', {
-    asOf: '2026-10-17',
-    source: 'infra/rates.json',
-    rates: { VND: '26350' },
-  });
-  for (const id of MEMBER_IDS as readonly MemberId[]) {
-    const w = wallets[id];
-    const appPubkey = await w.authorPubkey();
-    await publishEvent(pub(id), TRIP_ID, 'MEMBER_JOINED', {
-      displayName: id,
-      memberId: id,
-      appPubkey,
-      nodePubkey: await w.nodePubkey(),
-      bindInvoice: await w.bindInvoice(appPubkey),
-      policy: { autoPayLimitCents: 2000n, dailyCapCents: 6000n, payUpheldDisputes: false },
-    });
-    await publishEvent(pub('dave'), TRIP_ID, 'MEMBER_ADMITTED', { memberPubkey: appPubkey });
-    await publishEvent(pub('dave'), TRIP_ID, 'CHANNELS_READY', {
-      memberPubkey: appPubkey,
-      tripChannelId: `trip-${id}`,
-      liquidityChannelId: `liq-${id}`,
-    });
+  await dave.setRate({ asOf: '2026-10-17', source: 'infra/rates.json', rates: { VND: '26350' } });
+  for (const id of MEMBER_IDS) {
+    await travelers[id].joinTrip();
+    await dave.admit(id);
+    await dave.channelsReady(id, { tripChannelId: `trip-${id}`, liquidityChannelId: `liq-${id}` });
   }
 
   const tickAll = async () => {
