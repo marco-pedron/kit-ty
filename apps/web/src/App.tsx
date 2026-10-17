@@ -26,11 +26,12 @@ import { LogScreen } from './screens/shared/Log.js';
 import { ProofScreen } from './screens/shared/Proof.js';
 import { Styleguide } from './screens/Styleguide.js';
 import type { ScreenProps } from './screens/types.js';
-import { useNow, useTripState } from './state.js';
+import { useTripState } from './state.js';
 import { paymentToasts, type Toast } from './toasts.js';
 import { TabBar, type TabItem } from './ui/Bars.js';
 import { Mascot } from './ui/Mascot.js';
-import { Banner, ErrorNote } from './ui/Notes.js';
+import { humanError } from './errors.js';
+import { Banner, OperationsDock } from './ui/Notes.js';
 import { StateView, Toasts } from './ui/Overlays.js';
 import { Wordmark } from './ui/Text.js';
 
@@ -195,6 +196,9 @@ function Phone({ as }: { as: MemberId }) {
         onPointerCancel={() => (start.current = null)}
       >
         {trip.state?.fakes && <Banner>Fakes on · simulated wallet and AI, no real RGB</Banner>}
+        {trip.reconnecting && trip.state !== null && (
+          <Banner tone="quiet">Reconnecting to your agent…</Banner>
+        )}
         {trip.state?.ledger.chainValid === false && (
           <Banner>
             The relay sent an entry this phone rejects. Your agent keeps its own copy.
@@ -206,8 +210,8 @@ function Phone({ as }: { as: MemberId }) {
           ) : (
             <StateView
               kind="error"
-              title={trip.error.message}
-              text={trip.error.action}
+              title={humanError(trip.error).title}
+              text={humanError(trip.error).action}
               action={{ label: 'Try again', onClick: trip.refresh }}
             />
           )
@@ -216,33 +220,9 @@ function Phone({ as }: { as: MemberId }) {
             <View as={as} trip={trip} go={go} />
           </div>
         )}
-        {trip.state !== null && trip.error !== null && (
-          <div className="px-4 pt-4">
-            <ErrorNote error={trip.error} onRetry={trip.refresh} />
-          </div>
-        )}
-        {running.length > 0 && (
-          <div className="space-y-2 px-4 pt-4">
-            {running.map((o) => (
-              <Operation key={o.id} text={o.text} startedAt={o.startedAt} />
-            ))}
-          </div>
-        )}
       </div>
+      <OperationsDock operations={running} />
       <TabBar items={TABS} active={tabOf(screen)} onSelect={go} />
     </PhoneFrame>
-  );
-}
-
-/** A long step of my agent (paying, signing…): the kitten waves while it runs. */
-function Operation({ text, startedAt }: { text: string; startedAt: string }) {
-  const now = useNow(500);
-  const s = Math.max(0, Math.floor((now - Date.parse(startedAt)) / 1000));
-  return (
-    <div role="status" className="flex items-center gap-3 rounded-card bg-bg-cell px-3 py-2">
-      <Mascot size={40} />
-      <p className="flex-1 text-subhead">{text}</p>
-      <span className="tabular text-footnote text-label-2">{s} s</span>
-    </div>
   );
 }

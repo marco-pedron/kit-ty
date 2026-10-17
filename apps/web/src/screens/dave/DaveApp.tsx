@@ -17,7 +17,8 @@ import {
 } from '../../dave.js';
 import { useNow, useTripState, toClientError, type TripState } from '../../state.js';
 import { TabBar, type TabItem } from '../../ui/Bars.js';
-import { Banner, ErrorNote } from '../../ui/Notes.js';
+import { humanError } from '../../errors.js';
+import { Banner, OperationsDock } from '../../ui/Notes.js';
 import { StateView } from '../../ui/Overlays.js';
 import { CoverScreen } from './Cover.js';
 import { DaveHome } from './Home.js';
@@ -122,14 +123,17 @@ export function DaveApp({ frame }: { frame: (children: ReactNode) => ReactNode }
         onPointerCancel={() => (start.current = null)}
       >
         {s?.fakes && <Banner>Fakes on · simulated wallet and AI, no real RGB</Banner>}
+        {trip.reconnecting && s !== null && (
+          <Banner tone="quiet">Reconnecting to the operator's agent…</Banner>
+        )}
         {s === null ? (
           trip.error === null ? (
             <StateView kind="loading" title="Waking up the operator's agent…" />
           ) : (
             <StateView
               kind="error"
-              title={trip.error.message}
-              text={trip.error.action}
+              title={humanError(trip.error).title}
+              text={humanError(trip.error).action}
               action={{ label: 'Try again', onClick: trip.refresh }}
             />
           )
@@ -138,12 +142,8 @@ export function DaveApp({ frame }: { frame: (children: ReactNode) => ReactNode }
             <Route route={route} props={{ trip, state: s, go, covers, startCover }} />
           </div>
         )}
-        {s !== null && trip.error !== null && (
-          <div className="px-4 pt-4">
-            <ErrorNote error={trip.error} onRetry={trip.refresh} />
-          </div>
-        )}
       </div>
+      <OperationsDock operations={s?.operations.filter((o) => o.status === 'running') ?? []} />
       <TabBar items={TABS} active={tab} onSelect={(k) => go({ name: k })} />
     </>,
   );

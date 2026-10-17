@@ -178,6 +178,7 @@ function GroupBody({
             date={when(r.at)}
             connector={i < rows.length - 1}
             muted={r.muted}
+            waitingSince={r.waitingSince}
             {...(r.proof !== null && { onClick: () => openProof(r.proof!) })}
           />
         ))}
@@ -224,7 +225,7 @@ function PendingPart({
       {...(canApprove(l) && { onApprove: approve })}
       {...(l.resolution?.note ? { note: `Dave: ${l.resolution.note}` } : {})}
     >
-      {error && <ErrorNote error={error} className="mt-3" />}
+      {error && <ErrorNote error={error} who={cap(l.payer)} className="mt-3" />}
     </ApprovalCard>
   );
 }

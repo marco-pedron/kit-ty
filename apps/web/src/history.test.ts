@@ -33,17 +33,23 @@ describe('history rows as the wireframe draws them', () => {
   it('the payer sees what arrived, then the expense with who still owes', () => {
     const e = taxi([
       line({ state: 'paid', paidBy: 'debtor' }),
-      line({ debtor: 'charlie', state: 'awaiting_explicit' }),
+      line({ debtor: 'charlie', state: 'due' }),
     ]);
     const rows = historyRows([e], 'alice', none);
     expect(rows.map((r) => [r.title, r.subtitle, r.cents, r.sign])).toEqual([
       ['Bob paid you', '+ty · Taxi', 1744n, '+'],
       ['Taxi', 'You paid · Charlie owes 17.44', 5232n, null],
     ]);
+    expect(rows[1]?.waitingSince).toBeNull();
   });
 
-  it('says "all settled", "Bob and Charlie owe", and names the operator', () => {
-    const open = taxi([line({}), line({ debtor: 'charlie' })]);
+  it('waits for the agents, then says who owes, "all settled", and names the operator', () => {
+    const waiting = taxi([line({}), line({ debtor: 'charlie' })]);
+    expect(historyRows([waiting], 'alice', none)[0]).toMatchObject({
+      subtitle: 'You paid · Waiting for Bob and Charlie…',
+      waitingSince: '2026-10-17T12:00:00.000Z',
+    });
+    const open = taxi([line({ state: 'due' }), line({ debtor: 'charlie', state: 'overdue' })]);
     expect(historyRows([open], 'alice', none)[0]?.subtitle).toBe(
       'You paid · Bob and Charlie owe 17.44',
     );
