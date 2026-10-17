@@ -19,6 +19,8 @@ export interface TripState {
   error: ApiClientError | null;
   /** serverNow − browser clock, in ms: countdowns follow the server, not the browser. */
   clockOffsetMs: number;
+  /** Two polls in a row failed: the UI says it is reconnecting (task C7). */
+  reconnecting: boolean;
   refresh: () => void;
 }
 
@@ -43,6 +45,7 @@ export function useTripState(as: ActorId): TripState {
   const [state, setState] = useState<TripView | null>(null);
   const [error, setError] = useState<ApiClientError | null>(null);
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [failures, setFailures] = useState(0);
   const alive = useRef(true);
 
   const refresh = useCallback(() => {
@@ -52,10 +55,13 @@ export function useTripState(as: ActorId): TripState {
         if (!alive.current) return;
         setState(s);
         setError(null);
+        setFailures(0);
         setClockOffsetMs(Date.parse(s.serverNow) - Date.now());
       })
       .catch((e: unknown) => {
-        if (alive.current) setError(toClientError(e));
+        if (!alive.current) return;
+        setError(toClientError(e));
+        setFailures((n) => n + 1);
       });
   }, [client]);
 
@@ -69,5 +75,5 @@ export function useTripState(as: ActorId): TripState {
     };
   }, [refresh]);
 
-  return { client, state, error, clockOffsetMs, refresh };
+  return { client, state, error, clockOffsetMs, reconnecting: failures >= 2, refresh };
 }

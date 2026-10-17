@@ -133,6 +133,24 @@ async function run(browser: Browser, scheme: 'light' | 'dark') {
     await shot(alice, 'alice-proof', scheme);
   }
 
+  // Network trouble, simulated in the browser: polls fail → "Reconnecting…"; first load fails.
+  if (wanted('alice-reconnecting')) {
+    await alice.goto(`${BASE}/?as=alice`);
+    await alice.getByText('Only you can spend it').waitFor();
+    await alice.route('**/api/alice/state', (r) => r.abort());
+    await alice.getByText('Reconnecting to your agent…').waitFor({ timeout: 10_000 });
+    await shot(alice, 'alice-reconnecting', scheme);
+    await alice.unroute('**/api/alice/state');
+  }
+  if (wanted('bob-offline')) {
+    const page = await open(browser, scheme, 'bob');
+    await page.route('**/api/**', (r) => r.abort());
+    await page.reload();
+    await page.getByRole('alert').waitFor({ timeout: 10_000 });
+    await shot(page, 'bob-offline', scheme);
+    await page.context().close();
+  }
+
   // New expense: reading (the kitten waves) and check (rows, split, parts).
   if (wanted('alice-reading') || wanted('alice-check')) {
     await alice.goto(`${BASE}/?as=alice#/new`);

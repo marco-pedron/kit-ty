@@ -13,7 +13,7 @@ import { Avatar } from '../../ui/Avatar.js';
 import { Button } from '../../ui/Button.js';
 import { Section } from '../../ui/List.js';
 import { BalancePill } from '../../ui/Money.js';
-import { ErrorNote } from '../../ui/Notes.js';
+import { EmptyRow, ErrorNote } from '../../ui/Notes.js';
 import { AlertDialog, Sheet } from '../../ui/Overlays.js';
 import { Wordmark } from '../../ui/Text.js';
 import { Ago, lineKey, type DaveProps } from './DaveApp.js';
@@ -98,7 +98,7 @@ export function DaveHome(props: DaveProps) {
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="px-4 py-3.5 text-subhead text-label-2">{text}</p>;
+  return <EmptyRow>{text}</EmptyRow>;
 }
 
 function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView; last: boolean }) {

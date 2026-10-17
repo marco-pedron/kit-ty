@@ -18,7 +18,7 @@
   - [x] C4f UI del viaggiatore in stile iPhone (branch `c/C4f-ui`)
 - [x] C5 UI Dave (branch `c/C5-dave`)
 - [x] C6 Prova e Registro verificato (branch `c/C6-proof-log`)
-- [ ] C7 Attese ed errori
+- [x] C7 Attese ed errori (branch `c/C7-states`)
 
 ## Bloccato da
 - niente
@@ -27,7 +27,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C7 attese ed errori.
+- Giro visivo finale ([C-polish]), poi fermarsi.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -52,6 +52,8 @@
 - **C5, Log.** Nel wireframe è "(built in C6)": in C5 c'era una versione provvisoria, sostituita in C6.
 - **C6, firme con i fake.** `fakeVerify` di `packages/shared` si rifiuta di girare senza `KITTY_FAKES=1`, apposta: le firme finte sono falsificabili. Nel browser non aggiro il controllo: con `fakes` la schermata Log verifica solo la catena di hash e dice "hash chain only (fakes)"; sui nodi reali verifica ogni firma ed25519 con `signatureVerifier`. Niente da chiedere a Marco.
 - **C6, accesso al Log per i viaggiatori.** Riga "Verified log" nel Profilo; la Prova si apre toccando una riga dello storico che ha un pagamento (Home) o un evento `PAYMENT_MADE`/`GUARANTEE_PAID` nel Log. Per Dave il Log è la tab a destra.
+- **C7, banner di riconnessione.** Il `RelayClient` con `onStatus` vive nell'agente, non nel browser: la UI non lo vede. "Reconnecting to your agent…" compare dopo due giri di `/state` falliti di fila e sparisce al primo riuscito. Se servisse anche lo stato del relay visto dall'agente, andrebbe esposto in `TripView` (richiesta ad A, non necessaria per la demo).
+- **C7, dettaglio tecnico degli errori.** Sotto la frase umana resta, piccolo e in `--label-2`, il messaggio dell'agente se diverso (es. "the line of charlie is due, not contested"): utile in demo per capire cosa è successo, mai un codice.
 - **C6, relay nel browser.** Il proxy di Vite inoltra `/relay/*` al relay (sola lettura, `GET /events`), così la UI ricontrolla il registro senza fidarsi dell'agente; prima la UI parlava solo con l'agente.
 
 ## Decisioni del PM
@@ -59,6 +61,11 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C7, dom 18/10 00:15
+- Funziona: **errori** da un solo file (`apps/web/src/errors.ts`): ogni codice di `ErrorCodeSchema` ha una frase umana, un'azione e se ha senso "Try again"; HTTP 0 diventa "Can't reach your agent. Check your connection."; con un nodo in causa la frase lo nomina ("Alice's node is not answering."). `ErrorNote` e gli stati d'errore usano solo questa mappa, mai codici grezzi. **Attese**: le operazioni lunghe dell'agente ("Paying 3.09 to alice through the operator's node…", "Closing both channels…") in una pillola fissa sopra la tab bar con gattino e tempo trascorso (viaggiatori e Dave); la spesa del pagatore dice "Waiting for Bob and Charlie… 12 s" col gattino finché i loro agenti non decidono; "Reading the receipt on your phone…" con il tempo in decimi. **Connessione**: banner discreto "Reconnecting to your agent…" dopo due polling falliti, sparisce da solo. **Vuoti**: gattino in tutte le liste (Home, Dave Disputes/Insolvent, Members, Log). Errore di avvio centrato.
+- Come si prova: `pnpm --filter @kitty/web shots` produce anche `alice-reconnecting` e `bob-offline` (rete interrotta da Playwright nel browser). Test: `errors.test.ts` (tutti i codici coperti, nessun codice grezzo nei testi, rete assente, nodo nominato, retry solo dove serve), `history.test.ts`.
+- Problemi noti: la prova "spegnere `rln-dave` durante un pagamento" di PLAN C7 richiede i nodi reali, non fatta qui (con i fake non c'è un nodo da spegnere); i messaggi sono pronti (`NODE_UNREACHABLE`, `RECEIVER_UNREACHABLE`, `PAYMENT_FAILED`).
+
 ### C6, sab 17/10 23:30
 - Funziona: schermata **Log** condivisa (`screens/shared/Log.tsx`) per Dave (tab a destra) e per i viaggiatori (Profilo → Verified log). Legge `GET /events` del relay tramite il proxy `/relay` di Vite e **ricalcola tutto nel browser** (`verify.ts`): schema del contratto, `seq` consecutivi, `prevHash`, `hash = sha256(canonical({seq, prevHash, signed}))` con `storedEventHash` di shared, firma ed25519 di ogni autore con `signatureVerifier` (con i fake solo la catena, vedi decisioni). In cima "Chain verified ✓ · N events · N/N signatures valid" oppure "Chain broken at #N" con la spiegazione; sotto gli eventi (seq, tipo, autore, ora, hash abbreviato in mono, txid di chiusura per `MEMBER_EXCLUDED`). "Equal on N/N" non fatto (P1). Schermata **Proof** (`screens/shared/Proof.tsx`) da `GET /api/proof/:paymentHash`: importo, chi ha pagato chi, "Verified ✓", tre spunte (verde se verificate, accento con la spiegazione se no), dettagli in mono con Copy; on-chain txid e link all'esplora; se la prova non è ancora nel registro (404 per ~1 s dopo il pagamento) aspetta e riprova. Si apre toccando un pagamento nello storico (viaggiatori) o nel Log (Dave e viaggiatori).
 - Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, `?as=alice#/log`, oppure `pnpm --filter @kitty/web shots`. Test: `verify.test.ts` (catena valida, corpo alterato, evento omesso, firma falsa, evento illeggibile, fake), `nav.test.ts`, `dave.test.ts`.

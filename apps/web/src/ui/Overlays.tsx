@@ -92,7 +92,7 @@ export function StateView({
   return (
     <div
       role={kind === 'error' ? 'alert' : 'status'}
-      className="flex flex-col items-center px-8 py-10 text-center"
+      className={`flex flex-col items-center px-8 text-center ${kind === 'error' ? 'pt-[30dvh] pb-10' : 'py-10'}`}
     >
       {kind !== 'error' && (
         <Mascot size={kind === 'loading' ? 128 : 96} waving={kind === 'loading'} />

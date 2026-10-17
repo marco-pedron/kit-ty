@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { Amount } from './Text.js';
 import { Button } from './Button.js';
+import { Mascot } from './Mascot.js';
+import { Elapsed } from './Notes.js';
 
 // Money pieces of Home (DESIGN.md §7, wireframe): the balance pill, a history row, the card of a
 // part waiting for me.
@@ -57,6 +59,7 @@ export function TransactionRow({
   connector = false,
   muted = false,
   onClick,
+  waitingSince = null,
 }: {
   name: string;
   me?: boolean;
@@ -70,16 +73,26 @@ export function TransactionRow({
   muted?: boolean;
   /** Opens the proof of this payment. */
   onClick?: () => void;
+  /** Waiting for others: the kitten in place of the avatar and the time elapsed. */
+  waitingSince?: string | null;
 }) {
   const content = (
     <>
       {connector && (
         <span aria-hidden className="absolute top-[52px] bottom-[-10px] left-5 w-px bg-separator" />
       )}
-      <Avatar name={name} me={me} />
+      {waitingSince === null ? <Avatar name={name} me={me} /> : <Mascot size={40} />}
       <div className="min-w-0 flex-1">
         <p className="truncate text-headline font-semibold">{title}</p>
-        <p className={`line-clamp-2 text-subhead ${muted ? '' : 'text-label-2'}`}>{subtitle}</p>
+        <p className={`line-clamp-2 text-subhead ${muted ? '' : 'text-label-2'}`}>
+          {subtitle}
+          {waitingSince !== null && (
+            <>
+              {' '}
+              <Elapsed since={waitingSince} />
+            </>
+          )}
+        </p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5">
         <Amount cents={cents} sign={sign} />

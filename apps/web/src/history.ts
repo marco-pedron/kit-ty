@@ -18,6 +18,8 @@ export interface HistoryRow {
   muted: boolean;
   /** Payment hash or txid of the payment this row shows, for the Proof screen. */
   proof: string | null;
+  /** The payer waits for the debtors' agents: since when (the kitten and the time elapsed). */
+  waitingSince: string | null;
 }
 
 export const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
@@ -25,6 +27,8 @@ const SETTLED = (l: LineView) => l.state === 'paid' || l.state === 'guaranteed';
 const proofOf = (l: LineView | undefined) =>
   l?.proof == null ? null : l.proof.rail === 'ln' ? l.proof.paymentHash : l.proof.txid;
 const OPEN = (l: LineView) => !SETTLED(l) && l.state !== 'voided';
+const UNDECIDED = (l: LineView) =>
+  l.state === 'submitted' || l.state === 'awaiting_decision' || l.state === 'awaiting_explicit';
 
 function names(list: readonly string[]): string {
   if (list.length <= 1) return list.join('');
@@ -87,18 +91,24 @@ export function historyRows(
           sign: '+',
           muted: false,
           proof: proofOf(l),
+          waitingSince: null,
         });
+      const undecided = e.status === 'voided' ? [] : e.lines.filter(UNDECIDED);
       rows.push({
         ...base,
         key: e.expenseId,
         name: me,
         me: true,
         title: e.merchant,
-        subtitle: `You paid · ${e.status === 'voided' ? 'voided' : stillOwed(e.lines.filter(OPEN))}`,
+        subtitle:
+          undecided.length > 0
+            ? `You paid · Waiting for ${names(undecided.map((l) => cap(l.debtor)))}…`
+            : `You paid · ${e.status === 'voided' ? 'voided' : stillOwed(e.lines.filter(OPEN))}`,
         cents: e.totalUsdCents,
         sign: null,
         muted: e.status === 'voided',
         proof: null,
+        waitingSince: undecided.length > 0 ? e.submittedAt : null,
       });
       continue;
     }
@@ -115,6 +125,7 @@ export function historyRows(
       sign: mine === undefined || mine.state === 'voided' ? null : '-',
       muted: mine?.state === 'voided' || e.status === 'voided',
       proof: proofOf(mine),
+      waitingSince: null,
     });
   }
   return rows;
