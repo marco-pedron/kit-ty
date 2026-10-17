@@ -1,4 +1,10 @@
-import { lineKey, type LineRecord, type MemberState, type TripState } from '@kitty/ledger';
+import {
+  lineKey,
+  liquidityPlan,
+  type LineRecord,
+  type MemberState,
+  type TripState,
+} from '@kitty/ledger';
 import {
   FINAL_LINE_STATES,
   checkBindInvoice,
@@ -7,6 +13,7 @@ import {
   type MemberId,
   type PaymentProof,
   type ProofRef,
+  type Pubkey,
   type TripParams,
 } from '@kitty/shared';
 import { FlowError, apiErrorOf } from './errors.js';
@@ -25,18 +32,95 @@ export interface CoverAndExcludeResult {
 
 const EXCLUSION_REASON = 'Did not pay by the deadline';
 
+/** Below this margin, dave opens more liquidity to the member (SPEC §10.5, the "soglia"). */
+export const LIQUIDITY_THRESHOLD_CENTS = 1000n;
+
+export interface CoordinatorAgentOptions extends Omit<MemberAgentOptions, 'actor'> {
+  /** SPEC §10.5 threshold; default LIQUIDITY_THRESHOLD_CENTS. */
+  liquidityThresholdCents?: bigint;
+}
+
 export class CoordinatorAgent extends MemberAgent {
   /** A guarantee payment done but whose GUARANTEE_PAID is not in the log yet: never pay twice. */
   private readonly guarantees = new Map<string, { line: LineRecord; proof: PaymentProof }>();
+  /**
+   * Liquidity opened after the first channel, per member (liquidityPlan's `extra`). Known to
+   * dave's node only, never in the log; kept in memory (an agent restart forgets it and may
+   * open once more: capital, never funds at risk).
+   */
+  private readonly extraLiquidity = new Map<Pubkey, bigint>();
+  private opening: Promise<void> | null = null;
+  private openRetryAt = 0;
+  private readonly liquidityThresholdCents: bigint;
+  private readonly openRetryMs: number;
 
-  constructor(opts: Omit<MemberAgentOptions, 'actor'>) {
+  constructor(opts: CoordinatorAgentOptions) {
     super({ ...opts, actor: 'dave' });
+    this.liquidityThresholdCents = opts.liquidityThresholdCents ?? LIQUIDITY_THRESHOLD_CENTS;
+    this.openRetryMs = opts.retryMs ?? 10_000;
   }
 
   protected override async step(): Promise<void> {
     await super.step();
     const trip = this.trip();
     if (trip !== null) await this.publishGuarantees(trip);
+    if (trip !== null) this.planLiquidity(trip);
+  }
+
+  override async idle(): Promise<void> {
+    while (this.opening !== null) await this.opening;
+    await super.idle();
+  }
+
+  /** What liquidityPlan says now, with the liquidity dave already added. */
+  liquidityNeeds(trip: TripState | null = this.trip()) {
+    return trip === null
+      ? []
+      : liquidityPlan(trip, this.liquidityThresholdCents, this.extraLiquidity);
+  }
+
+  /**
+   * SPEC §10.5 rule 2, run at every tick: when a member's margin falls below the threshold,
+   * open a new liquidity channel to them right away, before the payment that would not fit.
+   * One opening at a time, in the background; a failure is retried after retryMs.
+   */
+  private planLiquidity(trip: TripState): void {
+    if (this.opening !== null || this.now().getTime() < this.openRetryAt) return;
+    const need = this.liquidityNeeds(trip).find((n) => n.openCents > 0n);
+    const member = need && trip.members.get(need.memberPubkey);
+    if (need === undefined || member === undefined) return;
+    // A payment goes through ONE channel (no multi-path payments in RLN): the new channel must
+    // also hold the largest line the member is still to receive, not only the missing margin.
+    let largest = 0n;
+    for (const l of trip.lines.values())
+      if (l.payerPubkey === member.pubkey && l.payment === null && l.state !== 'voided')
+        largest = l.cents > largest ? l.cents : largest;
+    const cents = need.openCents > largest ? need.openCents : largest;
+    const op = this.startOp(
+      'opening_liquidity',
+      `Opening ${formatCents(cents)} of liquidity to ${member.memberId} so they can be reimbursed…`,
+    );
+    this.opening = this.wallet
+      .openLiquidity(member.nodePubkey, cents)
+      .then(({ channelId }) => {
+        this.extraLiquidity.set(
+          member.pubkey,
+          (this.extraLiquidity.get(member.pubkey) ?? 0n) + cents,
+        );
+        this.endOp(op, 'done');
+        this.addActivity(
+          `Opened ${formatCents(cents)} of liquidity to ${member.memberId} (channel ${channelId.slice(0, 8)}…): their margin was ${formatCents(need.marginCents)}.`,
+          null,
+          null,
+        );
+      })
+      .catch((err: unknown) => {
+        this.openRetryAt = this.now().getTime() + this.openRetryMs;
+        this.endOp(op, 'failed', apiErrorOf(err));
+      })
+      .finally(() => {
+        this.opening = null;
+      });
   }
 
   // ---------- setting up the trip (SPEC §6.1-6.2; called by the seed, task B2) ----------

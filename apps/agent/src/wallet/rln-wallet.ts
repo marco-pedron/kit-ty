@@ -45,6 +45,13 @@ export interface CoordinatorChain {
   sweepWaitMs?: number;
 }
 
+/** BTC capacity of a liquidity channel, as the seed's (SPEC §15). */
+export const LIQUIDITY_CAPACITY_SAT = 1_000_000;
+/** Confirmations before a channel is usable (SPEC §15: 6 blocks to open). */
+const OPEN_CONFIRMATIONS = 6;
+/** Blocks openLiquidity may mine: 6 confirmations plus margin. */
+export const OPEN_BLOCK_BUDGET = 10;
+
 /** Blocks closeChannelsWith may mine in all: 1 to confirm + ~6 for the sweep (SPEC §6.7). */
 export const CLOSE_BLOCK_BUDGET = 12;
 
@@ -112,6 +119,8 @@ type RlnChannel = {
   status: string;
   funding_txid?: string | null;
   capacity_sat: number;
+  ready?: boolean;
+  is_usable?: boolean;
 };
 
 /** The funding output of a channel, whose spender is the closing tx. */
@@ -141,6 +150,7 @@ export class RlnWallet implements Wallet {
   private nodeInfo: Promise<{ pubkey: string; htlcMinMsat: number }> | null = null;
   /** Payments of one member run one at a time (in-flight value limit, SPEC §10.1, §20). */
   private payQueue: Promise<unknown> = Promise.resolve();
+  private openQueue: Promise<unknown> = Promise.resolve();
   private readonly refreshEveryMs: number;
   private lastRefreshAt = -Infinity;
 
@@ -410,8 +420,94 @@ export class RlnWallet implements Wallet {
     };
   }
 
-  async openLiquidity(): Promise<{ channelId: string }> {
-    throw new WalletError('NOT_IMPLEMENTED', 'openLiquidity is not implemented in B3 (task B9)');
+  /**
+   * dave only (SPEC §10.5): a new liquidity channel to the member with `cents` of dave's DUSD on
+   * dave's side, same shape as the seed's (public, anchors, no fees, LIQUIDITY_CAPACITY_SAT).
+   * Opens run one at a time (one DUSD allocation opens one channel at a time, B2); then mines
+   * until the channel is usable, within OPEN_BLOCK_BUDGET blocks (regtest: seconds; production
+   * would wait ~1 h for 6 confirmations, still less than the silent assent).
+   */
+  openLiquidity(peerPubkey: string, cents: bigint): Promise<{ channelId: string }> {
+    const run = this.openQueue.then(() => this.openNow(peerPubkey, cents));
+    this.openQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async openNow(peerPubkey: string, cents: bigint): Promise<{ channelId: string }> {
+    const chain = this.opts.coordinator;
+    if (!chain) throw new WalletError('NOT_ALLOWED', 'only dave opens liquidity channels');
+    if (!PUBKEY.test(peerPubkey))
+      throw new WalletError('VALIDATION_ERROR', `not a node pubkey: ${peerPubkey}`);
+    if (cents <= 0n || cents > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new WalletError('VALIDATION_ERROR', `invalid liquidity amount ${cents}`);
+    try {
+      const channels = async () =>
+        (await this.call('/listchannels', () => this.rln.GET('/listchannels')))
+          .channels as RlnChannel[];
+      const before = new Set((await channels()).map((c) => c.channel_id));
+      const body = {
+        peer_pubkey_and_opt_addr: peerPubkey,
+        capacity_sat: LIQUIDITY_CAPACITY_SAT,
+        push_msat: 0,
+        asset_amount: Number(cents),
+        asset_id: this.opts.assetId,
+        public: true,
+        with_anchors: true,
+        fee_base_msat: 0,
+        fee_proportional_millionths: 0,
+      };
+      let blocksMined = 0;
+      const mine = async (n: number) => {
+        const height = await chain.miner.mine(n);
+        blocksMined += n;
+        const deadline = this.now() + 30_000;
+        while ((await chain.esplora.tipHeight()) < height) {
+          if (this.now() >= deadline)
+            throw new WalletError('INTERNAL', `esplora did not reach height ${height} in 30 s`);
+          await sleep(this.pollIntervalMs);
+        }
+        await sleep(chain.blockWaitMs ?? 1_500);
+      };
+      // A transient refusal (an indexer miss, dave's previous change not confirmed): one block,
+      // then retry, as the seed does.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await this.call('/openchannel', () => this.rln.POST('/openchannel', { body }));
+          break;
+        } catch (e) {
+          if (!(e instanceof RlnError) || attempt >= 3) throw e;
+          await mine(1);
+        }
+      }
+      const fresh = async () =>
+        (await channels()).find((c) => !before.has(c.channel_id) && c.peer_pubkey === peerPubkey);
+      const deadline = this.now() + (chain.mempoolTimeoutMs ?? 60_000);
+      for (;;) {
+        const c = await fresh();
+        if (c?.funding_txid && (await chain.esplora.tx(c.funding_txid)) !== null) break;
+        if (this.now() >= deadline)
+          throw new WalletError(
+            'INTERNAL',
+            `the liquidity channel to ${peerPubkey} was not funded in time`,
+            'Retry; if it fails again, check the node of dave.',
+          );
+        await sleep(this.pollIntervalMs * 4);
+      }
+      // The 6 confirmations in one go, as the seed does; then a block at a time if needed.
+      await mine(OPEN_CONFIRMATIONS);
+      for (;;) {
+        const c = await fresh();
+        if (c?.ready && c.is_usable) return { channelId: c.channel_id };
+        if (blocksMined >= OPEN_BLOCK_BUDGET)
+          throw new WalletError(
+            'INTERNAL',
+            `the liquidity channel to ${peerPubkey} is not usable after ${blocksMined} blocks`,
+          );
+        await mine(1);
+      }
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
   }
 
   /**

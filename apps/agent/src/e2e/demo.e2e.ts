@@ -282,6 +282,9 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
       return h.every((x) => x.headHash === h[0]?.headHash) ? h : undefined;
     });
     note('ledger', heads);
+    // L = 30.00 covers the demo: dave never opened liquidity (B9)
+    const dave = await state('dave');
+    expect(dave.operations.filter((o) => o.kind === 'opening_liquidity')).toEqual([]);
     for (const h of heads) {
       expect(h.chainValid).toBe(true);
       expect(h.validSignatures).toBe(h.events);

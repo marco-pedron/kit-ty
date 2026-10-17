@@ -222,3 +222,35 @@ describe('CoordinatorAgent (A5b)', () => {
     expect(used).toBe(350n + (await line(d, d.agents.dave, 'charlie', lunchId)).cents);
   });
 });
+
+describe('just-in-time liquidity (B9, SPEC §10.5)', () => {
+  it('the demo numbers never open a channel: L = 30.00 covers alice 6.59', async () => {
+    const d = await demo();
+    await dinner(d);
+    await d.tickAll();
+    expect(d.agents.dave.operations().filter((o) => o.kind === 'opening_liquidity')).toEqual([]);
+    const needs = d.agents.dave.liquidityNeeds();
+    expect(needs.every((n) => n.openCents === 0n)).toBe(true);
+  });
+
+  it('a reimbursement larger than L opens liquidity to the creditor before it is paid', async () => {
+    // L = the threshold: bob and charlie, with nothing to receive, stay exactly at it
+    const d = await demo({ params: { liquidityCents: 1000n } });
+    const { alice, dave } = d.agents;
+    const aliceKey = await alice.authorPubkey();
+    const before = (await balance(d, 'alice')).inboundCents;
+    // alice will receive 6.59 with 10.00 of inbound: margin 3.41; dave's tick right after the
+    // submit opens threshold (10.00) − margin = 6.59, before bob's silent assent ends
+    await dinner(d);
+    const ops = dave.operations().filter((o) => o.kind === 'opening_liquidity');
+    expect(ops.map((o) => o.status)).toEqual(['done']);
+    expect((await balance(d, 'alice')).inboundCents).toBe(before + 659n);
+    expect(dave.liquidityNeeds().find((n) => n.memberPubkey === aliceKey)).toMatchObject({
+      marginCents: 1000n,
+      openCents: 0n,
+    });
+    await d.tickAll();
+    expect(dave.operations().filter((o) => o.kind === 'opening_liquidity')).toHaveLength(1);
+    expect(dave.activity()[0]?.text).toContain('Opened 6.59 of liquidity to alice');
+  });
+});
