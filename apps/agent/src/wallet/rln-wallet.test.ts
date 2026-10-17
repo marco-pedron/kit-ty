@@ -350,9 +350,8 @@ describe('RLN errors become WalletError codes', () => {
     expect(await codeOf(setup(rln).wallet.balances())).toBe('INTERNAL');
   });
 
-  it('B6 and B9 methods say they are not implemented yet', async () => {
+  it('the B6 method says it is not implemented yet', async () => {
     const { wallet } = setup();
-    expect(await codeOf(wallet.openLiquidity())).toBe('NOT_IMPLEMENTED');
     expect(await codeOf(wallet.backupNow())).toBe('NOT_IMPLEMENTED');
   });
 });
@@ -507,6 +506,91 @@ describe('closeChannelsWith (B7)', () => {
   it('rejects a malformed pubkey', async () => {
     const { rln, wallet } = daveSetup();
     expect(await codeOf(wallet.closeChannelsWith('nope'))).toBe('VALIDATION_ERROR');
+    expect(rln.calls).toEqual([]);
+  });
+});
+
+describe('openLiquidity (B9)', () => {
+  const NEW_FUNDING = 'cd'.repeat(32);
+  function daveSetup(opts: { refuseFirst?: boolean } = {}) {
+    const chain = new FakeChain();
+    let opened = false;
+    let openedAt = 0;
+    let refused = false;
+    const rln = new FakeRln()
+      .on('/listchannels', () => ({
+        json: {
+          channels: opened
+            ? [
+                {
+                  channel_id: 'new-liq',
+                  peer_pubkey: CHARLIE_NODE,
+                  status: 'Opened',
+                  funding_txid: NEW_FUNDING,
+                  capacity_sat: 1_000_000,
+                  // usable after 6 confirmations
+                  ready: chain.height - openedAt >= 6,
+                  is_usable: chain.height - openedAt >= 6,
+                },
+              ]
+            : [],
+        },
+      }))
+      .on('/openchannel', () => {
+        if (opts.refuseFirst && !refused) {
+          refused = true;
+          return { status: 403, json: { error: 'busy', code: 403, name: 'InsufficientAssets' } };
+        }
+        opened = true;
+        openedAt = chain.height;
+        chain.addTx(NEW_FUNDING, [{ value: 1_000_000, scriptpubkey_type: 'v0_p2wsh' }]);
+        return { json: { temporary_channel_id: 'tmp' } };
+      });
+    const { wallet } = setup(rln, {
+      coordinator: {
+        esplora: chain.esplora,
+        miner: chain.miner,
+        blockWaitMs: 0,
+        mempoolTimeoutMs: 50,
+      },
+    });
+    return { rln, wallet, chain };
+  }
+
+  it('is refused on any wallet but dave, before touching the node', async () => {
+    const { rln, wallet } = setup();
+    expect(await codeOf(wallet.openLiquidity(CHARLIE_NODE, 100n))).toBe('NOT_ALLOWED');
+    expect(rln.calls).toEqual([]);
+  });
+
+  it('opens a public DUSD channel like the seed, then mines until it is usable', async () => {
+    const { rln, wallet, chain } = daveSetup();
+    expect(await wallet.openLiquidity(CHARLIE_NODE, 2500n)).toEqual({ channelId: 'new-liq' });
+    expect(rln.calls.find((c) => c.endpoint === '/openchannel')?.body).toEqual({
+      peer_pubkey_and_opt_addr: CHARLIE_NODE,
+      capacity_sat: 1_000_000,
+      push_msat: 0,
+      asset_amount: 2500,
+      asset_id: ASSET,
+      public: true,
+      with_anchors: true,
+      fee_base_msat: 0,
+      fee_proportional_millionths: 0,
+    });
+    expect(chain.mined).toBe(6);
+  });
+
+  it('retries once after a block when the node refuses the open', async () => {
+    const { rln, wallet, chain } = daveSetup({ refuseFirst: true });
+    await wallet.openLiquidity(CHARLIE_NODE, 100n);
+    expect(rln.count('/openchannel')).toBe(2);
+    expect(chain.mined).toBe(7);
+  });
+
+  it('rejects a bad amount or pubkey before touching the node', async () => {
+    const { rln, wallet } = daveSetup();
+    expect(await codeOf(wallet.openLiquidity(CHARLIE_NODE, 0n))).toBe('VALIDATION_ERROR');
+    expect(await codeOf(wallet.openLiquidity('nope', 1n))).toBe('VALIDATION_ERROR');
     expect(rln.calls).toEqual([]);
   });
 });
