@@ -187,8 +187,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return buildTripView({
       as,
       agent,
-      // Until MemberAgent.balances() exists (A, PR #19): the UI shows "balance not available".
-      balances: null,
+      // A traveler's own node only (SPEC §1); null while it does not answer.
+      balances: agent === null || as === 'dave' ? null : await agent.balances(),
       ai: as === 'dave' ? null : (deps.ai?.status() ?? null),
       fakes: deps.fakes,
       explorerBaseUrl: deps.explorerBaseUrl,

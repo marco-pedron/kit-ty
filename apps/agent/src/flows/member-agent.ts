@@ -27,7 +27,7 @@ import {
   type TripState,
 } from '@kitty/ledger';
 import type { RelayClient } from '../relay/types.js';
-import type { Wallet } from '../wallet/types.js';
+import type { Wallet, WalletBalances } from '../wallet/types.js';
 import { FlowError, apiErrorOf } from './errors.js';
 import { planExpense, previewOf } from './expense.js';
 import { LocalLog } from './local-log.js';
@@ -129,6 +129,14 @@ export class MemberAgent {
   }
 
   /** The decisions of this agent, newest first (the AGENT rows of Attività). */
+  /**
+   * My own node's balances, for GET /state (SPEC §6.2: "50.00 in your trip channel"). null
+   * while the node does not answer: the UI shows "balance not available", never a stale number.
+   */
+  async balances(): Promise<WalletBalances | null> {
+    return this.wallet.balances().catch(() => null);
+  }
+
   activity(): readonly ActivityItem[] {
     return this.activityItems;
   }

@@ -110,8 +110,8 @@ describe('agent routes over MemberAgent', () => {
       ['bob', 'active'],
       ['charlie', 'active'],
     ]);
-    // null until MemberAgent.balances() (A, PR #19): the UI says "balance not available".
-    expect(alice.me?.balance).toBeNull();
+    // from alice's own (fake) node
+    expect(alice.me?.balance).not.toBeNull();
     expect(alice.ai).toEqual({ status: 'ready', fake: true });
     expect(alice.ledger).toMatchObject({ chainValid: true });
     expect(alice.ledger.validSignatures).toBe(alice.ledger.events);
