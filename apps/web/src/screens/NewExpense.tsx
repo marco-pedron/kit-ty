@@ -5,16 +5,22 @@ import {
   type SplitAssignment,
   type SplitPreview,
 } from '@kitty/shared';
-import { useRef, useState } from 'react';
-import { ErrorBox, Money, ScreenHeader } from '../components.js';
+import { Camera, Mic, ScanLine } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
+import { cap } from '../history.js';
 import { formatMinor, parseMinor, receiptGap, withItemTotal } from '../receipt-edit.js';
-import { Loading } from '../Mascot.js';
-import { toClientError } from '../state.js';
+import { toClientError, useNow } from '../state.js';
+import { Badge } from '../ui/Badge.js';
+import { NavBar } from '../ui/Bars.js';
+import { Button } from '../ui/Button.js';
+import { Section } from '../ui/List.js';
+import { Mascot } from '../ui/Mascot.js';
+import { ErrorNote } from '../ui/Notes.js';
 import type { ScreenProps } from './types.js';
 
-// New expense (SPEC §6.3): photo of the receipt → the on-device AI reads it → the payer fixes
-// the rows → one sentence says who had what → the ledger computes the parts → send. The AI
-// proposes, the ledger computes: parts come only from `preview`, never from the model.
+// New expense (wireframe, story 1): 1 photo → 2 the AI reads it on the phone (the kitten waves)
+// → 3 check the rows, say who had what, see the parts the ledger computed, send to the group.
+// The AI proposes, the ledger computes: parts come only from `preview`.
 
 interface Photo {
   url: string;
@@ -23,7 +29,7 @@ interface Photo {
   sha256: string;
 }
 
-type Step = 'pick' | 'reading' | 'review' | 'splitting' | 'sending' | 'sent';
+type Step = 'photo' | 'reading' | 'check';
 
 const MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
@@ -51,13 +57,15 @@ async function readPhoto(file: File): Promise<Photo> {
 export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
   const s = trip.state;
   const fileInput = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<Step>('pick');
+  const [step, setStep] = useState<Step>('photo');
   const [startedAt, setStartedAt] = useState(0);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [sentence, setSentence] = useState('');
   const [assignments, setAssignments] = useState<SplitAssignment[] | null>(null);
   const [preview, setPreview] = useState<SplitPreview | null>(null);
+  const [splitting, setSplitting] = useState(false);
+  const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [question, setQuestion] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
@@ -66,29 +74,21 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
   const me = s?.members.find((m) => m.memberId === as);
   const blocked =
     s?.trip == null
-      ? 'Waiting for dave to set up the trip.'
+      ? 'Waiting for Dave to set up the trip.'
       : me?.status === 'excluded'
-        ? 'You were excluded from this trip: you cannot add expenses.'
+        ? 'You were excluded from this trip.'
         : me?.status !== 'active'
-          ? 'Your channels are not open yet: you can add expenses once they are.'
+          ? 'Your channels are not open yet.'
           : null;
-
-  const fail = (e: unknown, back: Step) => {
-    setError(toClientError(e));
-    setStep(back);
-  };
-  const begin = (next: Step) => {
-    setError(null);
-    setStartedAt(Date.now());
-    setStep(next);
-  };
 
   const onFile = async (file: File | undefined) => {
     if (file === undefined) return;
-    begin('reading');
+    setError(null);
     setReceipt(null);
     setAssignments(null);
     setPreview(null);
+    setStartedAt(Date.now());
+    setStep('reading');
     try {
       const p = await readPhoto(file);
       setPhoto(p);
@@ -103,15 +103,17 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
           0,
         );
       setReceipt(r.data);
-      setStep('review');
+      setStep('check');
     } catch (e) {
-      fail(e, 'pick');
+      setError(toClientError(e));
+      setStep('photo');
     }
   };
 
   const split = async (clarification?: { question: string; answer: string }) => {
     if (receipt === null) return;
-    begin('splitting');
+    setSplitting(true);
+    setError(null);
     setAssignments(null);
     setPreview(null);
     setNote(null);
@@ -122,39 +124,38 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
         ...(clarification !== undefined && { clarification }),
       });
       setQuestion(null);
-      if (!result.ok) {
+      if (!result.ok)
         setNote(`The AI could not split it: ${result.error}. Try a clearer sentence.`);
-      } else if (result.data.clarificationNeeded !== undefined && clarification === undefined) {
+      else if (result.data.clarificationNeeded !== undefined && clarification === undefined)
         setQuestion(result.data.clarificationNeeded);
-      } else if (result.data.unassigned.length > 0) {
-        const names = result.data.unassigned.map((i) => receipt.items[i]?.label ?? `#${i}`);
-        setNote(`Nobody is assigned to: ${names.join(', ')}. Say who had them.`);
-      } else if (pv === null) {
+      else if (result.data.unassigned.length > 0)
+        setNote(
+          `Nobody is assigned to: ${result.data.unassigned.map((i) => receipt.items[i]?.label ?? `#${i}`).join(', ')}. Say who had them.`,
+        );
+      else if (pv === null)
         setNote('The ledger could not compute the parts. Check the rows and the sentence.');
-      } else {
+      else {
         setAssignments(result.data.assignments);
         setPreview(pv);
       }
-      setStep('review');
     } catch (e) {
-      fail(e, 'review');
+      setError(toClientError(e));
+    } finally {
+      setSplitting(false);
     }
   };
 
   const send = async () => {
     if (receipt === null || assignments === null || photo === null) return;
-    begin('sending');
+    setSending(true);
+    setError(null);
     try {
-      await trip.client.submitExpense({
-        receipt,
-        assignments,
-        receiptImageSha256: photo.sha256,
-      });
+      await trip.client.submitExpense({ receipt, assignments, receiptImageSha256: photo.sha256 });
       trip.refresh();
-      setStep('sent');
-      setTimeout(() => go('home'), 1500);
+      go('home');
     } catch (e) {
-      fail(e, 'review');
+      setError(toClientError(e));
+      setSending(false);
     }
   };
 
@@ -164,44 +165,42 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
     setPreview(null);
   };
 
-  return (
-    <>
-      <ScreenHeader title="New expense" back="home" go={go} />
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => void onFile(e.target.files?.[0])}
-      />
-      <div className="space-y-4 px-4" data-noswipe={step !== 'pick' ? '' : undefined}>
-        {s?.ai && (
-          <p className="text-small text-ink-muted">
-            {s.ai.fake ? 'Simulated AI (fakes on)' : 'AI runs on this device'} ·{' '}
-            {s.ai.status === 'ready' ? 'ready' : s.ai.status === 'loading' ? 'loading…' : 'error'}
+  if (step === 'reading')
+    return (
+      <>
+        <NavBar title="New expense" back={{ label: 'Back', onClick: () => setStep('photo') }} />
+        <div className="flex flex-col items-center px-8 pt-6 text-center">
+          {photo && (
+            <img
+              src={photo.url}
+              alt="Your receipt"
+              className="h-40 w-32 rounded-card bg-bg-cell object-cover"
+            />
+          )}
+          <div className="mt-8">
+            <Mascot size={128} label="The kit+ty kitten is reading" />
+          </div>
+          <p className="mt-4 text-headline font-semibold">Reading the receipt</p>
+          <p className="text-subhead text-label-2" role="status">
+            on your phone… <Elapsed since={startedAt} />
           </p>
-        )}
-        {error && <ErrorBox error={error} />}
+        </div>
+      </>
+    );
 
-        {step === 'pick' && <Pick blocked={blocked} onCamera={() => fileInput.current?.click()} />}
-        {step === 'reading' && (
-          <Loading since={startedAt}>Reading the receipt on your phone…</Loading>
-        )}
+  if (step === 'check' && receipt !== null)
+    return (
+      <>
+        <NavBar
+          title="Check the receipt"
+          back={{ label: 'Back', onClick: () => setStep('photo') }}
+        />
+        <div className="space-y-6 px-4 pt-4" data-noswipe>
+          <ReceiptEditor receipt={receipt} onChange={edit} disabled={splitting || sending} />
 
-        {receipt !== null && step !== 'reading' && (
-          <>
-            {photo && (
-              <img
-                src={photo.url}
-                alt="Your receipt"
-                className="max-h-40 rounded-[16px] border-[1.5px] border-line object-contain"
-              />
-            )}
-            <ReceiptEditor receipt={receipt} onChange={edit} disabled={step !== 'review'} />
-
-            <section className="space-y-2">
-              <label htmlFor="who" className="block font-semibold">
+          <Section header="Split between">
+            <div className="space-y-3 p-4">
+              <label htmlFor="who" className="sr-only">
                 Who had what?
               </label>
               <textarea
@@ -209,102 +208,143 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
                 rows={2}
                 value={sentence}
                 onChange={(e) => setSentence(e.target.value)}
-                placeholder="Bob and I had the pho, Charlie only beers, water for all three"
-                className="field w-full"
+                placeholder="Who had what? For example: taxi for all three"
+                className="w-full resize-none rounded-control bg-bg-fill px-3 py-2.5 text-body placeholder:text-label-3"
               />
-              <button
-                type="button"
-                onClick={() => void split()}
-                disabled={sentence.trim() === '' || step !== 'review'}
-                className="btn btn-secondary w-full"
-              >
-                Split with AI
-              </button>
-              {step === 'splitting' && (
-                <Loading since={startedAt} size={48}>
-                  Splitting on your phone…
-                </Loading>
+              {assignments !== null && (
+                <div className="flex flex-wrap gap-2">
+                  {[...new Set(assignments.flatMap((a) => a.members))].map((m) => (
+                    <Badge key={m} kind={m === as ? 'insolvent' : 'limit'}>
+                      {cap(m)}
+                    </Badge>
+                  ))}
+                </div>
               )}
-              {note && <p className="card-attention py-3">{note}</p>}
+              <Button
+                variant="gray"
+                full
+                onClick={() => void split()}
+                disabled={sentence.trim() === '' || splitting || sending}
+              >
+                {splitting ? 'Splitting on your phone…' : 'Split with AI'}
+              </Button>
+              {note && <p className="text-subhead text-label">{note}</p>}
               {question && (
                 <form
-                  className="card-attention space-y-2"
+                  className="space-y-2"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void split({ question, answer });
                   }}
                 >
-                  <p>{question}</p>
+                  <p className="text-subhead font-semibold">{question}</p>
                   <input
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     required
-                    className="field w-full"
+                    aria-label={question}
+                    className="min-h-11 w-full rounded-control bg-bg-fill px-3 text-body"
                   />
-                  <button type="submit" className="btn btn-primary">
+                  <Button type="submit" variant="plain">
                     Answer
-                  </button>
+                  </Button>
                 </form>
               )}
-            </section>
+            </div>
+          </Section>
 
-            {preview && assignments && (
-              <Parts receipt={receipt} assignments={assignments} preview={preview} me={as} />
-            )}
+          {preview !== null && (
+            <Section
+              header="Parts"
+              footer={`${formatCents(preview.totalUsdCents)} DUSD at ${preview.rate} ${receipt.currency} per USD (${preview.rateAsOf}). Computed by the ledger, not the AI.`}
+            >
+              <ul>
+                {preview.shares.map((sh, i) => (
+                  <li
+                    key={sh.member}
+                    className={`ml-4 flex min-h-11 items-center justify-between pr-4 ${i < preview.shares.length - 1 ? 'hairline-b' : ''}`}
+                  >
+                    <span>{sh.member === as ? 'You' : cap(sh.member)}</span>
+                    <span className="tabular font-semibold">{formatCents(sh.cents)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
 
-            {step === 'sending' && (
-              <Loading since={startedAt} size={48}>
-                Creating payment requests and signing…
-              </Loading>
-            )}
-            {step === 'sent' ? (
-              <p className="card bg-mint-soft">
-                Sent: the payment requests are signed by your node.
-              </p>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void send()}
-                disabled={preview === null || step !== 'review' || blocked !== null}
-                className="btn btn-primary w-full py-3"
-              >
-                Send
-              </button>
-            )}
-          </>
-        )}
+          {error && <ErrorNote error={error} />}
+          <Button
+            full
+            onClick={() => void send()}
+            disabled={preview === null || sending || blocked !== null}
+          >
+            {sending ? 'Signing and sending…' : 'Send to the group'}
+          </Button>
+        </div>
+      </>
+    );
+
+  return (
+    <>
+      <NavBar title="New expense" back={{ label: 'Home', onClick: () => go('home') }} />
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="environment"
+        className="hidden"
+        data-testid="receipt-file"
+        onChange={(e) => void onFile(e.target.files?.[0])}
+      />
+      <div className="flex flex-col items-center gap-4 px-4 pt-3">
+        {s?.trip != null && <Badge kind="limit">{s.trip.name}</Badge>}
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          disabled={blocked !== null}
+          aria-label="Take a photo of the receipt"
+          className="pressable flex aspect-[3/4] w-full max-w-72 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-separator bg-bg-cell text-label-2 disabled:text-label-3"
+        >
+          <ScanLine size={48} strokeWidth={1.25} />
+          <span className="text-subhead">{blocked ?? 'Tap to take a photo'}</span>
+        </button>
+        <p className="text-subhead text-label-2">
+          Point at the receipt. The photo stays on your phone.
+        </p>
+        {error && <ErrorNote error={error} className="w-full" />}
+        <div className="hairline flex rounded-full bg-bg-cell p-1">
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={blocked !== null}
+            aria-label="Camera"
+            className="pressable grid h-11 w-16 place-items-center rounded-full text-accent-text disabled:text-label-3"
+          >
+            <Camera size={22} strokeWidth={1.75} />
+          </button>
+          <span className="my-2 w-px bg-separator" />
+          <button
+            type="button"
+            disabled
+            aria-label="Voice, coming soon"
+            className="flex h-11 w-16 items-center justify-center gap-1 text-label-3"
+          >
+            <Mic size={22} strokeWidth={1.75} />
+            <span className="text-caption">soon</span>
+          </button>
+        </div>
       </div>
     </>
   );
 }
 
-function Pick({ blocked, onCamera }: { blocked: string | null; onCamera: () => void }) {
+function Elapsed({ since }: { since: number }) {
+  const now = useNow(100);
+  const tenths = Math.max(0, Math.floor((now - since) / 100));
   return (
-    <div className="flex min-h-[55dvh] flex-col items-center justify-end gap-3">
-      <p className="text-center text-ink-muted">
-        {blocked ?? 'Take a photo of the receipt. It never leaves this phone.'}
-      </p>
-      <div className="flex overflow-hidden rounded-full bg-plum">
-        <button
-          type="button"
-          onClick={onCamera}
-          disabled={blocked !== null}
-          aria-label="Photo of the receipt"
-          className="px-8 py-3 text-title text-surface disabled:text-ink-muted"
-        >
-          📷
-        </button>
-        <span className="w-[1.5px] bg-surface" />
-        <button
-          type="button"
-          disabled
-          aria-label="Voice, coming soon"
-          className="flex items-center gap-1 px-8 py-3 text-title text-plum-soft"
-        >
-          🎤<span className="text-small font-semibold">soon</span>
-        </button>
-      </div>
-    </div>
+    <span className="tabular">
+      {Math.floor(tenths / 10)}.{tenths % 10} s
+    </span>
   );
 }
 
@@ -318,77 +358,85 @@ function ReceiptEditor({
   disabled: boolean;
 }) {
   const gap = receiptGap(r);
-  const extra = (key: 'tax' | 'tip', label: string) =>
-    r[key] !== undefined && (
-      <div className="flex items-center justify-between text-ink-muted">
-        <span>{label}</span>
-        <AmountInput
-          value={r[key]}
-          currency={r.currency}
-          disabled={disabled}
-          onChange={(v) => onChange({ ...r, [key]: v })}
-        />
-      </div>
-    );
+  const row = (key: string, label: ReactNode, field: ReactNode, last = false) => (
+    <li
+      key={key}
+      className={`ml-4 flex min-h-11 items-center gap-3 pr-4 ${last ? '' : 'hairline-b'}`}
+    >
+      <span className="min-w-0 flex-1">{label}</span>
+      {field}
+    </li>
+  );
+  const amount = (value: bigint, set: (v: bigint) => void) => (
+    <AmountInput value={value} currency={r.currency} disabled={disabled} onChange={set} />
+  );
   return (
-    <section className="card space-y-2">
+    <div className="space-y-1.5">
       <input
         value={r.merchant}
         disabled={disabled}
         onChange={(e) => onChange({ ...r, merchant: e.target.value })}
         aria-label="Merchant"
-        className="field w-full font-slab text-amount font-bold"
+        className="min-h-11 w-full bg-transparent px-4 text-headline font-semibold"
       />
-      <p className="px-1 text-small text-ink-muted">
-        {r.date} · {r.currency}
-      </p>
-      <ul className="space-y-1">
-        {r.items.map((it, i) => (
-          <li key={i} className="flex items-center gap-2">
-            <input
-              value={it.label}
-              disabled={disabled}
-              aria-label={`Item ${i + 1}`}
-              onChange={(e) =>
-                onChange({
-                  ...r,
-                  items: r.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
-                })
-              }
-              className="field min-w-0 flex-1 py-1"
-            />
-            <AmountInput
-              value={it.total}
-              currency={r.currency}
-              disabled={disabled}
-              onChange={(v) => onChange(withItemTotal(r, i, v))}
-            />
-          </li>
-        ))}
-      </ul>
-      {extra('tax', 'Tax')}
-      {extra('tip', 'Tip')}
-      <div className="flex items-center justify-between border-t-[1.5px] border-line pt-2 font-semibold">
-        <span>Total</span>
-        <AmountInput
-          value={r.total}
-          currency={r.currency}
-          disabled={disabled}
-          onChange={(v) => v > 0n && onChange({ ...r, total: v })}
-        />
-      </div>
+      <Section footer={`${r.date} · ${r.currency}`}>
+        <ul>
+          {r.items.map((it, i) =>
+            row(
+              `item${i}`,
+              <input
+                value={it.label}
+                disabled={disabled}
+                aria-label={`Item ${i + 1}`}
+                onChange={(e) =>
+                  onChange({
+                    ...r,
+                    items: r.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
+                  })
+                }
+                className="min-h-11 w-full bg-transparent text-body"
+              />,
+              amount(it.total, (v) => onChange(withItemTotal(r, i, v))),
+            ),
+          )}
+          {r.tax !== undefined &&
+            row(
+              'tax',
+              'Tax',
+              amount(r.tax, (v) => onChange({ ...r, tax: v })),
+            )}
+          {r.tip !== undefined &&
+            row(
+              'tip',
+              'Tip',
+              amount(r.tip, (v) => onChange({ ...r, tip: v })),
+            )}
+          {row(
+            'total',
+            <span className="font-semibold">Total</span>,
+            <span className="flex items-center gap-1 font-semibold">
+              {amount(r.total, (v) => v > 0n && onChange({ ...r, total: v }))}
+              <span className="text-subhead text-label-2">{r.currency}</span>
+            </span>,
+            true,
+          )}
+        </ul>
+      </Section>
       {gap !== 0n && (
-        <p className="card-attention py-2 text-small">
+        <p
+          role="alert"
+          className="rounded-control bg-danger-soft px-3 py-2 text-subhead text-label"
+        >
           The rows {gap > 0n ? 'exceed' : 'are short of'} the total by{' '}
-          {formatMinor(gap > 0n ? gap : -gap, r.currency)} {r.currency}. Fix an item or the total.
+          {formatMinor(gap > 0n ? gap : -gap, r.currency)} {r.currency}. Fix a row or the total.
         </p>
       )}
       {r.warnings.map((w) => (
-        <p key={w} className="text-small text-ink">
+        <p key={w} className="px-4 text-footnote text-label-2">
           {w}
         </p>
       ))}
-    </section>
+    </div>
   );
 }
 
@@ -413,49 +461,14 @@ function AmountInput({
       value={shown}
       disabled={disabled}
       aria-invalid={invalid}
+      aria-label="Amount"
       onChange={(e) => setText(e.target.value)}
       onBlur={() => {
         const v = text === null ? null : parseMinor(text, currency);
         if (v !== null) onChange(v);
         setText(null);
       }}
-      className="field amount w-28 py-1 text-right"
+      className={`tabular h-8 w-24 rounded-[8px] bg-bg-fill px-2 text-right text-body ${invalid ? 'text-danger' : 'text-label'}`}
     />
-  );
-}
-
-function Parts({
-  receipt,
-  assignments,
-  preview,
-  me,
-}: {
-  receipt: Receipt;
-  assignments: SplitAssignment[];
-  preview: SplitPreview;
-  me: string;
-}) {
-  return (
-    <section className="card space-y-2">
-      <ul className="space-y-1 text-small text-ink-muted">
-        {assignments.map((a) => (
-          <li key={a.itemIndex}>
-            {receipt.items[a.itemIndex]?.label}: {a.members.join(', ')}
-          </li>
-        ))}
-      </ul>
-      <ul className="space-y-1 border-t-[1.5px] border-line pt-2">
-        {preview.shares.map((sh) => (
-          <li key={sh.member} className="flex justify-between">
-            <span>{sh.member === me ? 'Your part' : `${sh.member}'s part`}</span>
-            <Money cents={sh.cents} />
-          </li>
-        ))}
-      </ul>
-      <p className="text-small text-ink-muted">
-        Total {formatCents(preview.totalUsdCents)} DUSD at {preview.rate} {receipt.currency} per USD
-        ({preview.rateAsOf}). Parts are computed by the ledger, not the AI.
-      </p>
-    </section>
   );
 }
