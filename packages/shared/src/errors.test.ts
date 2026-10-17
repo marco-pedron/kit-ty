@@ -7,6 +7,7 @@ describe('error codes', () => {
     'NODE_UNREACHABLE',
     'INVOICE_EXPIRED',
     'AI_NOT_READY',
+    'AGENT_NOT_READY',
     'TOTAL_MISMATCH',
     'NOT_ALLOWED',
     'INVALID_EVENT',

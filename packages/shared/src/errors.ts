@@ -19,6 +19,7 @@ export const ErrorCodeSchema = z.enum([
   // agent and API
   'TOPUP_REQUIRED',
   'AI_NOT_READY',
+  'AGENT_NOT_READY',
   'NOT_ALLOWED',
   'NOT_FOUND',
   'VALIDATION_ERROR',
@@ -63,6 +64,7 @@ export const ERROR_ACTIONS: Record<ErrorCode, string> = {
   TOPUP_REQUIRED: 'Your trip channel is too low to pay this. Top up your channel, then retry.',
   AI_NOT_READY:
     'The on-device AI is still loading. Wait a few seconds, or fill in the form by hand.',
+  AGENT_NOT_READY: 'The agents are still starting. Wait a few seconds and retry.',
   NOT_ALLOWED: 'Only the right person can do this. Switch to the right account.',
   NOT_FOUND: 'This item no longer exists. Refresh the page.',
   VALIDATION_ERROR: 'Some fields are missing or invalid. Check the form and retry.',
