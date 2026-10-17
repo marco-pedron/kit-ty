@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { checkBindInvoice, PaymentProofSchema, sha256Hex, signatureVerifier } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
 import { LightningRail } from '../rail/lightning-rail.js';
+import { OnchainRail } from '../rail/onchain-rail.js';
 import { WalletError } from './errors.js';
 import { deriveAppSecretHex, normalizeMnemonic, RlnWallet } from './rln-wallet.js';
 import {
@@ -708,8 +709,88 @@ describe('LightningRail', () => {
       rail: 'onchain' as const,
       invoice: 'rgb:x',
       recipientId: 'r',
+      cents: 1n,
       expiresAt: new Date(),
     };
     expect(await codeOf(rail.pay(req))).toBe('VALIDATION_ERROR');
+  });
+});
+
+describe('OnchainRail (B5, SPEC §10.3)', () => {
+  const WITNESS = 'ab'.repeat(32);
+  function onchainSetup(status: 'Settled' | 'Failed' = 'Settled') {
+    const chain = new FakeChain();
+    const rln = new FakeRln()
+      .on('/rgbinvoice', () => ({
+        json: {
+          recipient_id: 'utxob:r1',
+          invoice: 'rgb:invoice',
+          batch_transfer_idx: 1,
+          expiration_timestamp: 4_000_000_000,
+        },
+      }))
+      .on('/sendrgb', () => {
+        chain.addTx(WITNESS, [{ value: 1000, scriptpubkey_type: 'v1_p2tr' }]);
+        chain.mempool.push(WITNESS);
+        return { json: { txid: WITNESS } };
+      })
+      .on('/refreshtransfers', () => ({ json: { transfers: {} } }))
+      .on('/listtransfers', () => ({
+        json: { transfers: [{ idx: 1, kind: 'Send', txid: WITNESS, status }] },
+      }));
+    const { wallet } = setup(rln);
+    const rail = new OnchainRail(wallet, {
+      esplora: chain.esplora,
+      miner: chain.miner,
+      timeoutMs: 200,
+      pollMs: 1,
+    });
+    return { rln, rail, chain };
+  }
+
+  it('the creditor asks for exactly the line amount of the trip asset, through the proxy', async () => {
+    const { rln, rail } = onchainSetup();
+    const req = await rail.requestPayment({ cents: 350n, description: 'x', expirySec: 600 });
+    expect(req).toMatchObject({ rail: 'onchain', recipientId: 'utxob:r1', cents: 350n });
+    expect(rln.calls[0]?.body).toMatchObject({
+      asset_id: ASSET,
+      assignment: { type: 'Fungible', value: 350 },
+      witness: false,
+      min_confirmations: 1,
+      transport_endpoints: ['rpc://proxy:3000/json-rpc'],
+    });
+  });
+
+  it('the debtor sends, one block confirms it, the proof is the txid', async () => {
+    const { rln, rail, chain } = onchainSetup();
+    const req = await rail.requestPayment({ cents: 350n, description: 'x', expirySec: 600 });
+    expect(await rail.pay(req)).toEqual({ rail: 'onchain', txid: WITNESS, cents: 350n });
+    expect(chain.mined).toBe(1);
+    expect(rln.calls.find((c) => c.endpoint === '/sendrgb')?.body).toMatchObject({
+      donation: true,
+      recipient_map: {
+        [ASSET]: [{ recipient_id: 'utxob:r1', assignment: { type: 'Fungible', value: 350 } }],
+      },
+    });
+  });
+
+  it('a failed RGB transfer is PAYMENT_FAILED, even with the tx confirmed', async () => {
+    const { rail } = onchainSetup('Failed');
+    const req = await rail.requestPayment({ cents: 350n, description: 'x', expirySec: 600 });
+    expect(await codeOf(rail.pay(req))).toBe('PAYMENT_FAILED');
+  });
+
+  it('refuses a Lightning request and an expired one', async () => {
+    const { rail } = onchainSetup();
+    const ln = { rail: 'ln' as const, bolt11: 'lnbc', paymentHash: 'aa', expiresAt: new Date() };
+    expect(await codeOf(rail.pay(ln))).toBe('VALIDATION_ERROR');
+    const old = {
+      rail: 'onchain' as const,
+      invoice: 'i',
+      recipientId: 'r',
+      cents: 1n,
+      expiresAt: new Date(0),
+    };
+    expect(await codeOf(rail.pay(old))).toBe('INVOICE_EXPIRED');
   });
 });
