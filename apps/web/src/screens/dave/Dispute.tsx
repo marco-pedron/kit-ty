@@ -13,7 +13,7 @@ import { AlertDialog, StateView } from '../../ui/Overlays.js';
 import { findDispute, type DaveProps } from './DaveApp.js';
 
 // A dispute (wireframe, bottom left): the receipt rows the AI read, the debtor's reason, the
-// split; "Cancel expense" voids the whole expense, "Confirm" upholds the part (SPEC §6.6).
+// split; "Cancel whole expense" voids the whole expense, "Confirm" upholds the part (SPEC §6.6).
 
 export function DisputeScreen({
   state: s,
@@ -104,9 +104,9 @@ export function DisputeScreen({
           ))}
         </Section>
         {error && <ErrorNote error={error} />}
-        <div className="flex gap-2">
+        <div className="flex flex-col-reverse gap-2">
           <Button variant="gray" full disabled={busy} onClick={() => setConfirmVoid(true)}>
-            Cancel expense
+            Cancel whole expense
           </Button>
           <Button full disabled={busy} onClick={() => resolve('upheld')}>
             {busy ? 'Signing…' : 'Confirm'}
@@ -120,7 +120,7 @@ export function DisputeScreen({
         <AlertDialog
           title="Cancel the whole expense?"
           message={`Nobody owes anything for ${e.merchant}. ${cap(e.payer)} can send it again, corrected.`}
-          confirm="Cancel expense"
+          confirm="Cancel whole expense"
           destructive
           onCancel={() => setConfirmVoid(false)}
           onConfirm={() => {

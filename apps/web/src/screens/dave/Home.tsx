@@ -140,9 +140,9 @@ function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView;
         </span>
         <ChevronRight size={18} strokeWidth={1.75} className="shrink-0 text-label-3" />
       </button>
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-col-reverse gap-2">
         <Button variant="gray" full disabled={busy} onClick={() => setConfirmVoid(true)}>
-          Cancel
+          Cancel {cap(d.debtor)}'s part
         </Button>
         <Button full disabled={busy} onClick={() => resolve('upheld')}>
           {busy ? 'Signing…' : 'Confirm'}
