@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { WalletError } from './errors.js';
@@ -19,7 +20,7 @@ const SUMMARY = fileURLToPath(new URL('../../../../infra/.out/e2e-close.json', i
 const summary: Record<string, unknown> = {};
 const note = (k: string, v: unknown) => {
   summary[k] = v;
-  mkdirSync(fileURLToPath(new URL('.', `file://${SUMMARY}`)), { recursive: true });
+  mkdirSync(dirname(SUMMARY), { recursive: true });
   writeFileSync(
     SUMMARY,
     JSON.stringify(summary, (_, x) => (typeof x === 'bigint' ? `${x}` : x), 2),
