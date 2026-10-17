@@ -275,6 +275,31 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
     expect(s.me?.owedToMeCents).toBe(0n);
   });
 
+  it('B6: every node backed itself up to the relay, encrypted, after the last change', async () => {
+    const seed = JSON.parse(
+      readFileSync(
+        fileURLToPath(new URL('../../../../infra/.out/seed-state.json', import.meta.url)),
+        'utf8',
+      ),
+    ) as { pubkeys: Record<ActorId, string> };
+    const sizes = await waitFor(
+      'a backup of every node on the relay',
+      async () => {
+        const out: Record<string, number> = {};
+        for (const a of ['alice', 'bob', 'charlie', 'dave'] as const) {
+          const res = await fetch(`${stack.relayUrl}/backups/${seed.pubkeys[a]}`);
+          if (res.status !== 200) return undefined;
+          out[a] = (await res.arrayBuffer()).byteLength;
+        }
+        return out;
+      },
+      60_000,
+      2_000,
+    );
+    note('backups', sizes);
+    for (const n of Object.values(sizes)) expect(n).toBeGreaterThan(10_000);
+  });
+
   it('step 7: "Ledger verified" on every phone, same head on 4/4', async () => {
     const heads = await waitFor('the same head on 4/4', async () => {
       const all = await Promise.all((['alice', 'bob', 'charlie', 'dave'] as const).map(state));

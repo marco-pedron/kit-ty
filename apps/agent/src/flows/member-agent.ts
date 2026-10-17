@@ -50,7 +50,22 @@ export interface MemberAgentOptions {
   retryMs?: number;
   /** A CHECKPOINT after this many new non-checkpoint events (default 10, SPEC §9.4). */
   checkpointEvery?: number;
+  /**
+   * B6, SPEC §12: back the node up (lock → backup → unlock) and upload it to the relay once it
+   * has been quiet this long after a change. Unset: no automatic backups (unit tests).
+   */
+  backupQuietMs?: number;
 }
+
+/** Event types that change a node's state (channels, invoices, payments), SPEC §12. */
+const NODE_EVENTS = new Set([
+  'CHANNELS_READY',
+  'EXPENSE_SUBMITTED',
+  'INVOICE_REISSUED',
+  'PAYMENT_MADE',
+  'GUARANTEE_PAID',
+  'MEMBER_EXCLUDED',
+]);
 
 const OPEN = (l: LineRecord) => !FINAL.includes(l.state);
 const MAX_KEPT = 50;
@@ -80,6 +95,12 @@ export class MemberAgent {
   private opCounter = 0;
   private lastCheckpointSeq = 0;
   private ticking = false;
+  private readonly backupQuietMs: number | null;
+  /** Events up to here were checked for node changes. */
+  private backupScannedSeq = 0;
+  /** When the node last changed and was not backed up since; null when the backup is current. */
+  private dirtySince: number | null;
+  private backingUp: Promise<void> | null = null;
 
   constructor(opts: MemberAgentOptions) {
     this.actor = opts.actor;
@@ -90,6 +111,9 @@ export class MemberAgent {
     this.retryMs = opts.retryMs ?? 10_000;
     this.checkpointEvery = opts.checkpointEvery ?? 10;
     this.log = new LocalLog(opts.wallet, opts.verifier);
+    this.backupQuietMs = opts.backupQuietMs ?? null;
+    // A first backup after start: the relay may hold none for this node yet.
+    this.dirtySince = this.now().getTime();
   }
 
   // ---------- reading (for the routes, task C3) ----------
@@ -148,7 +172,7 @@ export class MemberAgent {
 
   /** Resolves when no payment is in flight (tests, shutdown). */
   async idle(): Promise<void> {
-    while (this.paying !== null) await this.paying;
+    while (this.paying !== null || this.backingUp !== null) await (this.paying ?? this.backingUp);
     await this.lock;
   }
 
@@ -180,6 +204,69 @@ export class MemberAgent {
       await this.reissueExpired(trip, author);
     }
     await this.maybeCheckpoint(trip);
+    await this.maybeBackup(trip, author);
+  }
+
+  // ---------- backups (task B6, SPEC §12) ----------
+
+  /** A change to this node that the log does not show (dave's liquidity openings). */
+  protected markNodeChanged(): void {
+    this.dirtySince ??= this.now().getTime();
+  }
+
+  /** Does this event change my node? dave overrides it: every payment goes through his. */
+  protected changesMyNode(e: StoredEvent, me: string, trip: TripState): boolean {
+    const { type, author, body } = e.signed.inner;
+    const b = body as { memberPubkey?: string; debtorPubkey?: string; creditorPubkey?: string };
+    switch (type) {
+      case 'CHANNELS_READY':
+      case 'MEMBER_EXCLUDED':
+        return b.memberPubkey === me;
+      case 'EXPENSE_SUBMITTED':
+      case 'INVOICE_REISSUED':
+        return author === me; // my invoices
+      case 'PAYMENT_MADE':
+        return author === me || b.creditorPubkey === me;
+      case 'GUARANTEE_PAID':
+        return b.creditorPubkey === me || (b.debtorPubkey === me && trip.coordinatorPubkey === me);
+      default:
+        return false;
+    }
+  }
+
+  /** Something else must finish first (dave: a payment may be routing through his node). */
+  protected backupBlocked(): boolean {
+    return false; // a traveler: only their own payment in flight, checked in maybeBackup
+  }
+
+  private async maybeBackup(trip: TripState, me: string): Promise<void> {
+    if (this.backupQuietMs === null || this.backingUp !== null) return;
+    const now = this.now().getTime();
+    for (const e of this.log.events) {
+      if (e.seq <= this.backupScannedSeq) continue;
+      if (NODE_EVENTS.has(e.signed.inner.type) && this.changesMyNode(e, me, trip))
+        this.dirtySince = now; // the quiet period starts again
+    }
+    this.backupScannedSeq = this.log.headSeq;
+    if (this.dirtySince === null || now - this.dirtySince < this.backupQuietMs) return;
+    if (this.paying !== null || this.backupBlocked()) return;
+    if (this.ops.some((o) => o.status === 'running')) return;
+
+    this.dirtySince = null;
+    const op = this.startOp('backing_up', 'Backing up your node to the relay (encrypted)…');
+    this.backingUp = (async () => {
+      try {
+        const { blob } = await this.wallet.backupNow();
+        await this.relay.putBackup(await this.wallet.nodePubkey(), blob);
+        this.endOp(op, 'done');
+      } catch (err) {
+        // retried after retryMs, as a payment
+        this.dirtySince = this.now().getTime() - (this.backupQuietMs ?? 0) + this.retryMs;
+        this.endOp(op, 'failed', apiErrorOf(err));
+      }
+    })().finally(() => {
+      this.backingUp = null;
+    });
   }
 
   /** Fetches and verifies the events after the local head. */

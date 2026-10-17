@@ -28,6 +28,9 @@ interface Log {
   warn(msg: string): void;
 }
 
+/** SPEC §12: back a node up once it has been quiet for 10 s after a change. */
+export const BACKUP_QUIET_MS = 10_000;
+
 export function startAgents(p: {
   fakes: boolean;
   relay: RelayClient;
@@ -36,10 +39,18 @@ export function startAgents(p: {
   tickMs?: number;
   /** Clock of the agents (tests); default the wall clock. */
   now?: () => Date;
+  /** B6: quiet time before a backup; default BACKUP_QUIET_MS. */
+  backupQuietMs?: number;
 }): AgentRuntime {
   // FakeWallet signs with fakeSign; the real wallet (B3) with ed25519 (B4).
   const verifier = p.fakes ? fakeVerifier : signatureVerifier;
-  const common = { relay: p.relay, verifier, ...(p.now !== undefined && { now: p.now }) };
+  const common = {
+    relay: p.relay,
+    verifier,
+    ...(p.now !== undefined && { now: p.now }),
+    // B6: back each node up 10 s after it changed (SPEC §12)
+    backupQuietMs: p.backupQuietMs ?? BACKUP_QUIET_MS,
+  };
   const dave = new CoordinatorAgent({ ...common, wallet: p.wallets.dave });
   const agents = new Map<ActorId, MemberAgent>([['dave', dave]]);
   for (const id of MEMBER_IDS)

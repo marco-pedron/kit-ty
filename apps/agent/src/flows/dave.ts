@@ -14,6 +14,7 @@ import {
   type PaymentProof,
   type ProofRef,
   type Pubkey,
+  type StoredEvent,
   type TripParams,
 } from '@kitty/shared';
 import { FlowError, apiErrorOf } from './errors.js';
@@ -67,6 +68,20 @@ export class CoordinatorAgent extends MemberAgent {
     if (trip !== null) this.planLiquidity(trip);
   }
 
+  /** Every payment of the trip is routed through dave's node (SPEC §10.1). */
+  protected override changesMyNode(e: StoredEvent, me: string, trip: TripState): boolean {
+    const t = e.signed.inner.type;
+    return t === 'PAYMENT_MADE' || t === 'GUARANTEE_PAID' || t === 'CHANNELS_READY'
+      ? true
+      : super.changesMyNode(e, me, trip);
+  }
+
+  /** Never during a payment (SPEC §12): not while a line is due, so maybe routing now. */
+  protected override backupBlocked(): boolean {
+    const lines = this.trip()?.lines.values() ?? [];
+    return this.opening !== null || [...lines].some((l) => l.state === 'due');
+  }
+
   override async idle(): Promise<void> {
     while (this.opening !== null) await this.opening;
     await super.idle();
@@ -103,6 +118,7 @@ export class CoordinatorAgent extends MemberAgent {
     this.opening = this.wallet
       .openLiquidity(member.nodePubkey, cents)
       .then(({ channelId }) => {
+        this.markNodeChanged();
         this.extraLiquidity.set(
           member.pubkey,
           (this.extraLiquidity.get(member.pubkey) ?? 0n) + cents,

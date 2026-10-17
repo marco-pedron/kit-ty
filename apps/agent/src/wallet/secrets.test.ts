@@ -30,12 +30,18 @@ describe('loadMemberWalletOptions', () => {
       secretsFile,
       seedStateFile,
     });
-    expect(o).toEqual({
+    const { backup, ...rest } = o;
+    expect(rest).toEqual({
       nodeUrl: 'http://127.0.0.1:3002',
       appSecretHex: deriveAppSecretHex('bob words'),
       assetId: 'rgb:dusd',
     });
-    expect(JSON.stringify(o)).not.toMatch(/alice|pw-|treasury/);
+    expect(JSON.stringify(rest)).not.toMatch(/alice|pw-|treasury/);
+    // B6: bob's own password only, to back up and unlock his own node
+    expect(backup?.password).toBe('pw-bob');
+    expect(backup?.unlockBody).toMatchObject({ password: 'pw-bob', announce_alias: 'bob' });
+    expect(backup?.hostDir).toMatch(/infra\/data\/backups\/bob$/);
+    expect(JSON.stringify(backup)).not.toMatch(/alice|pw-alice|pw-dave|treasury/);
   });
 
   it('gives the chain tools that close channels to dave only (B7)', () => {

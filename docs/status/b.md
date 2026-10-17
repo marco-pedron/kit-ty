@@ -12,19 +12,26 @@
 - [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55, #20)
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [ ] B5 (P1) Rail on-chain
-- [ ] B6 Backup automatico (lock → backup → unlock); demo:lose-phone = P1
+- [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, branch `b/B6-backup`); demo:lose-phone = P1, prossimo
 - [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- Freeze alle 21:30: verifica finale su main (`pnpm typecheck && pnpm lint && pnpm test`, `demo:reset`, `e2e:demo`, `demo:reset`).
-- B6 (backup automatico) e P1 (`demo:lose-phone`, B5) solo dopo il tag `demo-v1`.
+- P1 `pnpm demo:lose-phone bob`: nodo nuovo, `/restore` dal backup sul relay, stesso saldo, un nuovo pagamento.
+- Poi A6 (anti-injection, hash GGUF), B5 (rail on-chain), pulizia Fase 3.
 - Prima di ogni merge rischioso: `pnpm demo:reset && pnpm e2e:demo`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B6, sab 17/10 18:10
+- **Cosa funziona:** `RlnWallet.backupNow()`: `/lock` → `/backup` in `/backups` → `/unlock` (sempre, anche se il backup fallisce, con 3 tentativi), poi attesa dei canali di nuovo usabili e lettura del file dalla cartella host montata (`infra/data/backups/<membro>`, gitignored), che viene poi cancellata. Il file è cifrato dal nodo con la sua password: il relay non lo legge. Pagamenti e aperture del wallet aspettano in coda durante il backup. Ogni agente (`MemberAgent`, opzione `backupQuietMs`, 10 s nel runtime) fa il backup e lo carica sul relay (`PUT /backups/<nodePubkey>`) quando il suo nodo è cambiato ed è fermo da 10 s: per un viaggiatore i suoi canali, i suoi invoice (spese e riemissioni), i pagamenti in cui è debitore o creditore, la sua esclusione; per Dave ogni pagamento (passano tutti dal suo nodo), i canali e le sue aperture di liquidità; più un backup all'avvio. Mai durante un proprio pagamento; Dave mai mentre una riga è `due` o un'apertura è in corso. Un fallimento si riprova dopo `retryMs`. Operazione `backing_up` visibile in `/state`.
+- **Misurato a mano (spike Q8 rifatto su questo stack):** lock 1,0 s, backup 0,6-0,9 s, unlock 1,0 s; i peer si riconnettono da soli in ~1 s anche su Dave (6 canali usabili, 3 peer). `pnpm e2e:demo` 12/12 con i backup attivi (log `infra/.out/logs/20261017-180429-e2e-demo.log`): a fine demo tutti e quattro i nodi hanno un backup sul relay (106-222 KB), tempi della demo invariati.
+- **Infra:** bind mount `./data/backups/<membro>:/backups` nei 4 nodi; `up.sh` crea le cartelle, `demo:reset` le cancella prima di ripartire (un backup di nodi vecchi non va mai ripristinato).
+- **Come si prova:** `pnpm demo:reset && pnpm e2e:demo` (passo "B6"); unit test in `rln-wallet.test.ts` (`backupNow`) e `flows/backup.test.ts`.
+- **Problemi noti:** un nodo bloccato per ~3 s non riceve: un pagamento verso di lui in quel momento fallisce e l'agente lo riprova dopo 10 s. Il relay non autentica chi carica un backup (chiunque conosca la pubkey può sovrascrivere l'ultimo): in produzione l'upload va firmato con la chiave dell'app.
+
 ### B9, sab 17/10 17:40
 - **Cosa funziona:** `RlnWallet.openLiquidity(peer, cents)` (solo Dave): `/openchannel` con gli stessi parametri del seed (pubblico, anchors, commissioni 0, 1,000,000 sat), aperture in coda una alla volta (un'allocazione DUSD apre un canale alla volta), attesa della funding tx su esplora, poi i 6 blocchi in un colpo solo e attesa del canale usabile (budget 10 blocchi). `CoordinatorAgent` esegue `liquidityPlan` a ogni tick con soglia `LIQUIDITY_THRESHOLD_CENTS` = 10.00: se un margine scende sotto, apre subito, in background, con l'operazione `opening_liquidity` e una riga di attività ("Opened 35.00 of liquidity to alice…"). La vista di Dave mostra il margine con la liquidità aggiunta (`dave.liquidityNeeds()`).
 - **Scelta da segnalare al PM (SPEC §10.5 punto 2):** il canale nuovo contiene **almeno la riga più grande ancora da ricevere**, non solo `soglia − margine`: un pagamento passa da un solo canale (RLN non fa pagamenti multi-percorso), quindi con 15.00 aperti un rimborso da 35.00 non passerebbe. Il ledger (`liquidityPlan`) non cambia; il `max` è nell'agente.
