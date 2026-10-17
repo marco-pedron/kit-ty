@@ -1,0 +1,4 @@
+.out/
+.secrets/
+run/
+node_modules/

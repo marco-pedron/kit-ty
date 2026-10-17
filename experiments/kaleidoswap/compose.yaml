@@ -1,0 +1,112 @@
+# Experiment stack (one channel per traveler + atomic on-chain swap). Separate from the demo
+# stack `kitty`: own project name, own volumes, own image (kitty/rln:kaleido-next), ports in 23xxx
+# and 28443, all bound to 127.0.0.1. Same services as infra/docker-compose.yml. Regtest only.
+name: kitty-kaleido
+
+x-rln: &rln
+  image: kitty/rln:kaleido-next
+  depends_on:
+    - bitcoind
+    - electrs
+    - proxy
+  restart: unless-stopped
+
+services:
+  bitcoind:
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.2
+    platform: linux/amd64
+    command: "-fallbackfee=0.0002"
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      # rpc user "user", password "password" (same as upstream, regtest only)
+      RPCAUTH: "user:84c66d54d736d8b02aaa5b02e07e759b$$cc56c229b2a49ae2bfd5932cc8a6135d435bb9a7ac037ddd351d65936082c03d"
+    ports:
+      - 127.0.0.1:28443:18443
+    volumes:
+      - bitcoind:/srv/app/.bitcoin
+
+  electrs:
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    platform: linux/amd64
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      BTCPASS: "password"
+    volumes:
+      - electrs:/srv/app/db
+    depends_on:
+      - bitcoind
+    ports:
+      - 127.0.0.1:23501:50001
+
+  # Esplora REST (the SDK side's rgb-lib wallets use it, stage 2).
+  esplora:
+    image: blockstream/esplora@sha256:ef092138f7fcd5f3988441adf056632d64a7b95908896c471355c750a18f4541
+    entrypoint: []
+    command: >
+      /srv/explorer/electrs_bitcoin/bin/electrs
+      --timestamp
+      --network regtest
+      --jsonrpc-import
+      --cookie user:password
+      --daemon-rpc-addr bitcoind:18443
+      --http-addr 0.0.0.0:3002
+      --electrum-rpc-addr 0.0.0.0:60401
+      --db-dir /data/db
+      --cors '*'
+    volumes:
+      - esplora:/data
+    depends_on:
+      - bitcoind
+    ports:
+      - 127.0.0.1:23010:3002
+
+  proxy:
+    image: ghcr.io/rgb-tools/rgb-proxy-server:0.3.0
+    platform: linux/amd64
+    ports:
+      - 127.0.0.1:23000:3000
+
+  rln-alice:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:23001:3001
+    volumes:
+      - rln-alice:/RLNdata
+
+  rln-bob:
+    <<: *rln
+    profiles: [full]
+    command: ["/RLNdata", "--daemon-listening-port", "3002", "--ldk-peer-listening-port", "9736", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:23002:3002
+    volumes:
+      - rln-bob:/RLNdata
+
+  rln-charlie:
+    <<: *rln
+    profiles: [full]
+    command: ["/RLNdata", "--daemon-listening-port", "3003", "--ldk-peer-listening-port", "9737", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:23003:3003
+    volumes:
+      - rln-charlie:/RLNdata
+
+  rln-dave:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3004", "--ldk-peer-listening-port", "9738", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:23004:3004
+    volumes:
+      - rln-dave:/RLNdata
+
+volumes:
+  bitcoind:
+  electrs:
+  esplora:
+  rln-alice:
+  rln-bob:
+  rln-charlie:
+  rln-dave:

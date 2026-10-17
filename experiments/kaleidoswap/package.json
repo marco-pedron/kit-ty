@@ -1,0 +1,19 @@
+{
+  "name": "@kitty/exp-kaleidoswap",
+  "private": true,
+  "type": "module",
+  "description": "Experiment: one RGB channel per traveler, funded by an atomic on-chain swap. Not part of the pnpm workspace.",
+  "scripts": {
+    "gen": "openapi-typescript vendor/rln-kaleido-openapi.yaml -o src/client/schema.d.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "stage1": "node src/stage1-hodl.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}
