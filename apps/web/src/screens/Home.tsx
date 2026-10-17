@@ -2,6 +2,7 @@ import { DEFAULT_POLICY, formatCents, type ApiClientError, type LineView } from 
 import { useState } from 'react';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { approvalText, cap, historyRows } from '../history.js';
+import { openProof } from '../nav.js';
 import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from '../lines.js';
 import { toClientError, useNow } from '../state.js';
 import { Badge, LimitBadge } from '../ui/Badge.js';
@@ -177,6 +178,7 @@ function GroupBody({
             date={when(r.at)}
             connector={i < rows.length - 1}
             muted={r.muted}
+            {...(r.proof !== null && { onClick: () => openProof(r.proof!) })}
           />
         ))}
       </ul>

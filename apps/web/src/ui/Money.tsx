@@ -56,6 +56,7 @@ export function TransactionRow({
   date,
   connector = false,
   muted = false,
+  onClick,
 }: {
   name: string;
   me?: boolean;
@@ -67,9 +68,11 @@ export function TransactionRow({
   /** Draws the timeline down to the next row. */
   connector?: boolean;
   muted?: boolean;
+  /** Opens the proof of this payment. */
+  onClick?: () => void;
 }) {
-  return (
-    <li className={`relative flex gap-3 py-2.5 ${muted ? 'text-label-3 line-through' : ''}`}>
+  const content = (
+    <>
       {connector && (
         <span aria-hidden className="absolute top-[52px] bottom-[-10px] left-5 w-px bg-separator" />
       )}
@@ -82,6 +85,24 @@ export function TransactionRow({
         <Amount cents={cents} sign={sign} />
         <span className="text-footnote text-label-2">{date}</span>
       </div>
+    </>
+  );
+  return (
+    <li className="relative">
+      {onClick === undefined ? (
+        <div className={`flex gap-3 py-2.5 ${muted ? 'text-label-3 line-through' : ''}`}>
+          {content}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`${title}: see the proof`}
+          className="pressable flex w-full gap-3 py-2.5 text-left"
+        >
+          {content}
+        </button>
+      )}
     </li>
   );
 }

@@ -22,7 +22,9 @@ import { StateView } from '../../ui/Overlays.js';
 import { CoverScreen } from './Cover.js';
 import { DaveHome } from './Home.js';
 import { DisputeScreen } from './Dispute.js';
-import { DaveLog, MembersScreen, DaveProfile } from './Others.js';
+import { LogScreen } from '../shared/Log.js';
+import { ProofScreen } from '../shared/Proof.js';
+import { MembersScreen, DaveProfile } from './Others.js';
 
 // Dave's app (wireframe-dave.pdf, task C5): Home with disputes, insolvencies and the rate of the
 // day; Members on the left, Log on the right; the bar Members · Home · Log. "Cover and exclude"
@@ -154,7 +156,22 @@ function Route({ route, props }: { route: DaveRoute; props: DaveProps }) {
     case 'members':
       return <MembersScreen {...props} />;
     case 'log':
-      return <DaveLog {...props} />;
+      return (
+        <LogScreen
+          members={props.state.members}
+          fakes={props.state.fakes}
+          back={{ label: 'Home', onClick: () => props.go({ name: 'home' }) }}
+          onProof={(paymentHash) => props.go({ name: 'proof', paymentHash })}
+        />
+      );
+    case 'proof':
+      return (
+        <ProofScreen
+          client={props.trip.client}
+          paymentHash={route.paymentHash}
+          back={{ label: 'Log', onClick: () => props.go({ name: 'log' }) }}
+        />
+      );
     case 'profile':
       return <DaveProfile {...props} />;
     case 'dispute':

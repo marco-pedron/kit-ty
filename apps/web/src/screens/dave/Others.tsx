@@ -58,44 +58,6 @@ export function MembersScreen({ state: s, go }: DaveProps) {
   );
 }
 
-/** Task C6 replaces this with the relay's events verified in the browser. */
-export function DaveLog({ state: s, go }: DaveProps) {
-  const h = s.ledger;
-  return (
-    <>
-      <NavBar title="Log" large back={{ label: 'Home', onClick: () => go({ name: 'home' }) }} />
-      <div className="space-y-6 px-4">
-        <Section>
-          <Row
-            leading={
-              <Tile tone="accent">
-                <ShieldCheck size={18} strokeWidth={1.75} />
-              </Tile>
-            }
-            title={h.chainValid ? 'Chain verified' : 'Chain broken'}
-            subtitle={`${h.events} events · ${h.validSignatures}/${h.events} signatures valid`}
-            last
-          />
-        </Section>
-        {s.activity.length === 0 ? (
-          <StateView kind="empty" title="Nothing signed yet" />
-        ) : (
-          <Section header="Activity">
-            {s.activity.slice(0, 40).map((a, i, all) => (
-              <Row
-                key={`${a.at}-${i}`}
-                title={a.text}
-                subtitle={new Date(a.at).toLocaleTimeString('en-GB')}
-                last={i === all.length - 1}
-              />
-            ))}
-          </Section>
-        )}
-      </div>
-    </>
-  );
-}
-
 export function DaveProfile({ state: s, go }: DaveProps) {
   const icon = { size: 18, strokeWidth: 1.75 };
   return (

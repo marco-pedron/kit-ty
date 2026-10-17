@@ -16,7 +16,7 @@ const FIXTURE = new URL('../../../infra/fixtures/receipts/vnd-dinner.png', impor
   .pathname;
 const filters = process.argv.slice(2);
 const USERS = ['alice', 'bob', 'charlie'] as const;
-const SCREENS = ['home', 'new', 'qr', 'groups', 'group', 'profile'] as const;
+const SCREENS = ['home', 'new', 'qr', 'groups', 'group', 'profile', 'log'] as const;
 
 const wanted = (name: string) => filters.length === 0 || filters.some((f) => name.includes(f));
 const settle = (page: Page) => page.waitForTimeout(700);
@@ -59,6 +59,16 @@ async function seedExpense() {
     method: 'POST',
     body: { receipt: DINNER, assignments: SPLIT, receiptImageSha256: hash },
   });
+}
+
+/** The payment hash (or txid) of the first settled line this actor's /state shows. */
+async function firstProof(path: string): Promise<string | null> {
+  type P = { rail: 'ln'; paymentHash: string } | { rail: 'onchain'; txid: string } | null;
+  const st = (await api(path)) as { expenses: { lines: { proof: P }[] }[] };
+  for (const e of st.expenses)
+    for (const l of e.lines)
+      if (l.proof) return l.proof.rail === 'ln' ? l.proof.paymentHash : l.proof.txid;
+  return null;
 }
 
 async function shot(page: Page, name: string, scheme: string) {
@@ -115,6 +125,14 @@ async function run(browser: Browser, scheme: 'light' | 'dark') {
     }
   }
 
+  // Proof of a payment Alice received (Bob paid automatically).
+  const hash = await firstProof('alice/state');
+  if (hash !== null && wanted('alice-proof')) {
+    await alice.goto(`${BASE}/?as=alice#/proof/${hash}`);
+    await alice.getByText('Checks', { exact: true }).waitFor({ timeout: 15_000 });
+    await shot(alice, 'alice-proof', scheme);
+  }
+
   // New expense: reading (the kitten waves) and check (rows, split, parts).
   if (wanted('alice-reading') || wanted('alice-check')) {
     await alice.goto(`${BASE}/?as=alice#/new`);
@@ -157,6 +175,12 @@ async function shootDave(browser: Browser, scheme: 'light' | 'dark', cover: bool
       defaults: { expenseId: string; debtor: string }[];
     };
   };
+  const proof = await firstProof('dave/state');
+  if (proof !== null && wanted('dave-proof')) {
+    await dave.goto(`${BASE}/?as=dave#/proof/${proof}`);
+    await dave.getByText('Checks', { exact: true }).waitFor({ timeout: 15_000 });
+    await shot(dave, 'dave-proof', scheme);
+  }
   const d = state.coordinator.disputes[0];
   if (d && wanted('dave-dispute')) {
     await dave.goto(`${BASE}/?as=dave#/dispute/${d.expenseId}/${d.debtor}`);

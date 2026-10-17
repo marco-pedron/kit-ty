@@ -7,13 +7,23 @@ import {
 } from '@kitty/shared';
 import { Camera, QrCode, Users } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { hashOf, screenFromHash, swipeDirection, swipeTarget, type Screen } from './nav.js';
+import {
+  hashOf,
+  openProof,
+  proofParam,
+  screenFromHash,
+  swipeDirection,
+  swipeTarget,
+  type Screen,
+} from './nav.js';
 import { GroupSettingsScreen, GroupsScreen } from './screens/Groups.js';
 import { HomeScreen } from './screens/Home.js';
 import { NewExpenseScreen } from './screens/NewExpense.js';
 import { ProfileScreen } from './screens/Profile.js';
 import { DaveApp } from './screens/dave/DaveApp.js';
 import { QrScreen } from './screens/Qr.js';
+import { LogScreen } from './screens/shared/Log.js';
+import { ProofScreen } from './screens/shared/Proof.js';
 import { Styleguide } from './screens/Styleguide.js';
 import type { ScreenProps } from './screens/types.js';
 import { useNow, useTripState } from './state.js';
@@ -115,6 +125,32 @@ const SCREEN_VIEWS: Record<Screen, (p: ScreenProps) => ReactNode> = {
   groups: GroupsScreen,
   group: GroupSettingsScreen,
   profile: ProfileScreen,
+  log: ({ trip, go }) => (
+    <LogScreen
+      members={trip.state?.members ?? []}
+      fakes={trip.state?.fakes ?? false}
+      back={{ label: 'Profile', onClick: () => go('profile') }}
+      onProof={openProof}
+    />
+  ),
+  proof: ({ trip, go }) => {
+    const hash = proofParam(window.location.hash);
+    if (hash === null)
+      return (
+        <StateView
+          kind="empty"
+          title="No payment to prove"
+          action={{ label: 'Back to Home', onClick: () => go('home') }}
+        />
+      );
+    return (
+      <ProofScreen
+        client={trip.client}
+        paymentHash={hash}
+        back={{ label: 'Back', onClick: () => window.history.back() }}
+      />
+    );
+  },
 };
 
 const TABS: readonly TabItem<'groups' | 'new' | 'qr'>[] = [
@@ -176,7 +212,7 @@ function Phone({ as }: { as: MemberId }) {
             />
           )
         ) : (
-          <div key={screen} className="animate-push">
+          <div key={window.location.hash || screen} className="animate-push">
             <View as={as} trip={trip} go={go} />
           </div>
         )}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashOf, screenFromHash, swipeDirection, swipeTarget } from './nav.js';
+import { hashOf, proofParam, screenFromHash, swipeDirection, swipeTarget } from './nav.js';
 
 describe('screens in the URL hash', () => {
   it('reads the screen, defaulting to home', () => {
@@ -10,8 +10,18 @@ describe('screens in the URL hash', () => {
   });
 
   it('round-trips every screen', () => {
-    for (const s of ['home', 'new', 'qr', 'groups', 'group', 'profile'] as const)
+    for (const s of ['home', 'new', 'qr', 'groups', 'group', 'profile', 'log'] as const)
       expect(screenFromHash(hashOf(s))).toBe(s);
+  });
+});
+
+describe('the proof of a payment in the hash', () => {
+  it('reads the payment hash of #/proof/<hash>', () => {
+    const h = 'ab'.repeat(32);
+    expect(screenFromHash(`#/proof/${h}`)).toBe('proof');
+    expect(proofParam(`#/proof/${h}`)).toBe(h);
+    expect(proofParam('#/proof/nothex')).toBeNull();
+    expect(proofParam('#/log')).toBeNull();
   });
 });
 

@@ -14,12 +14,15 @@ import { swipeDirection } from './nav.js';
 
 export type DaveRoute =
   | { name: 'home' | 'members' | 'log' | 'profile' }
-  | { name: 'dispute' | 'cover'; expenseId: string; member: MemberId };
+  | { name: 'dispute' | 'cover'; expenseId: string; member: MemberId }
+  | { name: 'proof'; paymentHash: string };
 
 export function daveRouteFromHash(hash: string): DaveRoute {
   const [name, expenseId, member] = hash.replace(/^#\/?/, '').split('/');
   if ((name === 'dispute' || name === 'cover') && expenseId && member && isMemberId(member))
     return { name, expenseId, member };
+  if (name === 'proof' && expenseId !== undefined && /^[0-9a-f]{64}$/.test(expenseId))
+    return { name, paymentHash: expenseId };
   if (name === 'members' || name === 'log' || name === 'profile') return { name };
   return { name: 'home' };
 }
@@ -27,6 +30,7 @@ export function daveRouteFromHash(hash: string): DaveRoute {
 export function daveHash(r: DaveRoute): string {
   if (r.name === 'home') return '';
   if (r.name === 'dispute' || r.name === 'cover') return `#/${r.name}/${r.expenseId}/${r.member}`;
+  if (r.name === 'proof') return `#/proof/${r.paymentHash}`;
   return `#/${r.name}`;
 }
 
