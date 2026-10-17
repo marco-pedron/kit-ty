@@ -16,6 +16,7 @@ writeFileSync(
     nodes: {
       alice: { password: 'pw-alice', mnemonic: 'alice words' },
       bob: { password: 'pw-bob', mnemonic: 'bob words' },
+      dave: { password: 'pw-dave', mnemonic: 'dave words' },
     },
     treasuryMnemonic: 'treasury words',
   }),
@@ -35,6 +36,16 @@ describe('loadMemberWalletOptions', () => {
       assetId: 'rgb:dusd',
     });
     expect(JSON.stringify(o)).not.toMatch(/alice|pw-|treasury/);
+  });
+
+  it('gives the chain tools that close channels to dave only (B7)', () => {
+    const at = { secretsFile, seedStateFile, esploraUrl: 'http://127.0.0.1:3010/' };
+    expect(loadMemberWalletOptions('bob', { nodeUrl: 'http://x', ...at }).coordinator).toBe(
+      undefined,
+    );
+    const dave = loadMemberWalletOptions('dave', { nodeUrl: 'http://x', ...at });
+    expect(dave.coordinator?.esplora.baseUrl).toBe('http://127.0.0.1:3010');
+    expect(dave.coordinator?.miner).toBeDefined();
   });
 
   it('fails clearly for a member with no secrets or a missing file', () => {
