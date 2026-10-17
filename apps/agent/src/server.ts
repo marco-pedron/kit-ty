@@ -1,21 +1,19 @@
-import { ERROR_ACTIONS, apiError, type ActorId, type ApiErrorBody } from '@kitty/shared';
+import { ERROR_ACTIONS, apiError, type ApiErrorBody } from '@kitty/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AiService } from './ai/types.js';
 import type { Config } from './config.js';
 import { createFakeAi } from './dev-fakes/fake-ai.js';
 import { FAKES_BANNER } from './dev-fakes/guard.js';
-import type { MemberAgent } from './flows/member-agent.js';
+import type { AgentRuntime } from './flows/runtime.js';
 import { registerRoutes } from './routes/index.js';
-import type { Wallet } from './wallet/types.js';
 
-// The agent's HTTP server (SPEC §14.3). It does not build agents: the runtime of A5
-// (startAgents, started by index.ts) does, and passes them in; this file only serves them.
+// The agent's HTTP server (SPEC §14.3). It does not build agents or wallets: index.ts builds
+// the server, then the runtime (startAgents, A5, which logs with app.log), then listens; the
+// routes read the runtime through a getter.
 
 export interface AgentServerDeps {
-  /** runtime.agents of startAgents (A5): one MemberAgent per actor. Default: none running. */
-  agents?: ReadonlyMap<ActorId, MemberAgent>;
-  /** Each member's own wallet, for balances. Default: none (balance shown as unknown). */
-  wallets?: ReadonlyMap<ActorId, Wallet>;
+  /** The runtime of startAgents (A5). Default: none, the agent routes answer 503. */
+  runtime?: () => AgentRuntime | null;
   /** The travelers' on-device AI (A4). Default: the FakeAi with KITTY_FAKES=1, else none. */
   ai?: AiService | null;
   now?: () => Date;
@@ -49,8 +47,7 @@ export function buildAgentServer(config: Config, deps: AgentServerDeps = {}): Fa
 
   const esplora = config.ESPLORA_URL.replace(/\/+$/, '');
   registerRoutes(app, {
-    agents: deps.agents ?? new Map(),
-    wallets: deps.wallets ?? new Map(),
+    runtime: deps.runtime ?? (() => null),
     ai: deps.ai !== undefined ? deps.ai : config.KITTY_FAKES ? createFakeAi() : null,
     fakes: config.KITTY_FAKES,
     explorerBaseUrl: config.ESPLORA_URL,

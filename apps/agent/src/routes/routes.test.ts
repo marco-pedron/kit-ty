@@ -1,4 +1,5 @@
 import {
+  CoverAndExcludeResponseSchema,
   ExpenseViewSchema,
   LineViewSchema,
   ProofViewSchema,
@@ -16,7 +17,11 @@ import { loadConfig } from '../config.js';
 import { DEMO_RECEIPT, DEMO_SENTENCE, DEMO_SPLIT } from '../dev-fakes/fake-ai.js';
 import { demo, type Demo } from '../flows/test/setup.js';
 import { buildAgentServer, type AgentServerDeps } from '../server.js';
+import type { MemberAgent } from '../flows/member-agent.js';
+import { MemoryRelay } from '../flows/test/memory-relay.js';
 import type { Wallet } from '../wallet/types.js';
+import { seedFakeTrip, startAgents, type AgentRuntime } from '../flows/runtime.js';
+import { FakeLightningNetwork } from '../dev-fakes/fake-wallet.js';
 
 // The routes over the real MemberAgents of A5a: four agents on one fake Lightning network and an
 // in-memory relay with the real validateEvent, the demo trip already set up (flows/test/setup).
@@ -33,14 +38,18 @@ afterEach(async () => {
   app = undefined;
 });
 
+/** The agents of A's demo() as the runtime the server reads (startAgents, minus the timer). */
+const runtimeOf = (d: Demo): AgentRuntime => ({
+  agents: new Map<ActorId, MemberAgent>(ACTORS.map((a) => [a, d.agents[a]])),
+  dave: d.agents.dave,
+  stop: () => undefined,
+});
+
 function serve(d: Demo | null, deps: AgentServerDeps = {}) {
   const config = loadConfig({ KITTY_FAKES: '1', ESPLORA_URL: 'http://127.0.0.1:3010' });
+  const rt = d && runtimeOf(d);
   app = buildAgentServer(config, {
-    ...(d && {
-      agents: new Map(ACTORS.map((a) => [a, d.agents[a]])),
-      wallets: new Map<ActorId, Wallet>(ACTORS.map((a) => [a, d.net.wallet(a)])),
-      now: d.now,
-    }),
+    ...(d && { runtime: () => rt, now: d.now }),
     onchainFound: async () => false,
     ...deps,
   });
@@ -101,11 +110,8 @@ describe('agent routes over MemberAgent', () => {
       ['bob', 'active'],
       ['charlie', 'active'],
     ]);
-    expect(alice.me?.balance).toMatchObject({
-      tripOutboundCents: 5000n,
-      tripChannelCents: 5000n,
-      topupWarning: false,
-    });
+    // null until MemberAgent.balances() (A, PR #19): the UI says "balance not available".
+    expect(alice.me?.balance).toBeNull();
     expect(alice.ai).toEqual({ status: 'ready', fake: true });
     expect(alice.ledger).toMatchObject({ chainValid: true });
     expect(alice.ledger.validSignatures).toBe(alice.ledger.events);
@@ -225,6 +231,111 @@ describe('agent routes over MemberAgent', () => {
   });
 });
 
+describe("dave's routes over CoordinatorAgent", () => {
+  it('upholds the contest, then covers and excludes charlie (SPEC §16 steps 5-6)', async () => {
+    const d = await demo();
+    const a = serve(d);
+    const expense = await dinner(d, a);
+    await call(a, 'POST', `/api/charlie/expenses/${expense.expenseId}/decision`, {
+      decision: 'contest',
+      reason: 'I only had water',
+    });
+    await d.tickAll();
+
+    const upheld = await call(a, 'POST', `/api/dave/disputes/${expense.expenseId}/charlie`, {
+      outcome: 'upheld',
+      note: 'The photo shows two beers',
+    });
+    expect(upheld.status).toBe(200);
+    expect(LineViewSchema.parse(upheld.json)).toMatchObject({
+      debtor: 'charlie',
+      state: 'due',
+      resolution: { outcome: 'upheld', note: 'The photo shows two beers' },
+    });
+
+    // charlie does not pay (payUpheldDisputes is off): past the deadline the line is overdue.
+    d.advance(20); // bob's silent assent: his agent pays
+    await d.tickAll();
+    await d.tickAll();
+    d.advance(11);
+    await d.tickAll();
+    const defaults = (await state(a, 'dave')).coordinator!.defaults;
+    expect(defaults).toMatchObject([
+      { debtor: 'charlie', payer: 'alice', cents: 350n, coverable: true },
+    ]);
+
+    const cover = await call(
+      a,
+      'POST',
+      `/api/dave/defaults/${expense.expenseId}/charlie/cover-and-exclude`,
+    );
+    expect(cover.status).toBe(200);
+    const { covered, closingTxids } = CoverAndExcludeResponseSchema.parse(cover.json);
+    expect(covered?.rail).toBe('ln');
+    expect(closingTxids.length).toBeGreaterThan(0);
+    await d.tickAll();
+
+    const alice = await state(a, 'alice');
+    expect(alice.me!.credits.find((l) => l.debtor === 'charlie')).toMatchObject({
+      state: 'guaranteed',
+      paidBy: 'guarantee',
+    });
+    expect(alice.members.find((m) => m.memberId === 'charlie')).toMatchObject({
+      status: 'excluded',
+      closingTxids,
+    });
+    const dave = await state(a, 'dave');
+    expect(dave.coordinator!.members.find((m) => m.memberId === 'charlie')).toMatchObject({
+      guaranteeUsedCents: 350n,
+      guaranteeLeftCents: 4650n,
+      operatorCreditCents: 350n,
+    });
+    const hash = covered!.rail === 'ln' ? covered!.paymentHash : '';
+    const proof = ProofViewSchema.parse((await call(a, 'GET', `/api/proof/${hash}`)).json);
+    expect(proof).toMatchObject({ verified: true, paidBy: 'guarantee', debtor: 'charlie' });
+  });
+
+  it('sets the rate of the day', async () => {
+    const d = await demo();
+    const a = serve(d);
+    await d.tickAll();
+    const rate = { asOf: '2026-10-18', source: 'infra/rates.json', rates: { VND: '26400' } };
+    expect(await call(a, 'PUT', '/api/dave/rates', rate)).toMatchObject({
+      status: 200,
+      json: rate,
+    });
+    await d.tickAll();
+    expect((await state(a, 'alice')).rate).toEqual(rate);
+  });
+});
+
+describe('agent routes over the runtime of startAgents', () => {
+  it('serves the trip that seedFakeTrip prepared, through the ticking agents', async () => {
+    const net = new FakeLightningNetwork();
+    const relay = new MemoryRelay(net, () => new Date());
+    const wallets = {} as Record<ActorId, Wallet>;
+    for (const x of ACTORS) wallets[x] = net.wallet(x);
+    const log = { info: () => undefined, warn: () => undefined };
+    const rt = startAgents({ fakes: true, relay, wallets, log, tickMs: 20 });
+    try {
+      await seedFakeTrip(rt, net.assetId, log);
+      const a = serve(null, { runtime: () => rt });
+      await vi.waitFor(
+        async () => {
+          const view = await state(a, 'bob');
+          expect(view.trip?.name).toBe('Vietnam 2026');
+          expect(view.members.filter((m) => m.status === 'active')).toHaveLength(3);
+          expect(view.me?.memberId).toBe('bob');
+        },
+        { timeout: 5_000, interval: 50 },
+      );
+    } finally {
+      rt.stop();
+      for (const ag of rt.agents.values()) await ag.idle();
+    }
+  });
+});
+
 describe('agent routes: roles, validation and errors', () => {
   it('refuses traveler actions to dave and unknown members', async () => {
     const a = serve(await demo());
@@ -243,14 +354,16 @@ describe('agent routes: roles, validation and errors', () => {
     });
   });
 
-  it("answers 501 to dave's actions until A5b", async () => {
-    const a = serve(await demo());
-    const r = await call(a, 'PUT', '/api/dave/rates', {
-      asOf: '2026-10-17',
-      source: 'x',
-      rates: { VND: '26000' },
+  it("refuses dave's actions on lines in the wrong state, with the flow's reason", async () => {
+    const d = await demo();
+    const a = serve(d);
+    const expense = await dinner(d, a);
+    const r = await call(a, 'POST', `/api/dave/disputes/${expense.expenseId}/bob`, {
+      outcome: 'upheld',
+      note: 'ok',
     });
-    expect(r).toMatchObject({ status: 501, json: { error: { code: 'NOT_IMPLEMENTED' } } });
+    expect(r).toMatchObject({ status: 403, json: { error: { code: 'NOT_ALLOWED' } } });
+    expect((r.json.error as { message: string }).message).toMatch(/not contested/);
   });
 
   it('validates bodies and params with the shared schemas', async () => {
@@ -291,15 +404,5 @@ describe('agent routes: roles, validation and errors', () => {
     // /state still answers: an empty trip, so the UI can say what is missing.
     const view = await state(a, 'alice');
     expect(view).toMatchObject({ trip: null, me: { memberId: 'alice', balance: null } });
-  });
-
-  it('shows balance unknown, not an error, when the node does not answer', async () => {
-    const d = await demo();
-    const down = {
-      balances: async () => Promise.reject(new Error('node down')),
-    } as unknown as Wallet;
-    const a = serve(d, { wallets: new Map<ActorId, Wallet>([['alice', down]]) });
-    await d.tickAll();
-    expect((await state(a, 'alice')).me?.balance).toBeNull();
   });
 });

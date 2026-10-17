@@ -20,18 +20,20 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AiService } from '../ai/types.js';
 import { FlowError } from '../flows/errors.js';
+import type { CoordinatorAgent } from '../flows/dave.js';
 import type { MemberAgent } from '../flows/member-agent.js';
+import type { AgentRuntime } from '../flows/runtime.js';
 import { RelayError } from '../relay/errors.js';
 import { WalletError } from '../wallet/errors.js';
-import type { Wallet } from '../wallet/types.js';
 import { buildProof } from './proof.js';
 import { buildTripView, expenseViewOf, lineViewOf } from './state.js';
 
 export interface RouteDeps {
-  /** One agent per actor, from the runtime of A5 (startAgents); missing = not running. */
-  agents: ReadonlyMap<ActorId, MemberAgent>;
-  /** Each member's own wallet, for the balances of /state (MemberAgent keeps it private). */
-  wallets: ReadonlyMap<ActorId, Wallet>;
+  /**
+   * The running agents (startAgents, A5), read at each request: index.ts starts them after
+   * the server is built. null = not started yet → 503 with an action.
+   */
+  runtime: () => AgentRuntime | null;
   /** The on-device AI of the travelers (A4; FakeAi with KITTY_FAKES=1); null if absent. */
   ai: AiService | null;
   fakes: boolean;
@@ -150,16 +152,22 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     });
   }
 
+  // No AGENT_NOT_READY in ErrorCodeSchema (shared, stream A): NODE_UNREACHABLE until it exists.
+  const notRunning = (what: string) =>
+    refuse(
+      'NODE_UNREACHABLE',
+      `${what} not running yet`,
+      'Start the agents (pnpm dev, or pnpm dev:fakes) and retry.',
+    );
   const agentOf = (as: ActorId): MemberAgent => {
-    const a = deps.agents.get(as);
-    if (a === undefined) {
-      throw refuse(
-        'NODE_UNREACHABLE',
-        `the agent of ${as} is not running`,
-        'Start the agents (pnpm dev, or pnpm dev:fakes) and retry.',
-      );
-    }
+    const a = deps.runtime()?.agents.get(as);
+    if (a === undefined) throw notRunning(`the agent of ${as} is`);
     return a;
+  };
+  const daveAgent = (): CoordinatorAgent => {
+    const d = deps.runtime()?.dave;
+    if (d === undefined) throw notRunning("dave's agent is");
+    return d;
   };
   const readyAi = (): AiService => {
     if (deps.ai === null || deps.ai.status() !== 'ready') {
@@ -174,14 +182,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       .map((m) => m.memberId);
 
   handle('getState', async ({ params: { as } }) => {
-    const agent = deps.agents.get(as) ?? null;
+    const agent = deps.runtime()?.agents.get(as) ?? null;
     if (agent !== null) await agent.authorPubkey().catch(() => undefined);
-    const wallet = as === 'dave' ? undefined : deps.wallets.get(as);
-    const balances = wallet === undefined ? null : await wallet.balances().catch(() => null);
     return buildTripView({
       as,
       agent,
-      balances,
+      // Until MemberAgent.balances() exists (A, PR #19): the UI shows "balance not available".
+      balances: null,
       ai: as === 'dave' ? null : (deps.ai?.status() ?? null),
       fakes: deps.fakes,
       explorerBaseUrl: deps.explorerBaseUrl,
@@ -244,18 +251,25 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   handle('putPolicy', async ({ params: { as }, body }) => agentOf(as).updatePolicy(body.policy));
 
-  // dave's actions are CoordinatorAgent (A5b), not on main yet.
-  const waitingForA5b = async (): Promise<never> => {
-    throw refuse('NOT_IMPLEMENTED', "dave's actions arrive with A5b (CoordinatorAgent)");
-  };
-  handle('resolveDispute', waitingForA5b);
-  handle('coverAndExclude', waitingForA5b);
-  handle('putRates', waitingForA5b);
+  handle('resolveDispute', async ({ params: { expenseId, member }, body }) => {
+    const dave = daveAgent();
+    const line = await dave.resolveDispute(expenseId, member, body.outcome, body.note);
+    return lineViewOf(dave, line, deps.now());
+  });
+
+  handle('coverAndExclude', async ({ params: { expenseId, member } }) =>
+    daveAgent().coverAndExclude(expenseId, member),
+  );
+
+  handle('putRates', async ({ body }) => {
+    await daveAgent().setRate(body);
+    return daveAgent().trip()?.rate?.body ?? body;
+  });
 
   handle('getProof', async ({ params: { paymentHash } }) => {
     // Every agent holds the same verified log; dave's sees every line.
-    const agent = deps.agents.get('dave') ?? deps.agents.values().next().value;
-    if (agent === undefined) throw refuse('NODE_UNREACHABLE', 'no agent is running');
+    const agent = deps.runtime()?.dave;
+    if (agent === undefined) throw notRunning('the agents are');
     const proof = await buildProof(agent, paymentHash, {
       explorerBaseUrl: deps.explorerBaseUrl,
       onchainFound: deps.onchainFound ?? (async () => false),

@@ -7,28 +7,35 @@
 - [x] C1 Relay (branch `c/C1-relay`)
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [x] C2 RelayClient (branch `c/C2-relay-client`)
-- [ ] C3 Rotte dell'agente: **C3a fatto** (branch `c/C3-agent-routes`: tutte le rotte dei viaggiatori, `/state` completo anche per Dave, `/proof`); C3b (azioni di Dave e collegamento al runtime) dopo A5b
+- [x] C3 Rotte dell'agente (branch `c/C3-agent-routes`)
 - [ ] C4 UI viaggiatore
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
 
 ## Bloccato da
-- C3b: A5b non è ancora su `main` (`CoordinatorAgent` con `resolveDispute`, `coverAndExclude`, `setRate`; `startAgents`). Finché non arriva, le tre rotte di Dave rispondono 501 `NOT_IMPLEMENTED` e `index.ts` non passa gli agenti al server (viste vuote).
-
-## TODO
-- C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
+- niente
 
 ## Prossimo passo
-- **Per A (`apps/agent/src/index.ts`, non è mio), con A5b:** `buildAgentServer(config, { agents: runtime.agents, wallets, ai })`. `agents` = `runtime.agents` di `startAgents`; `wallets` = il wallet di ogni membro, per i saldi di `/state` (`MemberAgent` lo tiene privato: in alternativa A aggiunge `MemberAgent.balances()` e tolgo `wallets`); `ai` = l'`AiService` di A4 (senza, con `KITTY_FAKES=1` il server usa il `FakeAi`). Il server non costruisce più agenti né una sua rete finta.
-- C3b, appena A5b è su `main`: le rotte di Dave su `CoordinatorAgent` e la prova con `pnpm dev:fakes` passando dal relay vero.
-- Da pulire (non è mio, lo segnalo ad A): `apps/agent/src/agent.ts` (la classe `Agent` della sessione contratto) non lo usa più nessuno.
+- C4 UI viaggiatore.
+
+## Richieste ad A (Paolo)
+1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
+2. **`MemberAgent.balances()`** (PR #19 di Paolo): appena è su `main`, `/state` lo usa per `me.balance`. Fino ad allora `balance` è `null` e la UI mostra "balance not available".
+3. **`now?` in `startAgents`** (già nella #19): per ora il test di collegamento usa l'orologio vero, e i flussi temporizzati usano `demo()`.
+4. **Codice `AGENT_NOT_READY` in `ErrorCodeSchema`** (`packages/shared/src/errors.ts`), con un'azione. Paolo propone 503 `AGENT_NOT_READY` quando il runtime non c'è, ma il codice non esiste: per ora C3 usa `NODE_UNREACHABLE` con il messaggio "… not running yet" e l'azione "Start the agents (pnpm dev, or pnpm dev:fakes) and retry.". Quando esiste, è una riga in `routes/index.ts` (`notRunning`).
+- `apps/agent/src/agent.ts` cancellato in C3, con l'ok di Paolo: non lo importava più nessuno.
 
 ## Decisioni del PM
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C3, sab 17/10 15:00 (completa C3a, sotto)
+- `buildAgentServer(config, { runtime?, ai?, now?, onchainFound? })`: `runtime` è un getter dell'`AgentRuntime` di `startAgents`. Il server non crea agenti, wallet o reti finte; senza runtime le rotte degli agenti rispondono 503 con un'azione (vedi richiesta 4).
+- Rotte di Dave su `CoordinatorAgent` (A5b): `POST /dave/disputes/:expenseId/:member`, `POST /dave/defaults/:expenseId/:member/cover-and-exclude`, `PUT /dave/rates`. Rifiuti dei flussi con il loro codice (es. riga non contestata → 403 `NOT_ALLOWED` con il motivo).
+- `me.balance` è `null` finché non c'è `MemberAgent.balances()` (richiesta 2).
+- Come si prova: `pnpm test`, `apps/agent/src/routes/routes.test.ts` (11 test). In più rispetto a C3a: contestazione → Dave conferma dalla rotta → charlie non paga → insolvenza → "Copri ed escludi" dalla rotta (garanzia 3.50, canali chiusi, charlie escluso, prova `paidBy: guarantee` verificata); tasso del giorno; **collegamento con il runtime vero**: `startAgents` in modalità fake più `seedFakeTrip` su un relay in memoria, e `/state` di bob mostra il viaggio seminato con 3 membri attivi.
 ### C3a, sab 17/10 14:00
 - Funziona: `registerRoutes` (`apps/agent/src/routes/index.ts`) per le 11 rotte di SPEC §14.3, sopra `MemberAgent` (A5a).
   - Ogni rotta: parametri e body validati con `routes` di `api.ts` (400 `VALIDATION_ERROR`, oppure 404 `NOT_FOUND` per un membro sconosciuto), ruolo dal percorso (`dave` su una rotta da viaggiatore → 403 `NOT_ALLOWED`, con un'azione), risposta con `z.encode` dello schema della rotta.
