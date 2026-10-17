@@ -1,21 +1,21 @@
 import { DEFAULT_POLICY, formatCents } from '@kitty/shared';
 import { useState, type ReactNode } from 'react';
-import { EmptyState, LimitBadge, Logo } from '../components.js';
+import { Avatar, EmptyState, LimitBadge, Logo } from '../components.js';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { DemoSecondGroup, DEMO_SECOND_GROUP, GroupHistory } from './group-history.js';
 import type { ScreenProps } from './types.js';
 
-// Home (PM prototype and fintech reference): the Balance card of my trip channel, then each
-// group as a card with its limit badge and its history; parts waiting for me come first.
-// Tapping the badge opens that group's limit slider.
+// Home (docs/DESIGN.md §6): avatar and logo on top, the Balance card of my trip channel, then
+// each group as a card with its limit badge (tap: that group's slider) and its history; parts
+// waiting for me come first, with a pink border.
 
 export function HomeScreen(props: ScreenProps) {
-  const { trip, go } = props;
+  const { trip, as, go } = props;
   const s = trip.state;
   const limit = (s?.me?.policy ?? DEFAULT_POLICY).autoPayLimitCents;
   const header =
     s?.trip == null ? (
-      <h2 className="text-lg font-semibold">No trip yet</h2>
+      <h2 className="text-title">No trip yet</h2>
     ) : (
       <GroupHeader name={s.trip.name}>
         <LimitBadge
@@ -33,33 +33,31 @@ export function HomeScreen(props: ScreenProps) {
     );
 
   return (
-    <div className="space-y-4 px-4 pt-4">
-      <div className="flex items-center justify-between">
-        <p className="text-lg font-semibold">kit+ty</p>
+    <div className="space-y-3 px-4 pt-4">
+      <div className="flex items-center justify-between pb-1">
+        <Avatar m={as} />
         <Logo onClick={() => go('profile')} />
       </div>
       <BalanceCard {...props} />
       {SHOW_DEMO_SECOND_GROUP ? (
         <>
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <section className="card">
             {header}
-            <div className="mt-2">{history}</div>
+            <div className="mt-3">{history}</div>
           </section>
           <DemoSecondGroup
             header={
               <GroupHeader name={DEMO_SECOND_GROUP.name}>
-                <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold">
-                  Limit
-                </span>
+                <span className="badge bg-line text-ink-muted">Limit</span>
               </GroupHeader>
             }
           />
         </>
       ) : (
         // One group: no card, the history runs to the bottom, behind the floating bar.
-        <section>
+        <section className="pt-1">
           {header}
-          <div className="mt-2">{history}</div>
+          <div className="mt-3">{history}</div>
         </section>
       )}
     </div>
@@ -69,7 +67,7 @@ export function HomeScreen(props: ScreenProps) {
 function GroupHeader({ name, children }: { name: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <h2 className="truncate text-lg font-semibold">{name}</h2>
+      <h2 className="truncate text-title">{name}</h2>
       {children}
     </div>
   );
@@ -98,28 +96,28 @@ function BalanceCard({ trip, as }: ScreenProps) {
   const balance = trip.state?.me?.balance ?? null;
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">Balance</p>
+    <section className="card text-center">
+      <p className="text-small font-semibold text-ink-muted">Balance</p>
+      <p className="mt-1 font-slab text-big leading-tight font-bold tabular-nums">
+        {balance === null ? '—' : hidden ? '•••••' : formatCents(balance.tripOutboundCents)}
+        <span className="ml-2 font-sans text-body font-semibold text-ink-muted">DUSD</span>
+      </p>
+      <p className="text-small text-ink-muted">
+        {balance === null
+          ? 'Balance not available: your node is not responding.'
+          : 'Only you can spend it'}
+      </p>
+      <div className="mt-3 flex justify-center gap-2">
         <button
           type="button"
           onClick={toggle}
           aria-label={hidden ? 'Show balance' : 'Hide balance'}
           aria-pressed={hidden}
-          className="rounded-full bg-gray-100 px-3 py-1 text-sm"
+          className="badge bg-plum-soft"
         >
-          {hidden ? '🙈' : '👁️'}
+          {hidden ? '🙈 Show' : '👁️ Hide'}
         </button>
       </div>
-      <p className="mt-2 text-4xl font-semibold tracking-tight tabular-nums">
-        {balance === null ? '—' : hidden ? '•••••' : formatCents(balance.tripOutboundCents)}
-        <span className="ml-2 text-base font-medium text-gray-500">DUSD</span>
-      </p>
-      <p className="mt-1 text-xs text-gray-500">
-        {balance === null
-          ? 'Balance not available: your node is not responding.'
-          : 'In your trip channel. Only you can spend it.'}
-      </p>
     </section>
   );
 }

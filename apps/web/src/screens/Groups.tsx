@@ -1,15 +1,9 @@
 import { DEFAULT_POLICY, formatCents, type ApiClientError } from '@kitty/shared';
 import { useState } from 'react';
-import { EmptyState, ErrorBox, LimitBadge, ScreenHeader } from '../components.js';
+import { Avatar, Badge, EmptyState, ErrorBox, LimitBadge, ScreenHeader } from '../components.js';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { paymentMode } from '../mode.js';
-import {
-  limitFromStep,
-  memberStanding,
-  sliderSteps,
-  stepFromLimit,
-  type MemberStanding,
-} from '../slider.js';
+import { limitFromStep, memberStanding, sliderSteps, stepFromLimit } from '../slider.js';
 import { toClientError } from '../state.js';
 import { DEMO_SECOND_GROUP } from './group-history.js';
 import type { ScreenProps } from './types.js';
@@ -28,10 +22,10 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
         {s?.trip == null ? (
           <EmptyState>Your groups appear here.</EmptyState>
         ) : (
-          <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="card flex items-center gap-3">
             <button type="button" onClick={() => go('group')} className="min-w-0 flex-1 text-left">
-              <p className="truncate font-semibold">{s.trip.name}</p>
-              <p className="mt-1 text-sm text-gray-600 tabular-nums">
+              <p className="truncate font-slab text-amount font-bold">{s.trip.name}</p>
+              <p className="amount mt-1 text-ink-muted">
                 {balance === null ? '—' : formatCents(balance.tripOutboundCents)} DUSD
               </p>
             </button>
@@ -43,35 +37,21 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
           </div>
         )}
         {SHOW_DEMO_SECOND_GROUP && (
-          <div
-            aria-hidden
-            className="pointer-events-none rounded-2xl bg-white p-4 opacity-40 grayscale select-none"
-          >
-            <p className="flex items-center justify-between font-semibold">
+          <div aria-hidden className="card pointer-events-none text-ink-muted select-none">
+            <p className="flex items-center justify-between font-slab text-amount font-bold">
               {DEMO_SECOND_GROUP.name}
-              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs">Limit</span>
+              <span className="badge bg-line text-ink-muted">Limit</span>
             </p>
-            <p className="mt-2 h-3 w-20 rounded bg-gray-200" />
+            <p className="mt-2 h-3 w-20 rounded-full bg-line" />
           </div>
         )}
-        <button
-          type="button"
-          disabled
-          className="w-full rounded-full border border-gray-300 py-3 text-sm font-medium text-gray-400"
-        >
-          Join group… <span className="text-xs">(soon)</span>
+        <button type="button" disabled className="btn btn-secondary w-full py-3">
+          Join group… <span className="text-small">(soon)</span>
         </button>
       </div>
     </>
   );
 }
-
-const STANDING: Record<MemberStanding, { label: string; className: string }> = {
-  active: { label: 'active', className: 'bg-green-100 text-green-800' },
-  insolvent: { label: 'insolvent', className: 'bg-red-100 text-red-800' },
-  excluded: { label: 'excluded', className: 'bg-gray-200 text-gray-600' },
-  joining: { label: 'joining', className: 'bg-amber-100 text-amber-800' },
-};
 
 export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
   const s = trip.state;
@@ -87,28 +67,27 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
   return (
     <>
       <ScreenHeader title={s.trip.name} back="groups" go={go} />
-      <div className="space-y-4 px-4">
+      <div className="space-y-3 px-4">
         <LimitSlider trip={trip} as={as} go={go} />
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold">Members</h2>
-          <ul className="mt-2 divide-y divide-gray-100">
+        <section className="card">
+          <h2 className="text-amount">Members</h2>
+          <ul className="mt-2 divide-y-[1.5px] divide-line">
             {s.members.map((m) => {
-              const st = STANDING[memberStanding(m, s.expenses)];
+              const st = memberStanding(m, s.expenses);
               return (
-                <li key={m.memberId} className="flex items-center justify-between py-2 text-sm">
-                  <span className="capitalize">
+                <li key={m.memberId} className="flex items-center justify-between py-2">
+                  <span className="flex items-center gap-3 capitalize">
+                    <Avatar m={m.memberId} size={32} />
                     {m.displayName}
-                    {m.memberId === as && <span className="text-gray-400"> (you)</span>}
+                    {m.memberId === as && <span className="text-ink-muted"> (you)</span>}
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${st.className}`}>
-                    {st.label}
-                  </span>
+                  <Badge kind={st}>{st}</Badge>
                 </li>
               );
             })}
           </ul>
         </section>
-        <p className="px-1 text-xs text-gray-500">
+        <p className="px-1 text-small text-ink-muted">
           Disputes are open for {params.silentAssentSeconds} s after you see an expense; parts above
           your limit wait for your approval up to {params.paymentDeadlineSeconds} s.
         </p>
@@ -145,36 +124,52 @@ function LimitSlider({ trip }: ScreenProps) {
       });
   };
 
+  const max = sliderSteps(d);
+  const filled = max === 0 ? 0 : (step / max) * 100;
   return (
-    <section className="rounded-2xl bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold">Payments by your agent</h2>
-      <p className="mt-2 text-lg font-semibold">{mode.long}</p>
-      <input
-        type="range"
-        min={0}
-        max={sliderSteps(d)}
-        step={1}
-        value={step}
-        disabled={excluded || saving === 'saving'}
-        onChange={(e) => {
-          setStep(e.target.valueAsNumber);
-          setSaving('idle');
-        }}
-        onPointerUp={save}
-        onKeyUp={save}
-        aria-label="Limit"
-        aria-valuetext={mode.long}
-        className="mt-3 w-full accent-pink-600"
-      />
-      <div className="flex justify-between text-xs text-gray-500">
+    <section className="card">
+      <h2 className="text-amount">Payments by your agent</h2>
+      <p className="mt-2 flex h-7 items-center">
+        {mode.kind === 'auto' ? (
+          <Badge kind="auto">Auto mode</Badge>
+        ) : (
+          <span className="font-semibold">{mode.long}</span>
+        )}
+      </p>
+      <div className="relative mt-3 h-7" data-noswipe>
+        <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-line" />
+        <div
+          className="absolute top-1/2 left-0 h-2 -translate-y-1/2 rounded-full bg-teal"
+          style={{ width: `${filled}%` }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={max}
+          step={1}
+          value={step}
+          disabled={excluded || saving === 'saving'}
+          onChange={(e) => {
+            setStep(e.target.valueAsNumber);
+            setSaving('idle');
+          }}
+          onPointerUp={save}
+          onKeyUp={save}
+          aria-label="Limit"
+          aria-valuetext={mode.long}
+          className="range-input relative"
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-small text-ink-muted">
         <span>Always ask me</span>
         <span>Automatic payment</span>
       </div>
-      <p className="mt-3 text-sm text-gray-600">
-        and at most <span className="font-medium">{formatCents(policy.dailyCapCents)} DUSD</span> a
+      <p className="mt-3 text-ink-muted">
+        and at most{' '}
+        <span className="font-semibold text-ink">{formatCents(policy.dailyCapCents)} DUSD</span> a
         day
       </p>
-      <p className="mt-2 h-4 text-xs text-gray-500">
+      <p className="mt-2 h-4 text-small text-ink-muted">
         {excluded
           ? 'You were excluded from this trip.'
           : saving === 'saving'
