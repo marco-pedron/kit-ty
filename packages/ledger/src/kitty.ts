@@ -414,22 +414,15 @@ export { autoPaidLast24h, decideAutoPay } from './autopay.js';
 
 export interface LiquidityNeed {
   memberPubkey: Pubkey;
-  /** L(m) + sent(m) − received(m); guarantee payments count as received. */
+  /** L(m) + extra(m) + sent(m) − received(m); guarantee payments count as received. */
   inboundCents: bigint;
-  /** Σ open lines (not paid, not voided) in favour of m. */
+  /** Σ open lines (not paid, guaranteed or voided) in favour of m. */
   toReceiveCents: bigint;
   /** inbound − toReceive. */
   marginCents: bigint;
-  /** A new liquidity channel to open now, or 0n: toReceive − margin + threshold if margin < threshold. */
+  /** A new liquidity channel to open now, or 0n: threshold − margin if margin < threshold. */
   openCents: bigint;
 }
 
-/**
- * dave's just-in-time liquidity (task A7, SPEC §10.5), per active member. Excluded members
- * have no channels and need none.
- */
-export function liquidityPlan(trip: TripState, thresholdCents: bigint): LiquidityNeed[] {
-  void trip;
-  void thresholdCents;
-  throw new LedgerError('NOT_IMPLEMENTED', 'liquidityPlan: task A7');
-}
+/** Task A7, SPEC §10.5: in liquidity.ts. */
+export { liquidityPlan } from './liquidity.js';

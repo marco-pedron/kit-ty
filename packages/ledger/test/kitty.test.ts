@@ -43,15 +43,8 @@ import {
   tripLog,
 } from './helpers.js';
 
-// The checklist of stream A (PLAN.md §4, tasks A1-A3, A7). Turn each it.todo into a test,
-// in this order. Reference numbers: the dinner of SPEC §15-16 (3.09 / 3.09 / 3.50).
-
-describe('stubs', () => {
-  it('throw NOT_IMPLEMENTED until their task lands', () => {
-    const calls = [() => liquidityPlan({} as never, 0n)];
-    for (const call of calls) expect(call).toThrow(LedgerError);
-  });
-});
+// The rules of stream A (PLAN.md §4, tasks A1-A3, A7). Reference numbers: the dinner of
+// SPEC §15-16 (3.09 / 3.09 / 3.50).
 
 const bodyOf = (e: StoredEvent) => e.signed.inner.body as EventBody<'EXPENSE_SUBMITTED'>;
 
@@ -1568,9 +1561,180 @@ describe('A3 decideAutoPay (SPEC §8)', () => {
 });
 
 describe('A7 liquidityPlan (SPEC §10.5)', () => {
-  it.todo('inbound = L + sent − received');
-  it.todo('open lines in favour of m reduce the margin');
-  it.todo('guarantee payments count as received');
-  it.todo('opens toReceive − margin + threshold when margin < threshold');
-  it.todo('excluded members need no liquidity');
+  const need = (trip: TripState | null, who: string) => {
+    const n = trip && liquidityPlan(trip, 500n).find((x) => x.memberPubkey === who);
+    if (!n) throw new Error('no entry');
+    return n;
+  };
+  const lnPay = (log: Log, expense: StoredEvent, i: number, s: number) => {
+    const l = bodyOf(expense).lines[i];
+    if (!l) throw new Error('no line');
+    log.push(
+      'PAYMENT_MADE',
+      l.debtorPubkey,
+      {
+        expenseEventHash: expense.hash,
+        creditorPubkey: expense.signed.inner.author,
+        cents: l.cents,
+        rail: 'ln',
+        ...log.proof(l.bolt11),
+      },
+      s,
+    );
+  };
+  const dinnerLog = () => {
+    const log = tripLog();
+    const expense = submit(log, dinnerSpec, 10);
+    return { log, expense };
+  };
+
+  it('inbound = L + sent − received', () => {
+    const { log, expense } = dinnerLog();
+    lnPay(log, expense, 0, 20); // bob → alice 3.09
+    const trip = deriveTrip(log.events, at(21));
+    // bob paid: dave's side of bob's trip channel grew, bob can receive more.
+    expect(need(trip, KEY.bob)).toMatchObject({ inboundCents: 3309n, toReceiveCents: 0n });
+    expect(need(trip, KEY.alice)).toMatchObject({ inboundCents: 2691n, toReceiveCents: 350n });
+    expect(need(trip, KEY.charlie).inboundCents).toBe(3000n);
+  });
+
+  it('open lines in favour of m reduce the margin', () => {
+    const { log, expense } = dinnerLog();
+    log.push('LINE_SEEN', KEY.charlie, { expenseEventHash: expense.hash }, 11);
+    log.push(
+      'LINE_DECIDED',
+      KEY.charlie,
+      { expenseEventHash: expense.hash, decision: 'contest', cents: 350n, reason: 'water only' },
+      12,
+    );
+    // The demo dinner: alice can still receive both lines, the contested one included.
+    expect(need(deriveTrip(log.events, at(13)), KEY.alice)).toEqual({
+      memberPubkey: KEY.alice,
+      inboundCents: 3000n,
+      toReceiveCents: 659n,
+      marginCents: 2341n,
+      openCents: 0n,
+    });
+    // A voided line no longer needs room.
+    log.push(
+      'DISPUTE_RESOLVED',
+      KEY.dave,
+      {
+        expenseEventHash: expense.hash,
+        debtorPubkey: KEY.charlie,
+        outcome: 'line_voided',
+        note: '',
+      },
+      14,
+    );
+    expect(need(deriveTrip(log.events, at(15)), KEY.alice).toReceiveCents).toBe(309n);
+  });
+
+  it('guarantee payments count as received', () => {
+    const { log, expense } = dinnerLog();
+    const l = bodyOf(expense).lines[1];
+    if (!l) throw new Error('no line');
+    log.push(
+      'MEMBER_EXCLUDED',
+      KEY.dave,
+      { memberPubkey: KEY.charlie, reason: 'x', closingTxids: [] },
+      20,
+    );
+    log.push(
+      'GUARANTEE_PAID',
+      KEY.dave,
+      {
+        expenseEventHash: expense.hash,
+        debtorPubkey: KEY.charlie,
+        creditorPubkey: KEY.alice,
+        cents: l.cents,
+        ...log.proof(l.bolt11),
+      },
+      21,
+    );
+    expect(need(deriveTrip(log.events, at(22)), KEY.alice)).toMatchObject({
+      inboundCents: 2650n,
+      toReceiveCents: 309n,
+    });
+  });
+
+  it('on-chain payments leave the channels alone', () => {
+    const { log, expense } = dinnerLog();
+    log.push(
+      'PAYMENT_MADE',
+      KEY.bob,
+      {
+        expenseEventHash: expense.hash,
+        creditorPubkey: KEY.alice,
+        cents: 309n,
+        rail: 'onchain',
+        txid: hex('5'),
+      },
+      20,
+    );
+    const trip = deriveTrip(log.events, at(21));
+    expect(need(trip, KEY.alice)).toMatchObject({ inboundCents: 3000n, toReceiveCents: 350n });
+    expect(need(trip, KEY.bob).inboundCents).toBe(3000n);
+  });
+
+  it('opens threshold − margin when margin < threshold', () => {
+    const log = tripLog();
+    // alice pays 90.00 shared with bob: she must be able to receive 45.00, L is 30.00.
+    submit(
+      log,
+      {
+        payer: KEY.alice,
+        receipt: {
+          merchant: 'Boat',
+          date: '2026-10-17',
+          currency: 'USD',
+          items: [{ label: 'Boat', quantity: 1, unitPrice: 9000n, total: 9000n }],
+          total: 9000n,
+          warnings: [],
+        },
+        payerItemIndexes: [0],
+        debtors: [{ id: KEY.bob, itemIndexes: [0] }],
+        expenseId: 'boat',
+        rate: '1',
+      },
+      10,
+    );
+    const trip = deriveTrip(log.events, at(11));
+    if (!trip) throw new Error('no trip');
+    expect(need(trip, KEY.alice)).toEqual({
+      memberPubkey: KEY.alice,
+      inboundCents: 3000n,
+      toReceiveCents: 4500n,
+      marginCents: -1500n,
+      openCents: 2000n,
+    });
+    // After dave opened those 20.00 the margin is exactly the threshold: nothing more to open.
+    const after = liquidityPlan(trip, 500n, new Map([[KEY.alice, 2000n]]));
+    expect(after.find((n) => n.memberPubkey === KEY.alice)).toMatchObject({
+      inboundCents: 5000n,
+      marginCents: 500n,
+      openCents: 0n,
+    });
+    // Margin above the threshold: nothing to open.
+    expect(need(trip, KEY.bob).openCents).toBe(0n);
+  });
+
+  it('excluded members need no liquidity, nor members without channels', () => {
+    const log = tripLog();
+    log.push(
+      'MEMBER_EXCLUDED',
+      KEY.dave,
+      { memberPubkey: KEY.charlie, reason: 'x', closingTxids: [] },
+      5,
+    );
+    const trip = deriveTrip(log.events, at(6));
+    if (!trip) throw new Error('no trip');
+    expect(liquidityPlan(trip, 500n).map((n) => n.memberPubkey)).toEqual([KEY.alice, KEY.bob]);
+
+    const fresh = new Log();
+    fresh.events.push(...tripLog().events.slice(0, 4)); // trip, rate, alice joined and admitted
+    const early = deriveTrip(fresh.events, at(1));
+    if (!early) throw new Error('no trip');
+    expect(liquidityPlan(early, 500n)).toEqual([]);
+  });
 });
