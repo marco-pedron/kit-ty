@@ -144,6 +144,8 @@ export class FakeChain {
   mined = 0;
   /** Spike Q7: close confirmed at h164, sweep confirmed at h170 (broadcast at h169). */
   sweepAfter = 5;
+  /** The nodes broadcast a sweep this long after it becomes possible (they sync late). */
+  broadcastDelayMs = 0;
   private confirmedAt = new Map<string, number>();
   private closes = 0;
 

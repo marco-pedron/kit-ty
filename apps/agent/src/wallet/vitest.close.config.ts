@@ -10,5 +10,7 @@ export default defineConfig({
     testTimeout: 180_000,
     hookTimeout: 30_000,
     fileParallelism: false,
+    reporters: ['verbose'],
+    silent: false,
   },
 });

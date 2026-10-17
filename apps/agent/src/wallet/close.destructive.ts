@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { WalletError } from './errors.js';
 import { CLOSE_BLOCK_BUDGET, RlnWallet } from './rln-wallet.js';
@@ -12,6 +14,16 @@ const URLS = {
   bob: process.env.RLN_BOB_URL ?? 'http://127.0.0.1:3002',
   charlie: process.env.RLN_CHARLIE_URL ?? 'http://127.0.0.1:3003',
   dave: process.env.RLN_DAVE_URL ?? 'http://127.0.0.1:3004',
+};
+const SUMMARY = fileURLToPath(new URL('../../../../infra/.out/e2e-close.json', import.meta.url));
+const summary: Record<string, unknown> = {};
+const note = (k: string, v: unknown) => {
+  summary[k] = v;
+  mkdirSync(fileURLToPath(new URL('.', `file://${SUMMARY}`)), { recursive: true });
+  writeFileSync(
+    SUMMARY,
+    JSON.stringify(summary, (_, x) => (typeof x === 'bigint' ? `${x}` : x), 2),
+  );
 };
 const ESPLORA = (process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010').replace(/\/+$/u, '');
 
@@ -72,11 +84,11 @@ describe('B7 closeChannelsWith on the regtest stack (charlie, irreversible)', ()
   it('dave closes both channels with charlie; the DUSD come back on-chain', async () => {
     const charlieBefore = await charlie.balances();
     const daveBefore = await dave.balances();
-    console.log('before', { charlie: charlieBefore, dave: daveBefore, charlieBack, daveBack });
+    note('before', { charlie: charlieBefore, dave: daveBefore, charlieBack, daveBack });
 
     const t0 = Date.now();
     const r = await dave.closeChannelsWith(charlieNode);
-    console.log('close', { ...r, ms: Date.now() - t0 });
+    note('close', { ...r, ms: Date.now() - t0 });
 
     expect(r.txids).toHaveLength(2);
     expect(r.swept).toBe(true);
@@ -105,7 +117,7 @@ describe('B7 closeChannelsWith on the regtest stack (charlie, irreversible)', ()
       const b = await dave.balances();
       return b.onchainCents === daveBefore.onchainCents + daveBack ? b : undefined;
     });
-    console.log('after', { charlie: after, dave: daveAfter });
+    note('after', { charlie: after, dave: daveAfter, at: new Date().toISOString() });
   });
 
   it('a second close finds nothing to close', async () => {

@@ -383,7 +383,7 @@ describe('balances refresh transfers (B7: swept closes show on-chain)', () => {
 });
 
 describe('closeChannelsWith (B7)', () => {
-  function daveSetup(chain = new FakeChain()) {
+  function daveSetup(chain = new FakeChain(), over: { sweepWaitMs?: number } = {}) {
     const rln = new FakeRln()
       .on('/nodeinfo', () => ({ json: { pubkey: DAVE_NODE, rgb_htlc_min_msat: 3_000_000 } }))
       .on('/listchannels', () => ({
@@ -407,6 +407,8 @@ describe('closeChannelsWith (B7)', () => {
         miner: chain.miner,
         blockWaitMs: 0,
         mempoolTimeoutMs: 50,
+        sweepWaitMs: 5,
+        ...over,
       },
     });
     return { rln, wallet, chain };
@@ -483,6 +485,14 @@ describe('closeChannelsWith (B7)', () => {
     expect((err as WalletError).message).toMatch(/no closing tx after 50 ms for trip, liq/);
     expect((err as WalletError).action).toMatch(/Not forcing/);
     expect(chain.mined).toBe(0);
+  });
+
+  it('waits for the sweeps instead of mining past them', async () => {
+    const chain = new FakeChain();
+    chain.broadcastDelayMs = 30;
+    const { wallet } = daveSetup(chain, { sweepWaitMs: 5_000 });
+    const r = await wallet.closeChannelsWith(CHARLIE_NODE);
+    expect(r).toMatchObject({ swept: true, blocksMined: 7 });
   });
 
   it('stops at the 12-block budget and reports swept: false', async () => {

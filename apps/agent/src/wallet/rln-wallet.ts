@@ -41,10 +41,18 @@ export interface CoordinatorChain {
   blockWaitMs?: number;
   /** How long a cooperative close may take to reach the mempool (default 60 s). */
   mempoolTimeoutMs?: number;
+  /** How long to wait for the nodes to broadcast their sweeps before mining again (45 s). */
+  sweepWaitMs?: number;
 }
 
 /** Blocks closeChannelsWith may mine in all: 1 to confirm + ~6 for the sweep (SPEC §6.7). */
 export const CLOSE_BLOCK_BUDGET = 12;
+
+/**
+ * Blocks after the confirming one before the nodes can sweep (LDK waits 6 confirmations).
+ * Spike Q7: close confirmed at h164, sweep confirmed at h170.
+ */
+const SWEEP_DEPTH = 5;
 
 export interface CloseResult {
   txids: string[];
@@ -555,19 +563,39 @@ export class RlnWallet implements Wallet {
       await mineOne();
     }
 
-    // Swept = every spendable output of the closing txs is spent by a confirmed tx.
-    const swept = async () => {
+    // Mine to the sweep depth, then let the nodes see it and broadcast: mining faster than
+    // they sync wastes blocks (first run on regtest: sweep 10 blocks after the close).
+    const confirmedAt = blocksMined;
+    while (blocksMined - confirmedAt < SWEEP_DEPTH && blocksMined < CLOSE_BLOCK_BUDGET)
+      await mineOne();
+
+    // Each spendable output of the closing txs: spent by a confirmed tx, in the mempool, or not.
+    const sweepState = async (): Promise<'confirmed' | 'mempool' | 'unspent'> => {
+      let state: 'confirmed' | 'mempool' = 'confirmed';
       for (const t of txids) {
         const tx = await chain.esplora.tx(t);
         const spends = await chain.esplora.outspends(t);
-        for (const [i, o] of (tx?.vout ?? []).entries())
-          if (o.scriptpubkey_type !== 'op_return' && !spends[i]?.status?.confirmed) return false;
+        for (const [i, o] of (tx?.vout ?? []).entries()) {
+          if (o.scriptpubkey_type === 'op_return') continue;
+          if (!spends[i]?.spent) return 'unspent';
+          if (!spends[i]?.status?.confirmed) state = 'mempool';
+        }
       }
-      return true;
+      return state;
     };
-    while (!(await swept())) {
+    const sweepWaitMs = chain.sweepWaitMs ?? 45_000;
+    let waitingSince = this.now();
+    for (;;) {
+      const state = await sweepState();
+      if (state === 'confirmed') break;
+      if (state === 'unspent' && this.now() - waitingSince < sweepWaitMs) {
+        await sleep(this.pollIntervalMs);
+        continue;
+      }
+      // sweeps in the mempool (or not broadcast in time): one more block, if the budget allows
       if (blocksMined >= CLOSE_BLOCK_BUDGET) return { swept: false, blocksMined };
       await mineOne();
+      waitingSince = this.now();
     }
     return { swept: true, blocksMined };
   }
