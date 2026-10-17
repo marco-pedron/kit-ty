@@ -38,6 +38,7 @@ export {
 } from './money.js';
 export { divRoundHalfUp, parseDecimal, type Rational } from './rational.js';
 export {
+  autoPaidLast24h,
   decideAutoPay,
   deriveTrip,
   lineKey,

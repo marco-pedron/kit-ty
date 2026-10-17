@@ -6,13 +6,16 @@ import {
   sha256Hex,
   signingMessage,
   storedEventHash,
+  type DecodedInvoice,
   type EventBody,
+  type Policy,
   type Receipt,
   type StoredEvent,
 } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
 import {
   LedgerError,
+  autoPaidLast24h,
   decideAutoPay,
   deriveTrip,
   expenseShares,
@@ -45,10 +48,7 @@ import {
 
 describe('stubs', () => {
   it('throw NOT_IMPLEMENTED until their task lands', () => {
-    const calls = [
-      () => decideAutoPay({} as never, {} as never, {} as never, new Date(0)),
-      () => liquidityPlan({} as never, 0n),
-    ];
+    const calls = [() => liquidityPlan({} as never, 0n)];
     for (const call of calls) expect(call).toThrow(LedgerError);
   });
 });
@@ -1297,14 +1297,274 @@ describe('A2 validateEvent (SPEC §9.3)', () => {
 });
 
 describe('A3 decideAutoPay (SPEC §8)', () => {
-  it.todo('pays a due line under the limit, with the reason sentence');
-  it.todo('does not pay above autoPayLimitCents without explicit approval');
-  it.todo('pays an explicitly approved line above the limit');
-  it.todo('respects dailyCapCents over a rolling 24 h');
-  it.todo('never pays a contested line');
-  it.todo('upheld dispute: pays only with payUpheldDisputes');
-  it.todo('never pays when the invoice payee is not the creditor node, or amount/asset differ');
-  it.todo('never pays on a closed trip');
+  const usd = (cents: bigint): Receipt => ({
+    merchant: 'Shop',
+    date: '2026-10-17',
+    currency: 'USD',
+    items: [{ label: 'Thing', quantity: 1, unitPrice: cents, total: cents }],
+    total: cents,
+    warnings: [],
+  });
+  /** alice pays `total` USD cents shared with bob only: bob owes total / 2. */
+  const shared = (log: Log, total: bigint, expenseId: string, s: number) =>
+    submit(
+      log,
+      {
+        payer: KEY.alice,
+        receipt: usd(total),
+        payerItemIndexes: [0],
+        debtors: [{ id: KEY.bob, itemIndexes: [0] }],
+        expenseId,
+        rate: '1',
+      },
+      s,
+    );
+  const bobLine = (log: Log, expense: StoredEvent, s: number) => {
+    const trip = deriveTrip(log.events, at(s));
+    const line = trip?.lines.get(lineKey(expense.hash, KEY.bob));
+    if (!trip || !line) throw new Error('no line');
+    return { trip, line, invoice: log.invoices.get(line.bolt11) ?? null };
+  };
+  const decide = (
+    log: Log,
+    expense: StoredEvent,
+    s: number,
+    policy: Policy = DEFAULT_POLICY,
+    invoice?: DecodedInvoice | null,
+  ) => {
+    const { trip, line, invoice: own } = bobLine(log, expense, s);
+    return decideAutoPay(policy, line, trip, at(s), invoice === undefined ? own : invoice);
+  };
+  const payBob = (log: Log, expense: StoredEvent, s: number) => {
+    const l = bodyOf(expense).lines[0];
+    if (!l) throw new Error('no line');
+    log.push(
+      'PAYMENT_MADE',
+      KEY.bob,
+      {
+        expenseEventHash: expense.hash,
+        creditorPubkey: KEY.alice,
+        cents: l.cents,
+        rail: 'ln',
+        ...log.proof(l.bolt11),
+      },
+      s,
+    );
+  };
+  const seenBy = (log: Log, expense: StoredEvent, s: number) =>
+    log.push('LINE_SEEN', KEY.bob, { expenseEventHash: expense.hash }, s);
+  /** The demo dinner, seen by bob at t = 11: silent assent ends at 31. */
+  const dinnerForBob = () => {
+    const log = tripLog();
+    const expense = submit(log, dinnerSpec, 10);
+    seenBy(log, expense, 11);
+    return { log, expense };
+  };
+
+  it('pays a due line under the limit, with the reason sentence', () => {
+    const { log, expense } = dinnerForBob();
+    expect(decide(log, expense, 31)).toEqual({
+      pay: true,
+      reason:
+        'Paying 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00.',
+    });
+    payBob(log, expense, 32);
+    expect(decide(log, expense, 33)).toEqual({
+      pay: false,
+      reason: 'Paid 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00.',
+    });
+  });
+
+  it('explains every state it does not pay', () => {
+    const { log, expense } = dinnerForBob();
+    expect(decide(log, expense, 23).reason).toBe(
+      'Will pay 3.09 to alice in 8 s unless you object.',
+    );
+    expect(decide(log, expense, 41).reason).toMatch(/^Overdue: .*Pay 3.09 to alice yourself/);
+    const fresh = tripLog();
+    const unseen = submit(fresh, dinnerSpec, 10);
+    expect(decide(fresh, unseen, 11)).toEqual({
+      pay: false,
+      reason: 'Not seen by your agent yet.',
+    });
+    fresh.push('EXPENSE_VOIDED', KEY.alice, { expenseEventHash: unseen.hash }, 12);
+    expect(decide(fresh, unseen, 13).reason).toMatch(/^Voided/);
+  });
+
+  it('does not pay above autoPayLimitCents without explicit approval', () => {
+    const log = tripLog();
+    const big = shared(log, 9000n, 'boat', 10); // bob owes 45.00
+    seenBy(log, big, 11);
+    expect(decide(log, big, 12)).toEqual({
+      pay: false,
+      reason: 'Needs your approval: 45.00 is above your automatic limit of 20.00.',
+    });
+    expect(decide(log, big, 31)).toEqual({
+      pay: false,
+      reason: 'Not paid: 45.00 is above your automatic limit of 20.00. Approve it yourself.',
+    });
+    // The limit is checked again when paying: lowered after silent assent, no payment.
+    const { log: l2, expense } = dinnerForBob();
+    const lowered = { ...DEFAULT_POLICY, autoPayLimitCents: 100n };
+    expect(decide(l2, expense, 31, lowered)).toEqual({
+      pay: false,
+      reason: 'Not paid: 3.09 is above your automatic limit of 1.00. Approve it yourself.',
+    });
+  });
+
+  it('pays an explicitly approved line above the limit', () => {
+    const log = tripLog();
+    const big = shared(log, 9000n, 'boat', 10);
+    seenBy(log, big, 11);
+    log.push(
+      'LINE_DECIDED',
+      KEY.bob,
+      { expenseEventHash: big.hash, decision: 'approve', cents: 4500n },
+      12,
+    );
+    expect(decide(log, big, 13)).toEqual({
+      pay: true,
+      reason: 'Paying 45.00 to alice: you approved it.',
+    });
+    payBob(log, big, 14);
+    expect(decide(log, big, 15).reason).toBe('Paid 45.00 to alice: you approved it.');
+  });
+
+  it('respects dailyCapCents over a rolling 24 h', () => {
+    const log = tripLog();
+    // Two automatic payments of 20.00 at t = 31 and t = 61.
+    for (const [id, s] of [
+      ['e1', 10],
+      ['e2', 40],
+    ] as const) {
+      const e = shared(log, 4000n, id, s);
+      seenBy(log, e, s + 1);
+      payBob(log, e, s + 21);
+    }
+    const third = shared(log, 4000n, 'e3', 70);
+    seenBy(log, third, 71);
+    // 40.00 + 20.00 = 60.00: exactly the cap, paid.
+    expect(decide(log, third, 91).pay).toBe(true);
+    expect(decide(log, third, 91, { ...DEFAULT_POLICY, dailyCapCents: 5999n })).toEqual({
+      pay: false,
+      reason:
+        'Not paid: 20.00 more would exceed your daily cap of 59.99 (40.00 paid automatically in the last 24 h). Approve it yourself.',
+    });
+    // Rolling window: a payment exactly 24 h old no longer counts.
+    const { trip } = bobLine(log, third, 91);
+    expect(autoPaidLast24h(trip, KEY.bob, at(31 + 86_399))).toBe(4000n);
+    expect(autoPaidLast24h(trip, KEY.bob, at(31 + 86_400))).toBe(2000n);
+    expect(autoPaidLast24h(trip, KEY.bob, at(61 + 86_400))).toBe(0n);
+    // An explicit approval is not an automatic payment: no cap.
+    log.push(
+      'LINE_DECIDED',
+      KEY.bob,
+      { expenseEventHash: third.hash, decision: 'approve', cents: 2000n },
+      92,
+    );
+    expect(decide(log, third, 93, { ...DEFAULT_POLICY, dailyCapCents: 0n }).pay).toBe(true);
+  });
+
+  it('never pays a contested line', () => {
+    const { log, expense } = dinnerForBob();
+    log.push(
+      'LINE_DECIDED',
+      KEY.bob,
+      { expenseEventHash: expense.hash, decision: 'contest', cents: 309n, reason: 'no pho' },
+      12,
+    );
+    expect(decide(log, expense, 100)).toEqual({
+      pay: false,
+      reason: 'You contested this line: waiting for dave to decide.',
+    });
+  });
+
+  it('upheld dispute: pays only with payUpheldDisputes', () => {
+    const { log, expense } = dinnerForBob();
+    const ref = { expenseEventHash: expense.hash };
+    log.push(
+      'LINE_DECIDED',
+      KEY.bob,
+      { ...ref, decision: 'contest', cents: 309n, reason: 'x' },
+      12,
+    );
+    log.push(
+      'DISPUTE_RESOLVED',
+      KEY.dave,
+      { ...ref, debtorPubkey: KEY.bob, outcome: 'upheld', note: 'photo checked' },
+      20,
+    );
+    expect(decide(log, expense, 21)).toEqual({
+      pay: false,
+      reason:
+        "Dave upheld alice's expense: approve 3.09 yourself (your agent does not pay upheld disputes).",
+    });
+    expect(decide(log, expense, 21, { ...DEFAULT_POLICY, payUpheldDisputes: true })).toEqual({
+      pay: true,
+      reason:
+        'Paying 3.09 to alice automatically: dave upheld the expense and you let your agent pay upheld disputes.',
+    });
+    log.push('LINE_DECIDED', KEY.bob, { ...ref, decision: 'approve', cents: 309n }, 22);
+    expect(decide(log, expense, 23).pay).toBe(true);
+  });
+
+  it('never pays when the invoice payee is not the creditor node, or amount/asset differ', () => {
+    const { log, expense } = dinnerForBob();
+    const { invoice } = bobLine(log, expense, 31);
+    if (!invoice) throw new Error('no invoice');
+    const with_ = (patch: Partial<DecodedInvoice>) =>
+      decide(log, expense, 31, DEFAULT_POLICY, { ...invoice, ...patch });
+    expect(with_({ payeePubkey: NODE(hex('9')) })).toEqual({
+      pay: false,
+      reason: "Not paid: the invoice is not payable to alice's node.",
+    });
+    expect(with_({ cents: 310n }).reason).toBe('Not paid: the invoice is not for 3.09 DUSD.');
+    expect(with_({ assetId: 'rgb:other' }).reason).toBe(
+      'Not paid: the invoice is not for 3.09 DUSD.',
+    );
+    expect(with_({ assetId: null }).pay).toBe(false);
+    expect(with_({ bolt11: 'lnbcrt1other' }).reason).toMatch(/not the one signed in the log/);
+    expect(with_({ expiresAt: at(31).toISOString() })).toEqual({
+      pay: false,
+      reason: 'The invoice from alice has expired: waiting for a new one.',
+    });
+    expect(decide(log, expense, 31, DEFAULT_POLICY, null).reason).toMatch(
+      /could not read the invoice/,
+    );
+    expect(with_({}).pay).toBe(true);
+  });
+
+  it('never pays a creditor who has left, nor when the debtor was excluded', () => {
+    const { log, expense } = dinnerForBob();
+    log.push(
+      'MEMBER_EXCLUDED',
+      KEY.dave,
+      { memberPubkey: KEY.alice, reason: 'x', closingTxids: [] },
+      31,
+    );
+    expect(decide(log, expense, 32)).toEqual({
+      pay: false,
+      reason: 'alice has left the trip: pay 3.09 on-chain.',
+    });
+    const other = dinnerForBob();
+    other.log.push(
+      'MEMBER_EXCLUDED',
+      KEY.dave,
+      { memberPubkey: KEY.bob, reason: 'x', closingTxids: [] },
+      12,
+    );
+    expect(decide(other.log, other.expense, 32).pay).toBe(false);
+  });
+
+  it('never pays on a closed trip', () => {
+    const { log, expense } = dinnerForBob();
+    // validateEvent refuses TRIP_CLOSED with open lines; decideAutoPay does not rely on it.
+    log.push('TRIP_CLOSED', KEY.dave, { summary: 'early' }, 30);
+    expect(decide(log, expense, 31)).toEqual({
+      pay: false,
+      reason: 'The trip is closed: your agent pays nothing any more.',
+    });
+  });
 });
 
 describe('A7 liquidityPlan (SPEC §10.5)', () => {
