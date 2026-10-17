@@ -31,7 +31,7 @@ Ogni sessione lavora per uno stream (A, B o C, vedi `docs/PLAN.md` §2) e scrive
 ## Come lavori
 - All'inizio della sessione: di' su quale stream e quale task (ID di `PLAN.md`) lavori e qual è il criterio "fatto quando".
 - **Prima di scrivere codice, proponi un piano** (file da creare o modificare, documenti letti, rischi) e **aspetta l'approvazione**.
-- Branch `<stream>/<ID>-<nome-breve>` (es. `a/A1-derive-trip`). Mai lavorare su `main`, mai `push --force`, mai riscrivere la storia. Un umano apre e mergia la PR.
+- Branch `<stream>/<ID>-<nome-breve>` (es. `a/A1-derive-trip`). Mai lavorare su `main`, mai `push --force`, mai riscrivere la storia. A fine task Claude Code: git fetch && git merge origin/main, poi typecheck, lint e test verdi, push del branch, PR con titolo [ID] ..., gh pr checks --watch, e se la CI è verde gh pr merge --merge --delete-branch. Se la CI è rossa o ci sono conflitti si ferma e avvisa. Mai push --force, mai push su main. Se un merge viene bloccato dai permessi, lo chiede all'umano.
 - Commit piccoli in Conventional Commits (`feat(ledger): derive line states`), dopo ogni passo che funziona.
 - Dopo ogni passo: `pnpm typecheck && pnpm lint && pnpm test` e incolla l'esito.
 - Se lo stesso errore si ripete 3 volte, fermati e riassumi: cosa hai provato, l'errore esatto, la tua ipotesi.
