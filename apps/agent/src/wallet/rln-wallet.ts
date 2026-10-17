@@ -1,4 +1,6 @@
 import { createHash, hkdfSync } from 'node:crypto';
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createRlnClient, RlnError, toRlnError, type RlnClient } from '@kitty/rln-client';
 import {
   ed25519PublicKeyHex,
@@ -32,7 +34,21 @@ export interface RlnWalletOptions {
   refreshEveryMs?: number;
   /** dave only (loadMemberWalletOptions sets it for dave): what closing channels needs. */
   coordinator?: CoordinatorChain;
+  /** B6: what lock → backup → unlock needs; without it backupNow is NOT_ALLOWED. */
+  backup?: BackupSettings;
 }
+
+export interface BackupSettings {
+  /** The node password: encrypts the backup and unlocks the node again. */
+  password: string;
+  /** The /unlock body of this node (the seed's unlockBody). */
+  unlockBody: Record<string, unknown>;
+  /** The host folder bind-mounted at /backups in this node's container. */
+  hostDir: string;
+}
+
+/** Where the node writes its backups, inside its container (infra/docker-compose.yml). */
+const BACKUP_CONTAINER_DIR = '/backups';
 
 export interface CoordinatorChain {
   esplora: Esplora;
@@ -696,7 +712,72 @@ export class RlnWallet implements Wallet {
     return { swept: true, blocksMined };
   }
 
-  async backupNow(): Promise<{ version: string }> {
-    throw new WalletError('NOT_IMPLEMENTED', 'backupNow is not implemented in B3 (task B6)');
+  /**
+   * SPEC §12, rln-rest: /backup only works on a locked node, so lock → backup → unlock (~3 s,
+   * spike Q8), always unlocking even if the backup fails. Payments and openings of this wallet
+   * wait in their queues meanwhile. The node writes the file, encrypted with its password, into
+   * the folder bind-mounted at /backups; it is read back, removed, and returned for upload.
+   */
+  backupNow(): Promise<{ version: string; blob: Uint8Array }> {
+    const run = Promise.all([this.payQueue, this.openQueue]).then(() => this.backupInner());
+    const settled = run.catch(() => undefined);
+    this.payQueue = settled;
+    this.openQueue = settled;
+    return run;
+  }
+
+  private async backupInner(): Promise<{ version: string; blob: Uint8Array }> {
+    const b = this.opts.backup;
+    if (!b) throw new WalletError('NOT_ALLOWED', 'this wallet has no backup settings');
+    const version = new Date(this.now()).toISOString();
+    const file = `backup-${version.replace(/[^0-9]/gu, '')}.bin`;
+    try {
+      await this.call('/lock', () => this.rln.POST('/lock', {}));
+      try {
+        await this.call('/backup', () =>
+          this.rln.POST('/backup', {
+            body: { backup_path: `${BACKUP_CONTAINER_DIR}/${file}`, password: b.password },
+          }),
+        );
+      } finally {
+        await this.unlockAfterBackup(b);
+      }
+      await this.waitChannelsUsable();
+      const path = join(b.hostDir, file);
+      const blob = new Uint8Array(await readFile(path));
+      await rm(path, { force: true });
+      return { version, blob };
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
+  }
+
+  /** Unlock, retried: a node left locked can neither pay nor receive. */
+  private async unlockAfterBackup(b: BackupSettings): Promise<void> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await this.call('/unlock', () => this.rln.POST('/unlock', { body: b.unlockBody as never }));
+        return;
+      } catch (e) {
+        if (e instanceof RlnError && e.rlnName === 'AlreadyUnlocked') return;
+        if (attempt >= 3)
+          throw new WalletError(
+            'NODE_UNREACHABLE',
+            `the node stayed locked after a backup: ${e instanceof Error ? e.message : String(e)}`,
+            'Run pnpm demo:unlock, then retry.',
+          );
+        await sleep(1_000);
+      }
+    }
+  }
+
+  /** After an unlock the peers reconnect by themselves in ~1 s (B6 test); wait up to 15 s. */
+  private async waitChannelsUsable(): Promise<void> {
+    const deadline = this.now() + 15_000;
+    while (this.now() < deadline) {
+      const i = await this.call('/nodeinfo', () => this.rln.GET('/nodeinfo')).catch(() => null);
+      if (i && i.num_usable_channels >= i.num_channels) return;
+      await sleep(this.pollIntervalMs * 2);
+    }
   }
 }
