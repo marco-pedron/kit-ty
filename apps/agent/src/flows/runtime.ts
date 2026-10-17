@@ -4,12 +4,14 @@ import {
   fakeVerifier,
   signatureVerifier,
   type ActorId,
+  type EventBody,
 } from '@kitty/shared';
 import type { RelayClient } from '../relay/types.js';
 import type { Wallet } from '../wallet/types.js';
 import { CoordinatorAgent } from './dave.js';
 import { apiErrorOf } from './errors.js';
 import { MemberAgent } from './member-agent.js';
+import { loadRates, type TripChannels } from './seed-state.js';
 
 // The running agents of the process (SPEC §14): one per actor, each with ONLY its own wallet,
 // all on the same relay client, ticking every second. The routes (task C3) read and act through
@@ -32,13 +34,16 @@ export function startAgents(p: {
   wallets: Record<ActorId, Wallet>;
   log: Log;
   tickMs?: number;
+  /** Clock of the agents (tests); default the wall clock. */
+  now?: () => Date;
 }): AgentRuntime {
   // FakeWallet signs with fakeSign; the real wallet (B3) with ed25519 (B4).
   const verifier = p.fakes ? fakeVerifier : signatureVerifier;
-  const dave = new CoordinatorAgent({ wallet: p.wallets.dave, relay: p.relay, verifier });
+  const common = { relay: p.relay, verifier, ...(p.now !== undefined && { now: p.now }) };
+  const dave = new CoordinatorAgent({ ...common, wallet: p.wallets.dave });
   const agents = new Map<ActorId, MemberAgent>([['dave', dave]]);
   for (const id of MEMBER_IDS)
-    agents.set(id, new MemberAgent({ actor: id, wallet: p.wallets[id], relay: p.relay, verifier }));
+    agents.set(id, new MemberAgent({ ...common, actor: id, wallet: p.wallets[id] }));
 
   const lastError = new Map<ActorId, string>();
   const timer = setInterval(() => {
@@ -60,32 +65,64 @@ export function startAgents(p: {
   return { agents, dave, stop: () => clearInterval(timer) };
 }
 
+/** The trip of SPEC §6.1-6.2 does not match this seed: retrying cannot fix it. */
+export class StaleRelayError extends Error {}
+
 /**
- * KITTY_FAKES=1 only: the trip of SPEC §6.1-6.2 on the fake network when the relay log is
- * empty, so `pnpm dev:fakes` has something to show (the real setup is the seed, task B2).
- * Retries until the relay answers.
+ * Sets up the trip of SPEC §6.1-6.2 on the relay: TRIP_CREATED, RATE_SET, then for each traveler
+ * MEMBER_JOINED, MEMBER_ADMITTED and CHANNELS_READY. Every step is skipped if already on the
+ * relay, so a restart (or a crash halfway) resumes where it stopped. With the real wallet the
+ * asset and channels come from the seed (B2); with KITTY_FAKES=1 from the fake network.
+ * Retries until the relay answers; throws StaleRelayError if the relay holds another seed's trip.
  */
-export async function seedFakeTrip(rt: AgentRuntime, assetId: string, log: Log): Promise<void> {
+export async function seedTrip(
+  rt: AgentRuntime,
+  seed: { assetId: string; channels: TripChannels; rate: EventBody<'RATE_SET'> },
+  log: Log,
+): Promise<void> {
   for (;;) {
     try {
       await rt.dave.sync();
-      if (rt.dave.trip() !== null) return;
-      await rt.dave.createTrip({ name: 'Vietnam 2026', assetId, params: DEMO_TRIP_PARAMS });
-      await rt.dave.setRate({ asOf: '2026-10-17', source: 'fake seed', rates: { VND: '26350' } });
+      let trip = rt.dave.trip();
+      if (trip !== null && trip.assetId !== seed.assetId)
+        throw new StaleRelayError(
+          `the relay holds the trip of a previous seed (asset ${trip.assetId}, this seed ${seed.assetId}): wipe the relay database (RELAY_DB) and restart`,
+        );
+      if (trip === null)
+        trip = await rt.dave.createTrip({
+          name: 'Vietnam 2026',
+          assetId: seed.assetId,
+          params: DEMO_TRIP_PARAMS,
+        });
+      if (trip.rate === null) await rt.dave.setRate(seed.rate);
       for (const id of MEMBER_IDS) {
         await rt.agents.get(id)?.joinTrip();
-        await rt.dave.admit(id);
-        await rt.dave.channelsReady(id, {
-          tripChannelId: `fake-trip-${id}`,
-          liquidityChannelId: `fake-liq-${id}`,
-        });
+        const member = await rt.dave.admit(id);
+        if (!member.channelsReady) await rt.dave.channelsReady(id, seed.channels[id]);
       }
-      log.info('fake trip "Vietnam 2026" set up on the relay');
+      log.info(`trip "${trip.name}" ready on the relay (asset ${seed.assetId})`);
       return;
     } catch (err) {
+      if (err instanceof StaleRelayError) throw err;
       const e = apiErrorOf(err);
-      log.warn(`fake seed: ${e.code} ${e.message}; retrying in 2 s`);
+      log.warn(`trip setup: ${e.code} ${e.message}; retrying in 2 s`);
       await new Promise((r) => setTimeout(r, 2_000));
     }
   }
+}
+
+/** KITTY_FAKES=1 only: the channel ids of the fake network. */
+export function fakeTripChannels(): TripChannels {
+  const c = {} as TripChannels;
+  for (const id of MEMBER_IDS)
+    c[id] = { tripChannelId: `fake-trip-${id}`, liquidityChannelId: `fake-liq-${id}` };
+  return c;
+}
+
+/**
+ * @deprecated Use {@link seedTrip} with {@link fakeTripChannels}: same trip, one code path for
+ * the fakes and the real seed. Kept so existing callers compile.
+ */
+export function seedFakeTrip(rt: AgentRuntime, assetId: string, log: Log): Promise<void> {
+  return seedTrip(rt, { assetId, channels: fakeTripChannels(), rate: loadRates() }, log);
 }

@@ -8,7 +8,7 @@
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
-- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 con il wallet reale da fare
+- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 cablaggio col wallet reale in `a/A5-real-wallet` (PR #19), prova reale di B **verde**; restano i passi 5-7 sul reale (B7 chiusura canali)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
@@ -71,6 +71,14 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A5 ★3, wallet reale (sab 17/10, branch `a/A5-real-wallet`, PR #19)
+- **Prova reale (B, stack regtest): verde in 25.5 s.** 20 eventi, firme 20/20, catena valida, stessa testa `387bf500da96` su 4/4, ultima riga `OK: real Lightning payment, proof verified, same log on 4/4 agents`.
+- Funziona: senza `KITTY_FAKES`, `index.ts` crea un `RlnWallet` (B3) per attore con `realSetup(config)` (`flows/real-setup.ts`): ogni wallet legge solo i segreti del proprio membro. I loop degli agenti partono in entrambe le modalità.
+- `seedTrip` (`flows/runtime.ts`, sostituisce `seedFakeTrip`): `TRIP_CREATED`, `RATE_SET`, poi per ogni viaggiatore `MEMBER_JOINED`, `MEMBER_ADMITTED`, `CHANNELS_READY`; ogni passo saltato se già sul relay (riavvio o crash a metà riprende). Asset e id dei canali (travel/liquidity con dave) da `infra/.out/seed-state.json`; tasso da `infra/fixtures/rates.json` (copiato da `_legacy`, `source` usata nel `RATE_SET`). Se il viaggio sul relay ha un altro `assetId` → `StaleRelayError` "the relay holds the trip of a previous seed …: wipe the relay database (RELAY_DB) and restart", l'agente esce con codice 1.
+- Come si prova:
+  - `pnpm test`: `flows/seed-state.test.ts` (lettura dei file, idempotenza, seed diverso) e `flows/real-wallet.test.ts`: **`RlnWallet` veri** costruiti da file di seed temporanei con `loadMemberWalletOptions`, firme ed25519 verificate dal vero `signatureVerifier`, relay vero via HTTP; solo i 4 nodi RLN sono simulati (`flows/test/rln-network.ts`, stessi endpoint e corpi dello spike). Viaggio dal seed, alice invia la cena, charlie contesta, bob paga 3.09 dopo il silenzio-assenso, preimage verificata, DUSD spostati, stessa testa su 4/4.
+  - **Prova reale (da B):** `pnpm demo:unlock` (o `demo:reset`), `RELAY_DB=':memory:' pnpm --filter @kitty/relay start`, poi `pnpm --filter @kitty/agent exec tsx src/flows/check-real.ts`. Stampa i passi con i tempi ed esce con `OK: …` o `FAIL: …`. È un pagamento vero: bob finisce a 46.91, quindi `demo:reset` prima della demo.
+- Problemi noti: `seedTrip` riprova ogni 2 s anche su errori che non passano da soli (es. schema): li stampa nel log. Le rotte (C3) non usano ancora `runtime.agents`.
 ### A5b, integrazione con C2 (sab 17/10)
 - `main` aggiornato nel branch con un merge (C2, PR #15): compila e passa senza modifiche ai flussi (`subscribe` ha un secondo argomento opzionale, compatibile).
 - `apiErrorOf` riconosce `RelayError`: un rifiuto del relay arriva al chiamante con il codice e il motivo del ledger (es. `INVALID_EVENT` "a due line cannot be contested") e l'azione.
