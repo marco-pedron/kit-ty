@@ -6,7 +6,7 @@
 - [x] K0 Sessione contratto (revisione): `api.ts` e `views.ts` approvati dal PM; registro in `a.md`
 - [x] C1 Relay (branch `c/C1-relay`)
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
-- [ ] C2 RelayClient
+- [x] C2 RelayClient (branch `c/C2-relay-client`)
 - [ ] C3 Rotte dell'agente
 - [ ] C4 UI viaggiatore
 - [ ] C5 UI Dave
@@ -20,10 +20,22 @@
 - C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
 
 ## Prossimo passo
-- C2 `RelayClient` (`apps/agent/src/relay`): append su `POST /events`, list su `GET /events?since=`, subscribe su `GET /events/stream` con riconnessione da `Last-Event-ID`; backup su `PUT/GET /backups/:pubkey` (`application/octet-stream`).
+- **Per A (`apps/agent/src/index.ts`, non è mio):** creare il client una volta sola, `createRelayClient({ baseUrl: config.RELAY_URL })` da `./relay/http-client.js`, e passarlo ai flussi. Uso tipico: `const log = await relay.list()`, poi `relay.subscribe(onEvent, { sinceSeq: log.at(-1)?.seq ?? 0, onStatus })`. Gli errori sono `RelayError` (`./relay/errors.js`) con `toApiError()`, come `WalletError`. `onStatus` dà `connected` / `reconnecting` (con tentativo, attesa ed errore): serve a C7.
+- C3 rotte dell'agente.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C2, sab 17/10 12:45
+- Funziona: `createRelayClient({ baseUrl, fetch?, timeoutMs?, backoff?, idleTimeoutMs? })` (`apps/agent/src/relay/http-client.ts`), che implementa `RelayClient`.
+  - `append`, `list(since)`, `putBackup`, `getBackup` (404 → `null`). Timeout di 10 s per richiesta. Se il relay non risponde → `RelayError` `RELAY_UNREACHABLE`; se rifiuta → il suo `ApiError` (es. `INVALID_EVENT` con il motivo del ledger) con `httpStatus`.
+  - `subscribe` (`sse.ts`): SSE letto con `fetch`, perché Node 22 non ha `EventSource` senza flag. Ogni evento arriva una volta sola, in ordine di `seq`. Riconnessione con backoff da 250 ms a 5 s, ripartendo da `?since=<ultimo seq>`. Un buco nella sequenza viene riempito con `list(ultimo)`. Un evento malformato non viene mai saltato: è un guasto del relay, lo stream si riconnette e lo segnala. Se per 45 s non arriva nulla (il relay manda un heartbeat ogni 15 s), il client si riconnette. Un errore nell'handler viene registrato in console e la consegna continua.
+  - Il client controlla solo la forma (zod); firme, catena e regole le verifica l'agente con `validateEvent` (SPEC §9.3).
+- **Modifica al contratto (approvata dal PM):** `subscribe(onEvent, opts?: { sinceSeq?, onStatus? })` in `apps/agent/src/relay/types.ts`. Il secondo argomento è opzionale, quindi resta compatibile con SPEC §14.2; nuovi tipi `RelayStatus` e `SubscribeOptions`.
+- Correzione al relay di C1 (commit separato): `forceCloseConnections: true`. Dopo l'interruzione di uno stream SSE, undici apre una connessione keep-alive senza richieste, che la politica `idle` non chiude: `close()` aspettava circa 4 s.
+- Come si prova: `pnpm test`.
+  - `apps/agent/src/relay/http-client.test.ts`, contro il **relay vero** in memoria (importato con percorso relativo, solo nei test): append/list, rifiuto con codice e motivo, `RELAY_UNREACHABLE`, backup e limite di dimensione, arretrati + diretta con `sinceSeq`, riavvio del relay con eventi aggiunti nel frattempo (né buchi né duplicati), relay spento all'avvio, `unsubscribe`.
+  - `sse.test.ts`, con un `fetch` finto: parser, buco riempito, duplicati, evento malformato, stream muto, backoff, handler che lancia.
+- Problemi noti: nessuno. Il collegamento in `index.ts` spetta ad A (vedi Prossimo passo).
 ### C1b, sab 17/10 12:15
 - Funziona: `decodeBolt11` (`apps/relay/src/bolt11.ts`) è il `decodeInvoice` dei `defaultDeps` del relay. Senza fake il relay ora valida tutto: `validateEvent` di A2, ed25519 di B4, invoice decodificati in JS. Nessuna libreria BOLT11: bech32 scritto a mano, firma con `@noble/curves` secp256k1 (stesse versioni già nel lockfile tramite B4, aggiunte a `apps/relay/package.json` in un commit separato).
 - Formato RGB, verificato sull'unico invoice reale che abbiamo (`spikes/wdk/calls.log:78`) contro il `/decodelninvoice` del nodo (riga 79): tag 30 = `asset_amount`, tag 31 = `asset_id` (32 byte). L'id si mostra come `rgb:` + baid64 senza padding, a gruppi 8-7-7-7-7-7. Alfabeto del crate `baid64`: `…0123456789_~` (`_` = 62, `~` = 63). RLN `d4762ac` usa `baid64` **0.4.1** (Cargo.lock), il PM aveva indicato 0.4.2: confrontati i sorgenti dei due crate, alfabeto, gruppi e decodifica sono identici (cambia solo un `debug_assert`).
