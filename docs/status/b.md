@@ -9,8 +9,8 @@
 - [x] B4 Verifica firme ed25519 in TS puro + invoice di legame (crypto.ts, sab 17/10 11:10)
 - [x] B2 Seed e demo:reset (sab 17/10 12:45)
 - [x] B3 Wallet reale e LightningRail (sab 17/10 13:40)
-- [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55; PR aperta, merge dopo la conferma del PM)
-- [ ] B8 e2e:demo
+- [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55, #20)
+- [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [ ] B5 (P1) Rail on-chain
 - [ ] B6 Backup automatico (lock → backup → unlock); demo:lose-phone = P1
 - [ ] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan)
@@ -19,19 +19,19 @@
 - niente
 
 ## Prossimo passo
-- **Per chi gestisce `server.ts`/`config.ts` (A o C), collegare il wallet reale** quando `KITTY_FAKES=0`:
-  ```ts
-  import { RlnWallet } from './wallet/rln-wallet.js';
-  import { loadMemberWalletOptions } from './wallet/secrets.js';
-  const url = nodeUrls(config)[actor];
-  const wallet = new RlnWallet(loadMemberWalletOptions(actor, { nodeUrl: url }));
-  ```
-  Ogni agente riceve solo il proprio wallet. Variabile opzionale `KITTY_SECRETS_FILE` (default `infra/.secrets/nodes.json`); l'asset id viene da `infra/.out/seed-state.json`. Se serve un rail: `new LightningRail(wallet)` (`apps/agent/src/rail/lightning-rail.ts`).
-- Dopo B7: `pnpm demo:reset` (charlie è senza canali dopo `e2e:close`) e secondo giro di `pnpm e2e:close` per confermare i 7 blocchi; poi B8 (`e2e:demo`).
-- Per chi collega dave in `server.ts`: `loadMemberWalletOptions('dave', { nodeUrl })` aggiunge già `coordinator` (esplora da `ESPLORA_URL` + miner). Gli altri membri non lo ricevono, e `closeChannelsWith` su di loro risponde `NOT_ALLOWED`.
+- B9: `openLiquidity` + loop di Dave su `liquidityPlan`, con scenario e2e separato "L piccola" (`pnpm e2e:liquidity`).
+- B6 (backup automatico) e P1 solo dopo il tag `demo-v1`.
+- Prima di ogni merge rischioso: `pnpm demo:reset && pnpm e2e:demo`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B8, sab 17/10 16:55
+- **Cosa funziona:** `pnpm e2e:demo` fa i passi 1-7 di SPEC §16 sui nodi veri, solo tramite l'API dell'agente (client tipizzato `createAgentClient` di shared). Relay e agente (`index.ts`, `KITTY_FAKES=0`) partono come processi figli su porte proprie (4400/4500, `E2E_RELAY_PORT`/`E2E_AGENT_PORT`) e un database del relay temporaneo, quindi non toccano il relay di `pnpm dev`. L'AI è saltata (A4): alice invia la cena e la divisione della demo come farebbe la UI dopo la revisione.
+- **Misurato (log `infra/.out/logs/20261017-164903-e2e-demo.log`, riepilogo `infra/.out/e2e-demo.json`):** quote 3.09/3.09/3.50; bob pagato in automatico 24 s dopo l'invio, motivo "Paid 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00.", prova con i tre controlli verdi, **0 blocchi minati**; charlie contesta, dave conferma, overdue dopo 30 s; "Copri ed escludi": `GUARANTEE_PAID` 3.50, due txid di chiusura confermati, **7 blocchi minati** (asserzione ≤ 8: la correzione dello sweep di B7 è confermata sul reale, il vecchio comportamento a 11 fallirebbe); charlie 100.00 on-chain e canali a zero; alice 56.59 in uscita (+6.59: 3.09 da bob, 3.50 garantiti); bob 46.91; registro 23/23 firme valide, stessa testa su 4/4.
+- **Corretti nel task:** `GET /state` dava sempre `me.balance: null` (mancava `MemberAgent.balances()`, ora legge il nodo del membro, `null` se non risponde); `demo:reset` ora cancella `apps/relay/data/relay.sqlite` (altrimenti `pnpm dev` dopo un reset trovava il viaggio vecchio, `StaleRelayError`).
+- **Come si prova:** `pnpm demo:reset && pnpm e2e:demo` (irreversibile: charlie escluso). Log in `infra/.out/logs/<data-ora>-e2e-demo.log`, output di relay e agente in `…-e2e-demo-processes.log`.
+- **Problemi noti:** "Copri ed escludi" dura **~73 s** (pagamento + chiusura cooperativa + 7 blocchi con attesa dello sweep): sul palco serve un'attesa che dice cosa succede (C7). Dopo l'esclusione charlie ha `topupWarning: true` (canale di viaggio a zero): cosmetico, per la UI. La prova di un pagamento appena fatto può dare 404 per ~1 s, finché l'agente di dave non sincronizza `PAYMENT_MADE`.
+
 ### B7, sab 17/10 15:55
 - Funziona: `RlnWallet.closeChannelsWith(peerPubkey)` (`apps/agent/src/wallet/rln-wallet.ts`), solo sul wallet di dave (opzione `coordinator`, data dal loader solo a dave; sugli altri `NOT_ALLOWED` senza nessuna chiamata al nodo). Restituisce `{ txids, explorerUrls, swept, blocksMined }`, compatibile con `{ txids }` dell'interfaccia: `flows/dave.ts` e FakeWallet non cambiano.
   1. Controlli prima di chiudere: canali con il membro (`/listchannels`, altrimenti `NOT_FOUND`), membro connesso (`/listpeers`, altrimenti `RECEIVER_UNREACHABLE` "Not forcing a close…"), tutti `Opened`, output di finanziamento trovato su esplora (valore = `capacity_sat`, p2wsh). Se uno fallisce, non si chiude niente.

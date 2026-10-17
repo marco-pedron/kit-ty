@@ -8,7 +8,7 @@
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
-- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 cablaggio col wallet reale in `a/A5-real-wallet` (PR #19), prova reale di B **verde**; restano i passi 5-7 sul reale (B7 chiusura canali)
+- [x] A5 Flussi dell'agente (fake → reale): ★1 (A5a, A5b), ★3 wallet reale (#19); passi 2-7 verdi sul reale con `pnpm e2e:demo` (B8, sab 17/10 16:55)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
@@ -16,8 +16,7 @@
 - niente
 
 ## Prossimo passo
-- A5 ★3: stessi flussi con il wallet reale (B3) e il seed (B2); passi 2-7 con `pnpm e2e:demo` (B8). C2 è integrato (vedi registro A5b).
-- **Per C3:** collegare le rotte a `runtime.agents` di `startAgents` (`apps/agent/src/flows/runtime.ts`), creato in `index.ts`. Oggi `buildAgentServer` costruisce ancora i suoi `Agent` (con un'altra rete finta), usati solo da `/state` vuoto: va cambiato in `server.ts` (di C) perché riceva il runtime.
+- A4: AI con QVAC (timebox fino alle 20:30, poi modulo manuale).
 - **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
 - A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
@@ -39,6 +38,7 @@ new MemberAgent({
 - **Lettura per `GET /state`:**
   - `agent.trip()` → `TripState | null` (dalla copia verificata, all'ora corrente): membri, spese, righe, `defaults`, `rate`.
   - `agent.me()` → `MemberState | null` (null per Dave); `agent.policy()`.
+  - `await agent.balances()` → `WalletBalances | null` dal nodo del membro (null se il nodo non risponde), per `me.balance`.
   - `agent.decisionFor(line)` → `AutoPayDecision | null`: il campo `LineView.agent` delle righe in cui l'agente è debitore (null per le altre).
   - `agent.activity()` → `ActivityItem[]` con `kind: 'AGENT'` (decisioni e pagamenti dell'agente, il più recente prima, con `proof`); le righe degli eventi del registro le costruisce la rotta dai `trip().expenses/lines`.
   - `agent.operations()` → `OperationView[]` (`paying`, `submitting_expense`, con errore e azione se fallisce).
