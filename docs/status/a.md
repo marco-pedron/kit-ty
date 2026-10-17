@@ -8,7 +8,7 @@
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
-- [ ] A5 Flussi dell'agente (fake → reale): **A5a fatto** (branch `a/A5-agent-flows`), A5b (Dave, ingresso nel viaggio, passi 2-7) da fare
+- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 con il wallet reale da fare
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
@@ -16,7 +16,7 @@
 - niente
 
 ## Prossimo passo
-- A5b: `flows/dave.ts` (`setRate`, `resolveDispute`, `coverAndExclude`), ingresso nel viaggio (`joinTrip`, `createTrip`, `admit`, `channelsReady`) e il test completo dei passi 2-7 di SPEC §16.
+- A5 ★3: stessi flussi con il wallet reale (B3), il `RelayClient` (C2) e il seed (B2); passi 2-7 con `pnpm e2e:demo` (B8). Oggi su `main` non c'è ancora C2.
 - **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
 - A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
@@ -49,10 +49,34 @@ new MemberAgent({
   - `decide(expenseId, 'approve' | 'contest', reason?)` → `LineRecord` per `POST /expenses/:id/decision`.
   - `voidExpense(expenseId)` per `POST /expenses/:id/void`.
   - `updatePolicy(policy)` → `Policy` per `PUT /policy`.
-  - Dave (A5b): `resolveDispute`, `coverAndExclude`, `setRate`.
+  - `joinTrip(policy?)` → `MemberState` (`MEMBER_JOINED` con l'invoice di legame del proprio nodo; non fa nulla se già iscritto).
+
+## API di `CoordinatorAgent` per C3 e B2 (`apps/agent/src/flows/dave.ts`)
+L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?, … })` (stesse opzioni di `MemberAgent`, senza `actor`: è sempre `dave`). Eredita lettura, `tick()` e `idle()`; nel tick ripubblica anche le `GUARANTEE_PAID` già pagate ma non ancora nel registro (mai ripagate). Ogni azione controlla che l'autore sia il `coordinatorPubkey` del viaggio.
+- **Seed (B2), SPEC §6.1-6.2**, in quest'ordine:
+  1. `createTrip({ name, assetId, params })` → `TRIP_CREATED` (solo se il registro è vuoto).
+  2. `setRate({ asOf, source, rates })` → `RATE_SET` (anche `PUT /dave/rates`).
+  3. per ogni viaggiatore: `travelers[id].joinTrip()`, poi `dave.admit(id)` (ricontrolla l'invoice di legame con `checkBindInvoice`), poi, aperti i due canali, `dave.channelsReady(id, { tripChannelId, liquidityChannelId })`.
+- **Rotte (C3):**
+  - `resolveDispute(expenseId, memberId, outcome, note)` → `LineRecord` per `POST /dave/disputes/:expenseId/:member`; solo su una riga `contested`.
+  - `coverAndExclude(expenseId, memberId)` → `{ covered: ProofRef | null, closingTxids }` = `CoverAndExcludeResponse` per `POST /dave/defaults/:expenseId/:member/cover-and-exclude`; solo su una riga `overdue`. Ordine: paga lo stesso invoice con la liquidità di Dave e pubblica `GUARANTEE_PAID` se rientra nella garanzia rimasta (altrimenti `covered: null`, l'invoice si paga intero o niente); chiude i due canali (`closeChannelsWith`) e pubblica `MEMBER_EXCLUDED`; copre fino a G le altre righe del membro, diventate `overdue` con l'esclusione. Invoice scaduto → `FlowError INVOICE_EXPIRED` (il pagatore lo riemette da solo al tick dopo).
+  - Insolvenze per la vista: `dave.trip().defaults`; garanzia usata e rimasta: `trip.members.get(pk).guaranteeUsedCents` e `params.guaranteeCapCents`.
+- Operazioni per C7: `covering`, `closing_channels` in `dave.operations()`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A5b, sab 17/10
+- Controllo iniziale: su `main`, rispetto ad A5a, c'è solo il merge della PR #13. **C2 (`RelayClient`) non è su `main` né su un branch remoto**: il piano non cambia (i flussi usano l'interfaccia `RelayClient`; i test il relay in memoria).
+- Funziona (con `KITTY_FAKES=1`): `apps/agent/src/flows/dave.ts` (`CoordinatorAgent`, API sopra) e `MemberAgent.joinTrip`. `errors.ts` ora ha `apiErrorOf(err)` (qualsiasi errore → `ApiError` con azione), usato da entrambi.
+- Il seed dei test (`flows/test/setup.ts`) passa ora dai flussi (`createTrip`, `setRate`, `joinTrip`, `admit`, `channelsReady`): anche i test di A5a li esercitano.
+- Come si prova: `pnpm test` (`apps/agent/src/flows/dave.test.ts`):
+  - **passi 2-7 di SPEC §16**: alice invia la cena → charlie contesta → dave conferma (nuova scadenza 30 s) → bob, in silenzio, paga 3.09 a 20 s → l'agente di charlie non paga la riga confermata (`payUpheldDisputes` false) → a 30 s dalla conferma la riga è tra le insolvenze → "copri ed escludi": stesso invoice pagato dal nodo di dave (preimage verificata), due txid di chiusura, `MEMBER_EXCLUDED` → alice: 6.59 ricevuti, nulla più da ricevere; bob 46.91; charlie 0 nei canali e 100.00 on-chain; dave −3.50; garanzia usata 3.50; registro valido e uguale su 4/4; charlie non più includibile in una spesa.
+  - solo il coordinatore agisce come dave; iscrizione e ammissione idempotenti; contestazione risolta solo se `contested`, `line_voided` libera il debitore; copertura solo su `overdue`; oltre la garanzia rimasta: escluso ma non coperto, alice resta in credito; l'esclusione rende scadute le altre righe del membro e dave copre anche quelle.
+- Problemi noti:
+  - Collaudo con il wallet reale (★3) dopo B3, C2 e B2.
+  - Il motivo dell'esclusione è fisso ("Did not pay by the deadline"): la rotta di `api.ts` non ha corpo.
+  - Restano quelli di A5a (nessuna azione per pagare a mano una riga `overdue`; doppio controllo con il decoder JS: P1).
+
 ### A5a, sab 17/10
 - Funziona (con `KITTY_FAKES=1`): `apps/agent/src/flows/`
   - `local-log.ts`: copia verificata del registro. Ogni evento del relay passa da `validateEvent` con il `trip` derivato a `receivedAt`; gli invoice li decodifica il **nodo del membro** (`wallet.decodeInvoice`, in cache, perché `validateEvent` vuole un decoder sincrono). Primo evento rifiutato → copia congelata, `chainValid: false`, motivo in `divergence`. Nodo irraggiungibile → nessun rifiuto, si riprova al tick dopo.
