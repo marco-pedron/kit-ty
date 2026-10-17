@@ -44,6 +44,9 @@ export interface Wallet {
   openLiquidity(peerPubkey: string, cents: bigint): Promise<{ channelId: string }>;
   /** dave only: cooperative close of both channels with a member (SPEC §6.7). */
   closeChannelsWith(peerPubkey: string): Promise<{ txids: string[] }>;
-  /** rln-rest: lock → backup → unlock, then upload (SPEC §12). */
-  backupNow(): Promise<{ version: string }>;
+  /**
+   * rln-rest: lock → backup → unlock (SPEC §12). Returns the backup file, encrypted by the node
+   * with its password: the agent uploads it to the relay, which cannot read it.
+   */
+  backupNow(): Promise<{ version: string; blob: Uint8Array }>;
 }

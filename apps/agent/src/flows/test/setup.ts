@@ -40,12 +40,14 @@ export async function setUpTrip(p: {
   now: () => Date;
   retryMs?: number;
   params?: Partial<TripParams>;
+  backupQuietMs?: number;
 }): Promise<TripAgents> {
   const common = {
     relay: p.relay,
     verifier: fakeVerifier,
     now: p.now,
     ...(p.retryMs !== undefined && { retryMs: p.retryMs }),
+    ...(p.backupQuietMs !== undefined && { backupQuietMs: p.backupQuietMs }),
   };
   const dave = new CoordinatorAgent({ ...common, wallet: p.net.wallet('dave') });
   const travelers = Object.fromEntries(
@@ -86,7 +88,12 @@ export function manualClock(): { now: () => Date; advance: (seconds: number) => 
 }
 
 export async function demo(
-  opts: { strict?: boolean; retryMs?: number; params?: Partial<TripParams> } = {},
+  opts: {
+    strict?: boolean;
+    retryMs?: number;
+    params?: Partial<TripParams>;
+    backupQuietMs?: number;
+  } = {},
 ): Promise<Demo> {
   const net = new FakeLightningNetwork();
   const { now, advance } = manualClock();
@@ -97,6 +104,7 @@ export async function demo(
     now,
     ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
     ...(opts.params !== undefined && { params: opts.params }),
+    ...(opts.backupQuietMs !== undefined && { backupQuietMs: opts.backupQuietMs }),
   });
   return { net, relay, agents, advance, now, tickAll };
 }

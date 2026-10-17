@@ -178,7 +178,8 @@ export class FakeWallet implements Wallet {
     return { txids: [this.net.fakeTxid(), this.net.fakeTxid()] };
   }
 
-  async backupNow(): Promise<{ version: string }> {
-    return { version: `fake-${++this.backups}` };
+  async backupNow(): Promise<{ version: string; blob: Uint8Array }> {
+    const version = `fake-${++this.backups}`;
+    return { version, blob: new TextEncoder().encode(version) };
   }
 }

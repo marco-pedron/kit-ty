@@ -78,6 +78,8 @@ services:
       - 127.0.0.1:9735:9735
     volumes:
       - rln-alice:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/backups/alice:/backups
 
   rln-bob:
     <<: *rln
@@ -87,6 +89,8 @@ services:
       - 127.0.0.1:9736:9736
     volumes:
       - rln-bob:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/backups/bob:/backups
 
   rln-charlie:
     <<: *rln
@@ -96,6 +100,8 @@ services:
       - 127.0.0.1:9737:9737
     volumes:
       - rln-charlie:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/backups/charlie:/backups
 
   rln-dave:
     <<: *rln
@@ -105,6 +111,8 @@ services:
       - 127.0.0.1:9738:9738
     volumes:
       - rln-dave:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/backups/dave:/backups
 
 volumes:
   bitcoind:

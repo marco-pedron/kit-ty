@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { checkBindInvoice, PaymentProofSchema, sha256Hex, signatureVerifier } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
 import { LightningRail } from '../rail/lightning-rail.js';
@@ -349,11 +352,6 @@ describe('RLN errors become WalletError codes', () => {
     const rln = new FakeRln().on('/assetbalance', () => ({ json: { settled: 'lots' } }));
     expect(await codeOf(setup(rln).wallet.balances())).toBe('INTERNAL');
   });
-
-  it('the B6 method says it is not implemented yet', async () => {
-    const { wallet } = setup();
-    expect(await codeOf(wallet.backupNow())).toBe('NOT_IMPLEMENTED');
-  });
 });
 
 describe('balances refresh transfers (B7: swept closes show on-chain)', () => {
@@ -592,6 +590,67 @@ describe('openLiquidity (B9)', () => {
     expect(await codeOf(wallet.openLiquidity(CHARLIE_NODE, 0n))).toBe('VALIDATION_ERROR');
     expect(await codeOf(wallet.openLiquidity('nope', 1n))).toBe('VALIDATION_ERROR');
     expect(rln.calls).toEqual([]);
+  });
+});
+
+describe('backupNow (B6)', () => {
+  function backupSetup(opts: { failBackup?: boolean } = {}) {
+    const hostDir = mkdtempSync(join(tmpdir(), 'kitty-backup-'));
+    const rln = new FakeRln()
+      .on('/lock', () => ({ json: {} }))
+      .on('/backup', (b) => {
+        if (opts.failBackup)
+          return { status: 500, json: { error: 'disk full', code: 500, name: 'IO' } };
+        // the container writes into the folder bind-mounted at /backups
+        writeFileSync(join(hostDir, String(b.backup_path).replace('/backups/', '')), 'ENCRYPTED');
+        return { json: {} };
+      })
+      .on('/unlock', () => ({ json: {} }))
+      .on('/nodeinfo', () => ({
+        json: {
+          pubkey: ALICE_NODE,
+          rgb_htlc_min_msat: 3_000_000,
+          num_channels: 2,
+          num_usable_channels: 2,
+        },
+      }));
+    const backup = { password: 'pw', unlockBody: { password: 'pw' }, hostDir };
+    const { wallet } = setup(rln, { backup });
+    return { rln, wallet, hostDir };
+  }
+
+  it('is refused without backup settings, before touching the node', async () => {
+    const { rln, wallet } = setup();
+    expect(await codeOf(wallet.backupNow())).toBe('NOT_ALLOWED');
+    expect(rln.calls).toEqual([]);
+  });
+
+  it('locks, backs up into /backups, unlocks, and returns the file (then removes it)', async () => {
+    const { rln, wallet, hostDir } = backupSetup();
+    const { blob } = await wallet.backupNow();
+    expect(new TextDecoder().decode(blob)).toBe('ENCRYPTED');
+    expect(rln.calls.map((c) => c.endpoint).slice(0, 3)).toEqual(['/lock', '/backup', '/unlock']);
+    expect(rln.calls[1]?.body).toMatchObject({
+      password: 'pw',
+      backup_path: expect.stringMatching(/^\/backups\/backup-\d+\.bin$/),
+    });
+    expect(rln.calls[2]?.body).toEqual({ password: 'pw' });
+    expect(readdirSync(hostDir)).toEqual([]);
+  });
+
+  it('always unlocks, even when the backup fails', async () => {
+    const { rln, wallet } = backupSetup({ failBackup: true });
+    expect(await codeOf(wallet.backupNow())).toBeDefined();
+    expect(rln.count('/unlock')).toBe(1);
+  });
+
+  it('a payment asked during a backup waits for the unlock', async () => {
+    const { rln, wallet } = backupSetup();
+    const backup = wallet.backupNow();
+    const pay = wallet.pay('lnbc-not-decoded').catch(() => undefined);
+    await Promise.all([backup, pay]);
+    const order = rln.calls.map((c) => c.endpoint);
+    expect(order.indexOf('/unlock')).toBeLessThan(order.indexOf('/decodelninvoice'));
   });
 });
 

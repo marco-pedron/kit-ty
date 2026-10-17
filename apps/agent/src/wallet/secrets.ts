@@ -25,13 +25,19 @@ function readJson(path: string, what: string): unknown {
 
 export function loadMemberWalletOptions(
   actor: ActorId,
-  p: { nodeUrl: string; secretsFile?: string; seedStateFile?: string; esploraUrl?: string },
+  p: {
+    nodeUrl: string;
+    secretsFile?: string;
+    seedStateFile?: string;
+    esploraUrl?: string;
+    backupDir?: string;
+  },
 ): RlnWalletOptions {
   const secrets = readJson(
     p.secretsFile ?? process.env.KITTY_SECRETS_FILE ?? DEFAULT_SECRETS_FILE,
     'node secrets',
   ) as {
-    nodes?: Record<string, { mnemonic?: unknown }>;
+    nodes?: Record<string, { mnemonic?: unknown; password?: unknown }>;
   };
   const mnemonic = secrets.nodes?.[actor]?.mnemonic;
   if (typeof mnemonic !== 'string')
@@ -45,10 +51,40 @@ export function loadMemberWalletOptions(
     appSecretHex: deriveAppSecretHex(mnemonic),
     assetId: seed.assetId,
   };
+  // B6, SPEC §12: the node's own password backs it up and unlocks it again afterwards.
+  const password = secrets.nodes?.[actor]?.password;
+  if (typeof password === 'string')
+    opts.backup = {
+      password,
+      unlockBody: unlockBody(actor, password),
+      hostDir: p.backupDir ?? `${repoRoot}infra/data/backups/${actor}`,
+    };
   // Only dave closes channels (SPEC §6.7): only his wallet gets the miner and esplora.
   if (actor === 'dave') {
     const esploraUrl = p.esploraUrl ?? process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010';
     opts.coordinator = { esplora: createEsplora(esploraUrl), miner: dockerMiner };
   }
   return opts;
+}
+
+/**
+ * The /unlock body of a node, the same as the seed's (infra/treasury/lib.ts unlockBody): the
+ * regtest bitcoind and electrs as the containers see them. No secret but the password.
+ */
+export function unlockBody(actor: ActorId, password: string): Record<string, unknown> {
+  return {
+    password,
+    ldk_chain_sync: {
+      mode: 'BlockSync',
+      config: {
+        bitcoind_rpc_username: process.env.BITCOIND_RPC_USER || 'user',
+        bitcoind_rpc_password: process.env.BITCOIND_RPC_PASSWORD || 'password',
+        bitcoind_rpc_host: process.env.BITCOIND_RPC_HOST || 'bitcoind',
+        bitcoind_rpc_port: 18443,
+      },
+    },
+    indexer_url: process.env.ELECTRS_URL_INTERNAL || 'electrs:50001',
+    announce_addresses: [],
+    announce_alias: actor,
+  };
 }
