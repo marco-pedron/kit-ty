@@ -8,12 +8,12 @@
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
-- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 cablaggio col wallet reale in `a/A5-real-wallet` (PR in bozza), **manca la prova reale di B** (`check-real.ts`)
+- [ ] A5 Flussi dell'agente (fake → reale): **★1 fatto** (A5a `a/A5-agent-flows`, A5b `a/A5b-dave-flows`); ★3 cablaggio col wallet reale in `a/A5-real-wallet` (PR #19), prova reale di B **verde**; restano i passi 5-7 sul reale (B7 chiusura canali)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
 ## Bloccato da
-- A5 ★3: prova sui nodi veri, da far girare a B (stack non presente su questa macchina, scelta del dev A)
+- niente
 
 ## Prossimo passo
 - A5 ★3: stessi flussi con il wallet reale (B3) e il seed (B2); passi 2-7 con `pnpm e2e:demo` (B8). C2 è integrato (vedi registro A5b).
@@ -71,7 +71,8 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
-### A5 ★3, wallet reale (sab 17/10, branch `a/A5-real-wallet`, PR in bozza)
+### A5 ★3, wallet reale (sab 17/10, branch `a/A5-real-wallet`, PR #19)
+- **Prova reale (B, stack regtest): verde in 25.5 s.** 20 eventi, firme 20/20, catena valida, stessa testa `387bf500da96` su 4/4, ultima riga `OK: real Lightning payment, proof verified, same log on 4/4 agents`.
 - Funziona: senza `KITTY_FAKES`, `index.ts` crea un `RlnWallet` (B3) per attore con `realSetup(config)` (`flows/real-setup.ts`): ogni wallet legge solo i segreti del proprio membro. I loop degli agenti partono in entrambe le modalità.
 - `seedTrip` (`flows/runtime.ts`, sostituisce `seedFakeTrip`): `TRIP_CREATED`, `RATE_SET`, poi per ogni viaggiatore `MEMBER_JOINED`, `MEMBER_ADMITTED`, `CHANNELS_READY`; ogni passo saltato se già sul relay (riavvio o crash a metà riprende). Asset e id dei canali (travel/liquidity con dave) da `infra/.out/seed-state.json`; tasso da `infra/fixtures/rates.json` (copiato da `_legacy`, `source` usata nel `RATE_SET`). Se il viaggio sul relay ha un altro `assetId` → `StaleRelayError` "the relay holds the trip of a previous seed …: wipe the relay database (RELAY_DB) and restart", l'agente esce con codice 1.
 - Come si prova:
