@@ -32,6 +32,7 @@ import {
   type LineRecord,
   type TripState,
 } from '@kitty/ledger';
+import { CoordinatorAgent } from '../flows/dave.js';
 import type { MemberAgent } from '../flows/member-agent.js';
 import type { WalletBalances } from '../wallet/types.js';
 
@@ -291,10 +292,13 @@ class ViewContext {
   }
 
   coordinator(): CoordinatorView {
-    // Threshold 0: the view shows the margin; dave's agent decides openings itself (B9).
-    const margins = new Map(
-      liquidityPlan(this.trip, 0n).map((n) => [n.memberPubkey, n.marginCents]),
-    );
+    // dave's agent knows the liquidity it opened after the first channel (B9); the margin
+    // does not depend on the threshold.
+    const needs =
+      this.agent instanceof CoordinatorAgent
+        ? this.agent.liquidityNeeds(this.trip)
+        : liquidityPlan(this.trip, 0n);
+    const margins = new Map(needs.map((n) => [n.memberPubkey, n.marginCents]));
     return {
       members: [...this.trip.members.values()].map((m) => ({
         memberId: m.memberId,
