@@ -9,7 +9,7 @@
 - [x] B4 Verifica firme ed25519 in TS puro + invoice di legame (crypto.ts, sab 17/10 11:10)
 - [x] B2 Seed e demo:reset (sab 17/10 12:45)
 - [x] B3 Wallet reale e LightningRail (sab 17/10 13:40)
-- [ ] B7 Chiusura canali per l'esclusione
+- [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55; PR aperta, merge dopo la conferma del PM)
 - [ ] B8 e2e:demo
 - [ ] B5 (P1) Rail on-chain
 - [ ] B6 Backup automatico (lock → backup → unlock); demo:lose-phone = P1
@@ -27,10 +27,21 @@
   const wallet = new RlnWallet(loadMemberWalletOptions(actor, { nodeUrl: url }));
   ```
   Ogni agente riceve solo il proprio wallet. Variabile opzionale `KITTY_SECRETS_FILE` (default `infra/.secrets/nodes.json`); l'asset id viene da `infra/.out/seed-state.json`. Se serve un rail: `new LightningRail(wallet)` (`apps/agent/src/rail/lightning-rail.ts`).
-- B7 (`closeChannelsWith`), poi B8 (`e2e:demo`).
+- Dopo B7: `pnpm demo:reset` (charlie è senza canali dopo `e2e:close`) e secondo giro di `pnpm e2e:close` per confermare i 7 blocchi; poi B8 (`e2e:demo`).
+- Per chi collega dave in `server.ts`: `loadMemberWalletOptions('dave', { nodeUrl })` aggiunge già `coordinator` (esplora da `ESPLORA_URL` + miner). Gli altri membri non lo ricevono, e `closeChannelsWith` su di loro risponde `NOT_ALLOWED`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B7, sab 17/10 15:55
+- Funziona: `RlnWallet.closeChannelsWith(peerPubkey)` (`apps/agent/src/wallet/rln-wallet.ts`), solo sul wallet di dave (opzione `coordinator`, data dal loader solo a dave; sugli altri `NOT_ALLOWED` senza nessuna chiamata al nodo). Restituisce `{ txids, explorerUrls, swept, blocksMined }`, compatibile con `{ txids }` dell'interfaccia: `flows/dave.ts` e FakeWallet non cambiano.
+  1. Controlli prima di chiudere: canali con il membro (`/listchannels`, altrimenti `NOT_FOUND`), membro connesso (`/listpeers`, altrimenti `RECEIVER_UNREACHABLE` "Not forcing a close…"), tutti `Opened`, output di finanziamento trovato su esplora (valore = `capacity_sat`, p2wsh). Se uno fallisce, non si chiude niente.
+  2. `/closechannel` con **`force: false` sempre** (c'è un test che lo controlla), un canale alla volta. Un rifiuto dice quali canali sono già in chiusura.
+  3. `/closechannel` risponde `{}` senza txid: **il txid di chiusura è lo spend dell'output di finanziamento** (`GET /tx/<funding>/outspends` di esplora). Attesa in mempool di 60 s, poi errore chiaro.
+  4. Mining (stesso `bitcoin-cli -generate` di `infra/scripts/mine.sh`, `wallet/chain.ts`): 1 blocco alla volta fino alla conferma, poi 5 blocchi, poi **attesa (fino a 45 s) che i nodi trasmettano gli sweep** e un blocco per confermarli. Budget di 12 blocchi in tutto; se lo sweep non arriva, `swept: false` (la chiusura resta valida). Infine `/refreshtransfers` di dave.
+  - `balances()` di ogni membro fa `/refreshtransfers` (body dello spike) al massimo ogni 15 s, prima di `/assetbalance`: è così che charlie vede i DUSD dello sweep in `onchainCents`. Se il refresh fallisce, il saldo viene restituito comunque.
+- Come si prova: `pnpm test` (11 test nuovi con nodo, esplora e catena finti, più 1 del loader). Sullo stack: **`pnpm e2e:close`**, **IRREVERSIBILE** (chiude i canali di charlie; dopo serve `pnpm demo:reset`), con configurazione e suffisso `.destructive.ts` suoi, fuori da `pnpm test`, `e2e:wallet` e CI. Controlla: rifiuto sul wallet di bob; 2 txid confermati, link `/tx/` 200; nessun canale dave↔charlie; charlie `onchainCents` +50.00, uscita e ingresso a 0; dave +30.00; secondo tentativo → `NOT_FOUND`. Riepilogo in `infra/.out/e2e-close.json`.
+- **Primo giro reale (15:45, verde, 69 s):** chiusure confermate a h125, ma sweep a **h135**: 11 blocchi su 12, contro i 6 dopo la conferma dello spike. Ipotesi: minando un blocco ogni 1,5 s i nodi restano indietro e lo sweep parte tardi. Saldi dopo: charlie 100.00 `settled`, 0 canali; dave 230.00 `settled` (+30.00). Correzione (attesa degli sweep invece di minare alla cieca) fatta dopo, coperta dai test unitari: **da confermare con un secondo `e2e:close` dopo `demo:reset`** (attesi 7 blocchi).
+- Problemi noti: la chiamata dura decine di secondi dentro "Copri ed escludi" (l'op `closing_channels` lo mostra). Esplora REST (`/tx`, `/outspends`, `/blocks/tip/height`) non è in `docs/vendor`, ma è lo stesso server delle prove. L'agente usa `docker` per minare: solo regtest.
 ### B3, sab 17/10 13:40
 - Funziona: `RlnWallet` (`apps/agent/src/wallet/rln-wallet.ts`), motore `rln-rest`, un'istanza per membro con **solo** `{ nodeUrl, appSecretHex, assetId }` del proprio membro (`loadMemberWalletOptions` in `wallet/secrets.ts` legge i file del seed e restituisce solo quei tre campi). `LightningRail` in `rail/lightning-rail.ts` (modalità `ln-2ch`, rifiuta richieste on-chain).
   - `nodePubkey`: `/nodeinfo` (in cache; dopo un errore riprova). `authorPubkey`/`sign`: ed25519 con `ed25519PublicKeyHex`/`ed25519Sign`, nuove in `crypto.ts`, formato B4. Mai `/signmessage`.

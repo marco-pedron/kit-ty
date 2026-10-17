@@ -20,7 +20,8 @@
     "infra:check": "./infra/scripts/check.sh",
     "demo:reset": "./infra/scripts/demo-reset.sh",
     "demo:unlock": "./infra/scripts/unlock.sh",
-    "e2e:wallet": "vitest run -c apps/agent/src/wallet/vitest.integration.config.ts"
+    "e2e:wallet": "vitest run -c apps/agent/src/wallet/vitest.integration.config.ts",
+    "e2e:close": "vitest run -c apps/agent/src/wallet/vitest.close.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
