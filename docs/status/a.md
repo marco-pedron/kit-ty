@@ -6,7 +6,7 @@
 - [x] K0 Sessione contratto (con C), branch `k0-contract`
 - [x] A1 deriveTrip (branch `a/A1-derive-trip`)
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
-- [ ] A3 decideAutoPay
+- [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
 - [ ] A5 Flussi dell'agente (fake → reale)
 - [ ] A7 liquidityPlan (SPEC §10.5)
@@ -16,11 +16,19 @@
 - niente
 
 ## Prossimo passo
-- A3 `decideAutoPay`: trasformare in test gli `it.todo` di A3. `TripState.autoPayments` è già derivato da `deriveTrip`; i log di test con invoice decodificabili e preimage vere sono in `packages/ledger/test/helpers.ts` (`Log.invoice`, `Log.proof`, `Log.check`).
+- A7 `liquidityPlan(trip, thresholdCents)`: trasformare in test gli `it.todo` di A7 (ultimi del ledger). Poi A5 (flussi dell'agente con `FakeWallet`).
 - A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A3, sab 17/10
+- Funziona: `decideAutoPay(policy, line, trip, now, invoice)` (`packages/ledger/src/autopay.ts`, riesportato da `kitty.ts`) e `autoPaidLast24h(trip, debtor, now)`.
+- **Cambio di firma (approvato, opzione A; avvisare C):** quinto parametro `invoice: DecodedInvoice | null`, decodificato dall'agente con il proprio nodo (`Wallet.decodeInvoice` di `line.bolt11`). `null` = non leggibile → non paga. Per `LineView.agent` di un debitore le rotte possono passare il decodificato o `null` (la frase degli stati non `due` non dipende dall'invoice).
+- Regole: paga solo una riga `due` di un viaggio aperto, debitore e creditore non esclusi (creditore escluso → "pay on-chain"), spesa non annullata e con Σ che torna, invoice = quello firmato nel registro, payee = nodo del creditore, asset del viaggio, importo della riga, non scaduto; riga confermata da Dave senza approvazione esplicita solo con `payUpheldDisputes`. Per i pagamenti automatici: importo ≤ `autoPayLimitCents` (ricontrollato: la policy può cambiare dopo l'assenso) e tetto `dailyCapCents` su 24 h mobili (un pagamento di esattamente 24 h fa non conta più). L'approvazione esplicita salta limite e tetto (SPEC §8).
+- `reason` per ogni stato, in inglese, per la UI: es. "Paying 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00." (prima di pagare), "Paid 3.09 to alice automatically: …" (dopo), "Will pay 3.09 to alice in 8 s unless you object.", "Not paid: 45.00 is above your automatic limit of 20.00. Approve it yourself.", tetto giornaliero, invoice scaduto, contestata, confermata da Dave, scaduta, coperta, annullata, viaggio chiuso.
+- Come si prova: `pnpm test` (blocco "A3 decideAutoPay": gli 8 casi della checklist più frasi degli stati, policy abbassata dopo l'assenso, finestra mobile esatta, creditore escluso).
+- Problemi noti: un creditore escluso non viene pagato in automatico (il rail on-chain B5 è P1): la riga resta `due` e poi `overdue`, e Dave la può coprire.
+
 ### A2, sab 17/10
 - Funziona: `validateEvent(stored, trip, deps)` (`packages/ledger/src/validate.ts`, riesportato da `kitty.ts`): catena (seq, prevHash, hash), firma via `deps.verify` su `signingMessage(inner)`, tripId, nonce (replay), autori (`EVENT_AUTHOR`: tipi di Dave solo da Dave, tipi dei membri mai da Dave, autore ammesso tranne `TRIP_CREATED`/`MEMBER_JOINED`), viaggio chiuso (solo `CHECKPOINT`), e le regole di ogni tipo di SPEC §9.3. Non lancia mai: un errore del decoder o del ledger diventa un rifiuto con il motivo.
 - **Come chiamarlo (relay e agente, avvisare C):** `validateEvent(stored, deriveTrip(precedenti, new Date(stored.receivedAt)), deps)`, così lo stato delle righe è quello al momento della ricezione. La forma va già parsata con `StoredEventSchema`.
