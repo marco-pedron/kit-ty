@@ -614,7 +614,7 @@ describe('backupNow (B6)', () => {
           num_usable_channels: 2,
         },
       }));
-    const backup = { password: 'pw', unlockBody: { password: 'pw' }, hostDir };
+    const backup = { password: 'pw', unlockBody: { password: 'pw' }, settleMs: 0, hostDir };
     const { wallet } = setup(rln, { backup });
     return { rln, wallet, hostDir };
   }
@@ -642,6 +642,41 @@ describe('backupNow (B6)', () => {
     const { rln, wallet } = backupSetup({ failBackup: true });
     expect(await codeOf(wallet.backupNow())).toBeDefined();
     expect(rln.count('/unlock')).toBe(1);
+  });
+
+  it('a node stuck after the unlock does not hold the payment queue forever', async () => {
+    const { rln, hostDir } = backupSetup();
+    const { wallet } = setup(rln, {
+      backup: {
+        password: 'pw',
+        unlockBody: { password: 'pw' },
+        settleMs: 0,
+        hostDir,
+        timeoutMs: 50,
+      },
+      // /unlock never answers, as the hung node did
+      fetch: (req) =>
+        new URL(req.url).pathname === '/unlock' ? new Promise(() => undefined) : rln.fetch(req),
+    });
+    expect(await codeOf(wallet.backupNow())).toBe('NODE_UNREACHABLE');
+    // the queue moved on: the payment is attempted (and fails here on the fake invoice)
+    await wallet.pay('lnbc-not-decoded').catch(() => undefined);
+    expect(rln.count('/decodelninvoice')).toBe(1);
+  });
+
+  it('no other request reaches the node from the lock until after the unlock', async () => {
+    const { rln, wallet } = backupSetup();
+    rln.on('/assetbalance', () => ({
+      json: { settled: 0, future: 0, spendable: 0, offchain_outbound: 0, offchain_inbound: 0 },
+    }));
+    rln.on('/refreshtransfers', () => ({ json: { transfers: {} } }));
+    const backup = wallet.backupNow();
+    const read = wallet.balances();
+    await Promise.all([backup, read]);
+    const order = rln.calls.map((c) => c.endpoint);
+    const locked = order.slice(order.indexOf('/lock'), order.indexOf('/unlock') + 1);
+    expect(locked).toEqual(['/lock', '/backup', '/unlock']);
+    expect(order).toContain('/assetbalance');
   });
 
   it('a payment asked during a backup waits for the unlock', async () => {
