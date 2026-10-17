@@ -8,6 +8,7 @@ import {
 import { FakeLightningNetwork } from '../../dev-fakes/fake-wallet.js';
 import { CoordinatorAgent } from '../dave.js';
 import { MemberAgent } from '../member-agent.js';
+import type { RelayClient } from '../../relay/types.js';
 import { MemoryRelay } from './memory-relay.js';
 
 // TESTS ONLY: four agents on one fake Lightning network and one in-memory relay, a manual
@@ -26,29 +27,39 @@ export interface Demo {
   tickAll: () => Promise<void>;
 }
 
-export async function demo(
-  opts: { strict?: boolean; retryMs?: number; params?: Partial<TripParams> } = {},
-): Promise<Demo> {
-  const net = new FakeLightningNetwork();
-  let t = Date.now();
-  const now = () => new Date(t);
-  const relay = new MemoryRelay(net, now, { strict: opts.strict ?? true });
+export interface TripAgents {
+  agents: Record<MemberId, MemberAgent> & { dave: CoordinatorAgent };
+  /** One tick of every agent, then waits for their payments. */
+  tickAll: () => Promise<void>;
+}
+
+/** The four agents on any RelayClient, and the trip set up through the flows. */
+export async function setUpTrip(p: {
+  net: FakeLightningNetwork;
+  relay: RelayClient;
+  now: () => Date;
+  retryMs?: number;
+  params?: Partial<TripParams>;
+}): Promise<TripAgents> {
   const common = {
-    relay,
+    relay: p.relay,
     verifier: fakeVerifier,
-    now,
-    ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
+    now: p.now,
+    ...(p.retryMs !== undefined && { retryMs: p.retryMs }),
   };
-  const dave = new CoordinatorAgent({ ...common, wallet: net.wallet('dave') });
+  const dave = new CoordinatorAgent({ ...common, wallet: p.net.wallet('dave') });
   const travelers = Object.fromEntries(
-    MEMBER_IDS.map((id) => [id, new MemberAgent({ ...common, actor: id, wallet: net.wallet(id) })]),
+    MEMBER_IDS.map((id) => [
+      id,
+      new MemberAgent({ ...common, actor: id, wallet: p.net.wallet(id) }),
+    ]),
   ) as Record<MemberId, MemberAgent>;
   const agents = { ...travelers, dave };
 
   await dave.createTrip({
     name: 'Vietnam 2026',
-    assetId: net.assetId,
-    params: { ...DEMO_TRIP_PARAMS, ...opts.params },
+    assetId: p.net.assetId,
+    params: { ...DEMO_TRIP_PARAMS, ...p.params },
   });
   await dave.setRate({ asOf: '2026-10-17', source: 'infra/rates.json', rates: { VND: '26350' } });
   for (const id of MEMBER_IDS) {
@@ -56,19 +67,36 @@ export async function demo(
     await dave.admit(id);
     await dave.channelsReady(id, { tripChannelId: `trip-${id}`, liquidityChannelId: `liq-${id}` });
   }
-
   const tickAll = async () => {
     for (const a of Object.values(agents)) await a.tick();
     for (const a of Object.values(agents)) await a.idle();
   };
+  return { agents, tickAll };
+}
+
+/** A manual clock, starting now. */
+export function manualClock(): { now: () => Date; advance: (seconds: number) => void } {
+  let t = Date.now();
   return {
-    net,
-    relay,
-    agents,
+    now: () => new Date(t),
     advance: (s) => {
       t += s * 1000;
     },
-    now,
-    tickAll,
   };
+}
+
+export async function demo(
+  opts: { strict?: boolean; retryMs?: number; params?: Partial<TripParams> } = {},
+): Promise<Demo> {
+  const net = new FakeLightningNetwork();
+  const { now, advance } = manualClock();
+  const relay = new MemoryRelay(net, now, { strict: opts.strict ?? true });
+  const { agents, tickAll } = await setUpTrip({
+    net,
+    relay,
+    now,
+    ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
+    ...(opts.params !== undefined && { params: opts.params }),
+  });
+  return { net, relay, agents, advance, now, tickAll };
 }

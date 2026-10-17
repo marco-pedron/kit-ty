@@ -1,4 +1,5 @@
 import { ERROR_ACTIONS, type ApiError, type ErrorCode } from '@kitty/shared';
+import { RelayError } from '../relay/errors.js';
 import { WalletError } from '../wallet/errors.js';
 
 /** A flow that cannot proceed, with a shared code so routes map it to an ApiError. */
@@ -20,7 +21,7 @@ export class FlowError extends Error {
 
 /** Any failure of a flow as the ApiError shown in the UI, with its suggested action. */
 export function apiErrorOf(err: unknown): ApiError {
-  return err instanceof WalletError || err instanceof FlowError
+  return err instanceof WalletError || err instanceof FlowError || err instanceof RelayError
     ? err.toApiError()
     : { code: 'INTERNAL', message: String(err), action: ERROR_ACTIONS.INTERNAL };
 }
