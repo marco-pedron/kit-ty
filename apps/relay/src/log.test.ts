@@ -1,3 +1,4 @@
+import { LedgerError } from '@kitty/ledger';
 import { GENESIS_HASH, storedEventHash } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
 import { openRelayDb } from './db.js';
@@ -80,9 +81,28 @@ describe('event log', () => {
     });
   });
 
-  it('answers 501 while the real validateEvent is a stub, and stores nothing', () => {
-    const db = openRelayDb(':memory:');
-    const log = createEventLog({ db, deps: testDeps });
+  it("uses the ledger's validateEvent by default", () => {
+    const log = createEventLog({ db: openRelayDb(':memory:'), deps: testDeps });
+    const forged = rateSet();
+    forged.sig = 'not-a-signature';
+    expect(log.append(wire(tripCreated())).ok).toBe(true);
+    expect(log.append(wire(forged))).toMatchObject({
+      ok: false,
+      status: 409,
+      error: { code: 'INVALID_EVENT', message: 'invalid signature' },
+    });
+    expect(log.append(wire(rateSet())).ok).toBe(true);
+    expect(log.list().map((e) => e.seq)).toEqual([1, 2]);
+  });
+
+  it('answers 501 to a validator that is not implemented yet, and stores nothing', () => {
+    const log = createEventLog({
+      db: openRelayDb(':memory:'),
+      deps: testDeps,
+      validate: () => {
+        throw new LedgerError('NOT_IMPLEMENTED', 'not yet');
+      },
+    });
     expect(log.append(wire(tripCreated()))).toMatchObject({
       ok: false,
       status: 501,

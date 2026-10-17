@@ -16,7 +16,7 @@ import { z } from 'zod';
 import type { Validate } from '../log.js';
 
 // Test-only signatures: sha256 of author and message. Forgeable on purpose; the real verifier
-// is task B4 and the real validateEvent is task A2.
+// is task B4.
 
 export const KEY = {
   alice: 'a'.repeat(64),
@@ -35,8 +35,9 @@ export const testDeps: ValidationDeps = {
 };
 
 /**
- * A stand-in for the ledger's validateEvent (task A2), so C1 does not wait for it. It checks
- * what the relay depends on: signature, chain, nonce, and that the log opens with TRIP_CREATED.
+ * A minimal stand-in for the ledger's validateEvent, so the relay's own tests do not depend on
+ * every ledger rule. It checks what the relay relies on: signature, chain, nonce, and that the
+ * log opens with TRIP_CREATED.
  */
 export const fakeValidate: Validate = (stored, trip, deps) => {
   const { inner, sig } = stored.signed;

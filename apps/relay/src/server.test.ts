@@ -68,12 +68,17 @@ describe('relay HTTP', () => {
     expect(list.json<unknown[]>()).toHaveLength(1);
   });
 
-  it('answers 501 while the ledger validateEvent is a stub', async () => {
+  it("validates with the ledger's validateEvent by default", async () => {
     const a = buildRelay({ logger: false, deps: testDeps });
     app = a;
-    const r = await post(a, wire(tripCreated()));
-    expect(r.statusCode).toBe(501);
-    expect(r.json()).toMatchObject({ error: { code: 'NOT_IMPLEMENTED' } });
+    expect((await post(a, wire(tripCreated()))).statusCode).toBe(201);
+    const forged = rateSet();
+    forged.sig = 'not-a-signature';
+    const r = await post(a, wire(forged));
+    expect(r.statusCode).toBe(409);
+    expect(r.json()).toMatchObject({
+      error: { code: 'INVALID_EVENT', message: 'invalid signature' },
+    });
   });
 });
 
