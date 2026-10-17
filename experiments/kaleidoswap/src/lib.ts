@@ -26,14 +26,16 @@ export function nodeUrl(m: Member): string {
 export const peerAddr = (m: Member) => `rln-${m}:${PEER_PORT[m]}`;
 
 export class RlnError extends Error {
-  constructor(
-    readonly member: Member,
-    readonly path: string,
-    readonly status: number,
-    readonly rlnName: string | undefined,
-    message: string,
-  ) {
+  readonly member: Member;
+  readonly path: string;
+  readonly status: number;
+  readonly rlnName: string | undefined;
+  constructor(member: Member, path: string, status: number, rlnName: string | undefined, message: string) {
     super(`${member} ${path} → ${status} ${rlnName ?? ''}: ${message}`);
+    this.member = member;
+    this.path = path;
+    this.status = status;
+    this.rlnName = rlnName;
   }
 }
 
@@ -113,9 +115,10 @@ function electrsHeight(): Promise<number> {
     s.setTimeout(5000, () => (s.destroy(), reject(new Error('electrs timeout'))));
     s.on('data', (d) => {
       buf += d;
-      if (buf.includes('\n')) {
+      const reply = buf.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).find((m) => m?.id === 1);
+      if (reply) {
         s.end();
-        resolve(JSON.parse(buf).result.height);
+        resolve(reply.result.height);
       }
     });
     s.on('error', reject);

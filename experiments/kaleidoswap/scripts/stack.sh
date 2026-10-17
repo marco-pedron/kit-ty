@@ -20,7 +20,7 @@ up)
     fi
     profile=()
     [ "${2:-}" = full ] && profile=(--profile full)
-    "${COMPOSE[@]}" "${profile[@]}" up -d
+    "${COMPOSE[@]}" ${profile[@]+"${profile[@]}"} up -d
     ;;
 down) "${COMPOSE[@]}" --profile full stop ;;
 reset)
