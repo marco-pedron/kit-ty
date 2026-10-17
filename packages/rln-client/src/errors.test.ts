@@ -3,7 +3,11 @@ import { isRlnErrorBody, toRlnError } from './errors.js';
 
 describe('toRlnError', () => {
   it('keeps the name of an { error, code, name } body', () => {
-    const e = toRlnError('/sendpayment', 403, { error: 'Node is locked', code: 403, name: 'LockedNode' });
+    const e = toRlnError('/sendpayment', 403, {
+      error: 'Node is locked',
+      code: 403,
+      name: 'LockedNode',
+    });
     expect(e.rlnName).toBe('LockedNode');
     expect(e.status).toBe(403);
     expect(e.detail).toBe('Node is locked');
