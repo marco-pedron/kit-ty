@@ -12,6 +12,12 @@ import {
   payment,
   PREIMAGE,
   rlnError,
+  channel,
+  CHARLIE_NODE,
+  DAVE_NODE,
+  FakeChain,
+  LIQ_FUNDING,
+  TRIP_FUNDING,
 } from './test/fake-rln.js';
 
 // BIP-39 test mnemonic (never a real wallet). Expected values computed once and cross-checked:
@@ -21,7 +27,10 @@ const TEST_MNEMONIC =
 const TEST_APP_SECRET = 'cf92a79ac618944a5cb76c837e9189da1d825ec4b5d766e131472331cfdddce4';
 const TEST_APP_PUBKEY = 'e33fe1b9405c076379116fa854c93edd006a36076d3e687c68b94362c7fbd14b';
 
-function setup(rln = new FakeRln(), over: { payTimeoutMs?: number } = {}) {
+function setup(
+  rln = new FakeRln(),
+  over: Partial<ConstructorParameters<typeof RlnWallet>[0]> = {},
+) {
   const wallet = new RlnWallet({
     nodeUrl: 'http://127.0.0.1:3001',
     appSecretHex: TEST_APP_SECRET,
@@ -341,11 +350,154 @@ describe('RLN errors become WalletError codes', () => {
     expect(await codeOf(setup(rln).wallet.balances())).toBe('INTERNAL');
   });
 
-  it('B6, B7 and B9 methods say they are not implemented yet', async () => {
+  it('B6 and B9 methods say they are not implemented yet', async () => {
     const { wallet } = setup();
     expect(await codeOf(wallet.openLiquidity())).toBe('NOT_IMPLEMENTED');
-    expect(await codeOf(wallet.closeChannelsWith())).toBe('NOT_IMPLEMENTED');
     expect(await codeOf(wallet.backupNow())).toBe('NOT_IMPLEMENTED');
+  });
+});
+
+describe('balances refresh transfers (B7: swept closes show on-chain)', () => {
+  it('calls /refreshtransfers with the spike body, at most once per interval', async () => {
+    let t = 0;
+    const { rln, wallet } = setup(undefined, { now: () => t, refreshEveryMs: 15_000 });
+    rln.on('/refreshtransfers', () => ({ json: { transfers: {} } }));
+    await wallet.balances();
+    await wallet.balances();
+    expect(rln.count('/refreshtransfers')).toBe(1);
+    expect(rln.calls.find((c) => c.endpoint === '/refreshtransfers')?.body).toEqual({
+      asset_id: null,
+      filter: [],
+      skip_sync: false,
+    });
+    t = 15_000;
+    await wallet.balances();
+    expect(rln.count('/refreshtransfers')).toBe(2);
+  });
+
+  it('a failed refresh still returns the balance', async () => {
+    const { rln, wallet } = setup();
+    rln.on('/refreshtransfers', () => rlnError(500, 'Unexpected'));
+    expect((await wallet.balances()).onchainCents).toBe(5000n);
+  });
+});
+
+describe('closeChannelsWith (B7)', () => {
+  function daveSetup(chain = new FakeChain()) {
+    const rln = new FakeRln()
+      .on('/nodeinfo', () => ({ json: { pubkey: DAVE_NODE, rgb_htlc_min_msat: 3_000_000 } }))
+      .on('/listchannels', () => ({
+        json: {
+          channels: [
+            channel('trip', TRIP_FUNDING),
+            channel('liq', LIQ_FUNDING),
+            channel('other', 'aa'.repeat(32), { peer_pubkey: DAVE_NODE.replace('02', '03') }),
+          ],
+        },
+      }))
+      .on('/listpeers', () => ({ json: { peers: [{ pubkey: CHARLIE_NODE }] } }))
+      .on('/closechannel', (b) => {
+        chain.close(b.channel_id === 'trip' ? TRIP_FUNDING : LIQ_FUNDING);
+        return { json: {} };
+      })
+      .on('/refreshtransfers', () => ({ json: { transfers: {} } }));
+    const { wallet } = setup(rln, {
+      coordinator: {
+        esplora: chain.esplora,
+        miner: chain.miner,
+        blockWaitMs: 0,
+        mempoolTimeoutMs: 50,
+      },
+    });
+    return { rln, wallet, chain };
+  }
+
+  it('is refused on any wallet but dave, before touching the node', async () => {
+    const { rln, wallet } = setup();
+    expect(await codeOf(wallet.closeChannelsWith(CHARLIE_NODE))).toBe('NOT_ALLOWED');
+    expect(rln.calls).toEqual([]);
+  });
+
+  it('closes both channels cooperatively, confirms, waits for the sweep, links esplora', async () => {
+    const { rln, wallet, chain } = daveSetup();
+    const r = await wallet.closeChannelsWith(CHARLIE_NODE);
+    expect(r.txids).toHaveLength(2);
+    expect(r.explorerUrls).toEqual(r.txids.map((t) => `http://127.0.0.1:3010/tx/${t}`));
+    expect(r.swept).toBe(true);
+    // 1 block to confirm, then the sweep confirms 6 blocks later (spike Q7: h164 → h170)
+    expect(r.blocksMined).toBe(7);
+    expect(chain.mined).toBe(7);
+    const closes = rln.calls.filter((c) => c.endpoint === '/closechannel');
+    expect(closes.map((c) => c.body)).toEqual([
+      { channel_id: 'trip', peer_pubkey: CHARLIE_NODE, force: false },
+      { channel_id: 'liq', peer_pubkey: CHARLIE_NODE, force: false },
+    ]);
+    for (const t of r.txids) expect(chain.txs.get(t)?.status.confirmed).toBe(true);
+    expect(rln.count('/refreshtransfers')).toBe(1);
+  });
+
+  it('never forces: an offline member closes nothing', async () => {
+    const { rln, wallet } = daveSetup();
+    rln.on('/listpeers', () => ({ json: { peers: [] } }));
+    expect(await codeOf(wallet.closeChannelsWith(CHARLIE_NODE))).toBe('RECEIVER_UNREACHABLE');
+    expect(rln.count('/closechannel')).toBe(0);
+  });
+
+  it('no channel with the member is NOT_FOUND', async () => {
+    const { rln, wallet } = daveSetup();
+    rln.on('/listchannels', () => ({ json: { channels: [] } }));
+    expect(await codeOf(wallet.closeChannelsWith(CHARLIE_NODE))).toBe('NOT_FOUND');
+  });
+
+  it('a channel not Opened stops everything before any close', async () => {
+    const { rln, wallet } = daveSetup();
+    rln.on('/listchannels', () => ({
+      json: {
+        channels: [
+          channel('trip', TRIP_FUNDING),
+          channel('liq', LIQ_FUNDING, { status: 'Closing' }),
+        ],
+      },
+    }));
+    expect(await codeOf(wallet.closeChannelsWith(CHARLIE_NODE))).toBe('INTERNAL');
+    expect(rln.count('/closechannel')).toBe(0);
+  });
+
+  it('a refused second close says which channel is already closing, and never forces', async () => {
+    const { rln, wallet, chain } = daveSetup();
+    rln.on('/closechannel', (b) => {
+      if (b.channel_id === 'liq') return rlnError(400, 'FailedClosingChannel');
+      chain.close(TRIP_FUNDING);
+      return { json: {} };
+    });
+    const err = await wallet.closeChannelsWith(CHARLIE_NODE).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(WalletError);
+    expect((err as WalletError).message).toMatch(/liq refused .*already closing: trip/);
+    expect(rln.calls.every((c) => c.body.force !== true)).toBe(true);
+  });
+
+  it('a close that never reaches the mempool fails clearly after the timeout', async () => {
+    const { rln, wallet, chain } = daveSetup();
+    rln.on('/closechannel', () => ({ json: {} }));
+    const err = await wallet.closeChannelsWith(CHARLIE_NODE).catch((e: unknown) => e);
+    expect((err as WalletError).message).toMatch(/no closing tx after 50 ms for trip, liq/);
+    expect((err as WalletError).action).toMatch(/Not forcing/);
+    expect(chain.mined).toBe(0);
+  });
+
+  it('stops at the 12-block budget and reports swept: false', async () => {
+    const chain = new FakeChain();
+    chain.sweepAfter = 100;
+    const { wallet } = daveSetup(chain);
+    const r = await wallet.closeChannelsWith(CHARLIE_NODE);
+    expect(r).toMatchObject({ swept: false, blocksMined: 12 });
+    expect(chain.mined).toBe(12);
+  });
+
+  it('rejects a malformed pubkey', async () => {
+    const { rln, wallet } = daveSetup();
+    expect(await codeOf(wallet.closeChannelsWith('nope'))).toBe('VALIDATION_ERROR');
+    expect(rln.calls).toEqual([]);
   });
 });
 

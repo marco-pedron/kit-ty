@@ -99,3 +99,126 @@ export const rlnError = (status: number, name: string, error = name): Reply => (
   status,
   json: { error, code: status, name },
 });
+
+// --- B7: dave's channels with charlie, and the chain they close on ----------------------
+
+export const CHARLIE_NODE = '020150342089c80a83507b7c1cf3e5ee27e1f08a3dfc7d119e121c79829f51273d';
+export const DAVE_NODE = '02ee056673eb9280f4dba7831f3b22cd1b01240cc0f51369c1b6e1c7ac969519a7';
+export const TRIP_FUNDING = 'f1'.repeat(32);
+export const LIQ_FUNDING = 'f2'.repeat(32);
+
+export function channel(
+  channelId: string,
+  fundingTxid: string,
+  over: Record<string, unknown> = {},
+) {
+  return {
+    channel_id: channelId,
+    funding_txid: fundingTxid,
+    peer_pubkey: CHARLIE_NODE,
+    status: 'Opened',
+    ready: true,
+    capacity_sat: 1_000_000,
+    is_usable: true,
+    public: true,
+    ...over,
+  };
+}
+
+type Tx = {
+  txid: string;
+  vout: { value: number; scriptpubkey_type: string }[];
+  status: { confirmed: boolean };
+};
+
+/**
+ * A regtest chain for unit tests: funding txs exist; /closechannel puts a closing tx in the
+ * mempool (unless told not to); each mined block confirms the mempool, and the sweep of a
+ * closing tx's outputs is broadcast `sweepAfter` blocks after it confirms.
+ */
+export class FakeChain {
+  readonly txs = new Map<string, Tx>();
+  readonly spends = new Map<string, { txid: string; confirmedAt: number | null }>();
+  mempool: string[] = [];
+  height = 124;
+  mined = 0;
+  /** Spike Q7: close confirmed at h164, sweep confirmed at h170 (broadcast at h169). */
+  sweepAfter = 5;
+  private confirmedAt = new Map<string, number>();
+  private closes = 0;
+
+  constructor() {
+    for (const f of [TRIP_FUNDING, LIQ_FUNDING])
+      this.addTx(
+        f,
+        [
+          { value: 0, scriptpubkey_type: 'op_return' },
+          { value: 1_000_000, scriptpubkey_type: 'v0_p2wsh' },
+          { value: 130_213, scriptpubkey_type: 'v1_p2tr' },
+        ],
+        true,
+      );
+  }
+
+  addTx(txid: string, vout: Tx['vout'], confirmed = false): void {
+    this.txs.set(txid, { txid, vout, status: { confirmed } });
+    if (confirmed) this.confirmedAt.set(txid, this.height);
+  }
+
+  /** Called by /closechannel: spends output 1 of the funding tx. Returns the closing txid. */
+  close(fundingTxid: string): string {
+    this.closes += 1;
+    const txid = `c${this.closes}`.padEnd(64, '0');
+    this.addTx(txid, [
+      { value: 0, scriptpubkey_type: 'op_return' },
+      { value: 990_000, scriptpubkey_type: 'v0_p2wpkh' },
+      { value: 8_000, scriptpubkey_type: 'v0_p2wpkh' },
+    ]);
+    this.spends.set(`${fundingTxid}:1`, { txid, confirmedAt: null });
+    this.mempool.push(txid);
+    return txid;
+  }
+
+  readonly miner = {
+    mine: async (blocks: number): Promise<number> => {
+      for (let b = 0; b < blocks; b++) {
+        this.height += 1;
+        this.mined += 1;
+        for (const t of this.mempool) {
+          const tx = this.txs.get(t);
+          if (tx) tx.status.confirmed = true;
+          this.confirmedAt.set(t, this.height);
+          for (const s of this.spends.values()) if (s.txid === t) s.confirmedAt = this.height;
+        }
+        this.mempool = [];
+        // nodes sweep the outputs of closes confirmed long enough ago
+        for (const [t, at] of this.confirmedAt)
+          if (t.startsWith('c') && this.height - at >= this.sweepAfter) {
+            const sweep = `5${t.slice(1, 3)}`.padEnd(64, '5');
+            if (this.txs.has(sweep)) continue;
+            this.addTx(sweep, [{ value: 990_000, scriptpubkey_type: 'v0_p2wpkh' }]);
+            this.mempool.push(sweep);
+            for (const i of [1, 2])
+              this.spends.set(`${t}:${i}`, { txid: sweep, confirmedAt: null });
+          }
+      }
+      return this.height;
+    },
+  };
+
+  readonly esplora = {
+    baseUrl: 'http://127.0.0.1:3010',
+    tx: async (txid: string) => this.txs.get(txid) ?? null,
+    outspends: async (txid: string) => {
+      const tx = this.txs.get(txid);
+      if (!tx) throw new Error(`unknown tx ${txid}`);
+      return tx.vout.map((_, i) => {
+        const s = this.spends.get(`${txid}:${i}`);
+        return s
+          ? { spent: true, txid: s.txid, status: { confirmed: s.confirmedAt !== null } }
+          : { spent: false };
+      });
+    },
+    tipHeight: async () => this.height,
+  };
+}
