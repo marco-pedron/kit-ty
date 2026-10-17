@@ -8,11 +8,11 @@
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [x] C2 RelayClient (branch `c/C2-relay-client`)
 - [x] C3 Rotte dell'agente (branch `c/C3-agent-routes`)
-- [ ] C4 UI viaggiatore (piano ridotto, 4 PR)
+- [x] C4 UI viaggiatore (piano ridotto, 4 PR; Attività, Prova, Registro e modulo manuale fuori: C6 e P1)
   - [x] C4a shell, polling, navigazione, QR, Profile (branch `c/C4a-shell`)
   - [x] C4b Home con Approve/Dispute (branch `c/C4b-home`)
   - [x] C4c New expense (branch `c/C4c-new-expense`)
-  - [ ] C4d Groups e Group settings
+  - [x] C4d Groups e Group settings (branch `c/C4d-groups`)
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -24,7 +24,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C4d Groups e Group settings.
+- C5 UI Dave (contestazioni, insolventi, "Cover and exclude", tasso del giorno), poi C6 Prova e Registro. P1: modulo manuale con `expenseShares`.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -45,6 +45,11 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4d, sab 17/10 19:50
+- Funziona: Groups con il gruppo reale (saldo del canale e modalità), "Group 2" simulato in grigio e non cliccabile se `SHOW_DEMO_SECOND_GROUP`, "Join group" disattivato. Group settings: slider unico da 0 a D (`trip.params.tripChannelCents`) a passi di 0.50, etichette "Always ask me" / "Pay automatically up to X DUSD" / "Automatic payment", salvataggio al rilascio con `PUT /policy` (policy intera, tetto giornaliero rimandato invariato e mostrato in sola lettura), membri con stato active / insolvent (una parte `overdue`) / excluded, durate delle finestre lette dai parametri del viaggio.
+- Come si prova: `pnpm dev:fakes`, `?as=charlie#/group`, spostare lo slider; la barra in alto della Home mostra la nuova modalità. Test: `slider.test.ts`.
+- Problemi noti: nessuno noto; nessuna verifica visiva automatica.
+
 ### C4c, sab 17/10 19:35
 - Funziona: New expense da 📷 (pulsante centrale) o swipe. Foto (JPEG/PNG/WebP) → sha256 calcolato nel browser per `receiptImageSha256` → `POST /expenses/extract` con il tempo trascorso → righe modificabili (esercente, etichette, importi nella valuta dello scontrino come `bigint`, tasse, mancia, totale; scarto mostrato, mai corretto da solo) → frase → `POST /expenses/split` (con la domanda di chiarimento mandata una volta) → parti dall'anteprima del ledger → `POST /expenses` → ritorno alla Home. 🎤 disattivato con "soon".
 - Come si prova: `pnpm dev:fakes`, `?as=alice#/new`, una foto qualsiasi (con i fake l'AI dà sempre la cena: 3.09 / 3.09 / 3.50). Verificato sulle rotte con `infra/fixtures/receipts/vnd-dinner.png`. Test: `receipt-edit.test.ts`.
