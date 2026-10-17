@@ -331,8 +331,8 @@ await runCase('11. (cont.) dave wakes up after the refund: his claim fails, loss
   const p = await getPayment('dave', s.hash, 'Outbound');
   const late = tool('spend', { wallet: 'dave-htlc', path: 'claim', hash: d.hash!, claim: d.claimKey, refund: d.refundKey, timeout: d.timeout, secret: d.claimSecret, preimage: p!.preimage!, outpoint: d.outpoint!, 'asset-id': assetId, amount: d.amount, 'no-mark': true }) as { tx_hex: string; operation_id: string };
   const r = await broadcast(late.tx_hex);
-  tool('abort', { wallet: 'dave-htlc', op: late.operation_id });
   assert(!r.ok, 'late claim should fail: the HTLC is already refunded');
+  tool('abort', { wallet: 'dave-htlc', op: late.operation_id });
   const ch = await chan('charlie', 'dave');
   return { note: `late claim: ${r.ok ? '' : r.error.slice(0, 80)}; dave lost ${d.amount} units (10.00 DUSD) + 3000 sat of the HTLC; charlie has ${ch.asset_local_amount} in the channel and got ${d.amount} back on-chain. The watcher is critical.` };
 });
@@ -345,15 +345,20 @@ await runCase('7. dave closes charlie channel: DUSD back to charlie on-chain aft
   const hClose = await height();
   await post('dave', '/closechannel', { channel_id: c.channel_id, peer_pubkey: pk.charlie, force: false });
   await waitFor('close tx in mempool', async () => (await mempool()).length > 0, 60_000, 500);
+  // LDK's OutputSweeper runs on a timer, not per block: mine one block at a time and give it
+  // time to broadcast the sweep (budget 12 blocks, as in SPEC §15)
   let n = 0;
-  while (n < 14) {
+  let tSweep = 0;
+  while (n < 12) {
     await mine(1);
     n++;
-    await refresh('charlie');
+    const t = Date.now();
+    await waitFor('sweep or timeout', async () => (await refresh('charlie'), (await settled('charlie')) === before + charlieSide || (await mempool()).length > 0), 20_000, 2000).catch(() => undefined);
+    tSweep += Date.now() - t;
     if ((await settled('charlie')) === before + charlieSide) break;
   }
   assert((await settled('charlie')) === before + charlieSide, `charlie settled ${await settled('charlie')} expected ${before + charlieSide}`);
-  return { note: `charlie side ${charlieSide} → on-chain after ${n} blocks (close at ${hClose}); charlie settled ${before}→${await settled('charlie')}` };
+  return { note: `charlie side ${charlieSide} → on-chain after ${n} blocks (close at ${hClose}, ${Math.round(tSweep / 1000)} s waiting for the sweeper); charlie settled ${before}→${await settled('charlie')}` };
 });
 
 // ======================= conservation =======================

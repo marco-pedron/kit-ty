@@ -138,6 +138,8 @@ export async function travelerRefund(s: TravelerSwap): Promise<{ refundTxid: str
   await mine(1);
   tool('apply', { wallet: w, op: refund.operation_id, 'asset-id': assetIdOf() });
   await mine(1);
+  // the refunded allocation is spendable only after the wallet refreshes (balance does it)
+  await waitFor(`${w} refund settled`, async () => ((tool('balance', { wallet: w, 'asset-id': assetIdOf() }).asset?.settled as number) ?? 0) >= lock.amount, 90_000, 2000);
   const before = (await assetBalance(s.traveler, assetIdOf())).settled;
   const rid = await rlnRgbInvoice(s.traveler, assetIdOf(), lock.amount);
   const sent = tool('send', { wallet: w, 'asset-id': assetIdOf(), amount: lock.amount, 'recipient-id': rid });
