@@ -158,7 +158,9 @@ export class MemberAgent {
    * while the node does not answer: the UI shows "balance not available", never a stale number.
    */
   async balances(): Promise<WalletBalances | null> {
-    return this.wallet.balances().catch(() => null);
+    // during a backup (~6 s, B6) the node is not asked: "not available", never a hung /state
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 1_500));
+    return Promise.race([this.wallet.balances().catch(() => null), timeout]);
   }
 
   activity(): readonly ActivityItem[] {

@@ -44,17 +44,15 @@ export function startAgents(p: {
 }): AgentRuntime {
   // FakeWallet signs with fakeSign; the real wallet (B3) with ed25519 (B4).
   const verifier = p.fakes ? fakeVerifier : signatureVerifier;
-  const common = {
-    relay: p.relay,
-    verifier,
-    ...(p.now !== undefined && { now: p.now }),
-    // B6: back each node up 10 s after it changed (SPEC §12)
-    backupQuietMs: p.backupQuietMs ?? BACKUP_QUIET_MS,
-  };
+  const common = { relay: p.relay, verifier, ...(p.now !== undefined && { now: p.now }) };
+  // B6: no automatic backup of dave's node. Once in ~20 lock → unlock cycles RLN d4762ac hung
+  // after the unlock on dave's node, the hub every payment goes through (docs/status/b.md, B6).
   const dave = new CoordinatorAgent({ ...common, wallet: p.wallets.dave });
   const agents = new Map<ActorId, MemberAgent>([['dave', dave]]);
+  // B6: each traveler's node is backed up 10 s after it changed (SPEC §12)
+  const backupQuietMs = p.backupQuietMs ?? BACKUP_QUIET_MS;
   for (const id of MEMBER_IDS)
-    agents.set(id, new MemberAgent({ ...common, actor: id, wallet: p.wallets[id] }));
+    agents.set(id, new MemberAgent({ ...common, actor: id, wallet: p.wallets[id], backupQuietMs }));
 
   const lastError = new Map<ActorId, string>();
   const timer = setInterval(() => {
