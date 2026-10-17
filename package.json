@@ -24,7 +24,8 @@
     "e2e:close": "vitest run -c apps/agent/src/wallet/vitest.close.config.ts",
     "e2e:demo": "./infra/scripts/e2e.sh demo",
     "ai:eval": "pnpm --filter @kitty/agent ai:eval",
-    "ai:eval:offline": "sandbox-exec -f infra/scripts/offline.sb pnpm --offline --filter @kitty/agent ai:eval"
+    "ai:eval:offline": "sandbox-exec -f infra/scripts/offline.sb pnpm --offline --filter @kitty/agent ai:eval",
+    "e2e:liquidity": "./infra/scripts/e2e.sh liquidity"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
