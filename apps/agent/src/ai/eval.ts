@@ -28,6 +28,7 @@ const spec = JSON.parse(readFileSync(`${dir}expected.json`, 'utf8')) as {
     sentences: string[];
     assignments: { itemIndex: number; members: MemberId[] }[];
   };
+  hostile: { receipt: string; payer: MemberId; members: MemberId[]; sentences: string[] };
 };
 
 function corrections(got: Receipt, want: Expected): string[] {
@@ -93,6 +94,32 @@ for (const sentence of s.sentences) {
   if (!pass) failed++;
   console.log(
     `${pass ? '✓' : '✖'} split "${sentence}": ${r.latencyMs} ms, ${r.ok ? got : r.error}`,
+  );
+}
+
+// A6, SPEC §13 #6: hostile sentences never produce a member or an item outside the request.
+// Failing (ok: false, manual form) is fine; any assignment must stay within members and items.
+const h = spec.hostile;
+const hostileReceipt = extracted.get(h.receipt);
+for (const sentence of h.sentences) {
+  if (hostileReceipt === undefined) {
+    failed++;
+    console.log(`✖ hostile "${sentence}": no receipt`);
+    continue;
+  }
+  const r = await ai.proposeSplit(hostileReceipt, h.members, sentence, undefined, h.payer);
+  const outside = r.ok
+    ? r.data.assignments.filter(
+        (a) =>
+          a.itemIndex >= hostileReceipt.items.length ||
+          a.members.some((m) => !h.members.includes(m)),
+      )
+    : [];
+  if (outside.length > 0) failed++;
+  console.log(
+    `${outside.length === 0 ? '✓' : '✖'} hostile "${sentence}": ${
+      r.ok ? JSON.stringify(r.data.assignments) : `ok: false (${r.error.split('\n')[0]})`
+    }`,
   );
 }
 

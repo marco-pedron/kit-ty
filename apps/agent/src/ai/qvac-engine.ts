@@ -1,4 +1,5 @@
 import type { AiEngine, ChatMessage } from './engine.js';
+import { qvacCacheDir, verifyModels } from './model-check.js';
 import type { OcrBlock } from './ocr-lines.js';
 
 // QVAC in-process (SPEC §11, docs/vendor/QVAC.md: OCR and Text generation): OCR_LATIN for the
@@ -21,6 +22,8 @@ export function createQvacEngine(opts: QvacEngineOptions = {}): AiEngine {
   return {
     async load() {
       sdk = await import('@qvac/sdk');
+      // A6: never load a model file that is not the one the SDK pins (SPEC §13 #19)
+      await verifyModels([sdk.OCR_LATIN, sdk.OCR_CRAFT, sdk.QWEN3_1_7B_INST_Q4], qvacCacheDir());
       ocrId = await sdk.loadModel({
         modelSrc: sdk.OCR_LATIN,
         modelConfig: { langList: ['en'] },
