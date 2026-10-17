@@ -16,7 +16,8 @@
 - niente
 
 ## Prossimo passo
-- A5 ★3: stessi flussi con il wallet reale (B3), il `RelayClient` (C2) e il seed (B2); passi 2-7 con `pnpm e2e:demo` (B8). Oggi su `main` non c'è ancora C2.
+- A5 ★3: stessi flussi con il wallet reale (B3) e il seed (B2); passi 2-7 con `pnpm e2e:demo` (B8). C2 è integrato (vedi registro A5b).
+- **Per C3:** collegare le rotte a `runtime.agents` di `startAgents` (`apps/agent/src/flows/runtime.ts`), creato in `index.ts`. Oggi `buildAgentServer` costruisce ancora i suoi `Agent` (con un'altra rete finta), usati solo da `/state` vuoto: va cambiato in `server.ts` (di C) perché riceva il runtime.
 - **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
 - A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
@@ -51,6 +52,11 @@ new MemberAgent({
   - `updatePolicy(policy)` → `Policy` per `PUT /policy`.
   - `joinTrip(policy?)` → `MemberState` (`MEMBER_JOINED` con l'invoice di legame del proprio nodo; non fa nulla se già iscritto).
 
+## Runtime (`apps/agent/src/flows/runtime.ts`, avviato da `index.ts`)
+- `index.ts` crea il `RelayClient` di C2 una volta sola (`createRelayClient({ baseUrl: config.RELAY_URL })`) e chiama `startAgents({ fakes, relay, wallets, log })` → `{ agents: Map<ActorId, MemberAgent>, dave: CoordinatorAgent, stop() }`. Un agente per attore, ciascuno con il proprio wallet; `tick()` ogni secondo; un errore viene registrato una volta sola finché non cambia (es. relay spento: `RELAY_UNREACHABLE … ` e poi `back to normal`). Verificatore: `fakeVerifier` con i fake, `signatureVerifier` (B4) senza.
+- Senza wallet reale (B3 non c'è ancora) i loop non partono: avviso nel log.
+- Con `KITTY_FAKES=1` e il registro vuoto, `seedFakeTrip` prepara il viaggio della demo sulla rete finta (crea, tasso, tre membri ammessi con canali), riprovando finché il relay risponde: `pnpm dev:fakes` ha subito un viaggio. Il seed vero è B2.
+
 ## API di `CoordinatorAgent` per C3 e B2 (`apps/agent/src/flows/dave.ts`)
 L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?, … })` (stesse opzioni di `MemberAgent`, senza `actor`: è sempre `dave`). Eredita lettura, `tick()` e `idle()`; nel tick ripubblica anche le `GUARANTEE_PAID` già pagate ma non ancora nel registro (mai ripagate). Ogni azione controlla che l'autore sia il `coordinatorPubkey` del viaggio.
 - **Seed (B2), SPEC §6.1-6.2**, in quest'ordine:
@@ -65,6 +71,12 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A5b, integrazione con C2 (sab 17/10)
+- `main` aggiornato nel branch con un merge (C2, PR #15): compila e passa senza modifiche ai flussi (`subscribe` ha un secondo argomento opzionale, compatibile).
+- `apiErrorOf` riconosce `RelayError`: un rifiuto del relay arriva al chiamante con il codice e il motivo del ledger (es. `INVALID_EVENT` "a due line cannot be contested") e l'azione.
+- I flussi usano `list(sinceSeq)` a ogni tick, non `subscribe`: il relay è locale e il polling da 1 s basta; `subscribe` potrà far partire il tick subito (P1).
+- Come si prova: `pnpm test` (`apps/agent/src/flows/relay-http.test.ts`): **passi 2-7 attraverso il relay vero** (`buildRelay` con il vero `validateEvent`, solo firme e decoder dei fake) e il `RelayClient` HTTP di C2, stessi esiti del test in memoria e testa del relay = testa di ogni agente; rifiuto del relay con motivo e azione. A mano: `KITTY_FAKES=1 RELAY_DB=':memory:' pnpm --filter @kitty/relay start` e `KITTY_FAKES=1 pnpm --filter @kitty/agent start` → 11 eventi del viaggio finto e 4 `CHECKPOINT` sul relay (provato su porte 4900/4901).
+
 ### A5b, sab 17/10
 - Controllo iniziale: su `main`, rispetto ad A5a, c'è solo il merge della PR #13. **C2 (`RelayClient`) non è su `main` né su un branch remoto**: il piano non cambia (i flussi usano l'interfaccia `RelayClient`; i test il relay in memoria).
 - Funziona (con `KITTY_FAKES=1`): `apps/agent/src/flows/dave.ts` (`CoordinatorAgent`, API sopra) e `MemberAgent.joinTrip`. `errors.ts` ora ha `apiErrorOf(err)` (qualsiasi errore → `ApiError` con azione), usato da entrambi.
