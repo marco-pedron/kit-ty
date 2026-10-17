@@ -14,6 +14,7 @@
   - [x] C4c New expense (branch `c/C4c-new-expense`)
   - [x] C4d Groups e Group settings (branch `c/C4d-groups`)
   - [x] C4e Correzioni dalla revisione del PM (branch `c/C4e-fixes`)
+  - [x] C4f Visual identity di `docs/DESIGN.md` (branch `c/C4f-design`)
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -48,6 +49,11 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4f, sab 17/10 21:15
+- Funziona: `docs/DESIGN.md` applicato a tutta `apps/web`. Variabili di §3 e §4 in `index.css`, copiate dal documento; la palette predefinita di Tailwind è spenta (`--color-*: initial`, `--shadow-*: initial`), quindi nelle classi esistono solo i token (`bg-plum`, `text-ink-muted`, …). Classi componente scritte solo con variabili: `card`, `card-attention`, `btn-primary`, `btn-secondary`, `badge`, `field`, `amount`, `range-input`. Font Zilla Slab / Fira Sans / Fira Mono. Badge del §7, slider con binario `--line`, riempimento `--teal`, pomello `--plum` e badge "Auto mode" a fine corsa. Barra in basso prugna con tre pulsanti tondi uguali. Mascotte maneki-neko in `Mascot.tsx` (zampa animata, ferma con `prefers-reduced-motion`) nel caricamento iniziale, nella lettura dello scontrino e nelle operazioni in corso dell'agente. Toast `+ty!` / `-ty!` per 3 s dal confronto tra due giri di `/state` (`toasts.ts`).
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, `?as=alice` e `?as=bob` affiancati; alice invia la cena, bob paga dopo la finestra: +ty su alice, -ty su bob. Test: `toasts.test.ts`.
+- Problemi noti: nessuna verifica visiva automatica; il disegno del gattino è una prima versione in codice, sostituibile dal PM. `docs/DESIGN.md` §4 chiede la conferma del font (Zilla Slab).
+
 ### C4e, sab 17/10 20:30
 - Bug "alice non è membro / nessuna spesa / QR vuoto": non è un bug della UI. Un `relay.sqlite` lasciato da un run precedente di `pnpm dev:fakes` non è verificabile dai nuovi agenti finti (R5 a Marco). Con il database pulito: 3 membri attivi, catena valida, `PUT /policy` accettato. Istruzioni nel README; avviso rosso in UI quando il registro è rifiutato.
 - Design dalla revisione: barra in basso con tre pulsanti di pari peso; limite per gruppo con badge a pillola ("Auto mode" verde / "Always ask" / "Limit X.XX") in Home e in Groups, il tocco apre lo slider del gruppo; tolto dal Profilo. Home con card Balance (importo grande, occhio come chip) e card del gruppo con righe di transazione (avatar, nome, descrizione, + verde / − rosso, data e ora), card di approvazione in cima. QR a schermo intero con switch Scan / Show (apre su Show; Scan = cornice e "Join group: coming soon", nessuna camera).

@@ -1,1 +1,207 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Mono&family=Fira+Sans:wght@400;600&family=Zilla+Slab:wght@500;700&display=swap');
 @import 'tailwindcss';
+
+/* Visual identity: docs/DESIGN.md §3 (palette) and §4 (type). Every colour in the app is one of
+   these variables; Tailwind's own palette is switched off below, so nothing else can creep in. */
+:root {
+  /* base neutra (bianco caldo, tinto verso il rosa della palette) */
+  --bg:         #F7F1EE;  /* sfondo dell'app */
+  --surface:    #FFFBF8;  /* card */
+  --line:       #EADDE0;  /* bordi e divisori */
+  --ink:        #2B1B28;  /* testo principale (prugna quasi nera) */
+  --ink-muted:  #7D6A78;  /* testo secondario, date */
+
+  /* palette del progetto */
+  --plum:       #81366F;  /* primario: pulsanti principali, barra in basso, titoli forti */
+  --pink:       #F25481;  /* accento: il "+" del logo, notifiche, cose che chiedono attenzione */
+  --mint:       #9CE7AB;  /* successo: Auto mode, active, pagato */
+  --teal:       #42848A;  /* informazione: importi in entrata, link, limite, avanzamento */
+
+  /* tinte chiare per sfondi di badge e banner (stessa tinta, più chiara) */
+  --plum-soft:  #EBD9E5;
+  --pink-soft:  #FDDCE6;
+  --mint-soft:  #DDF6E3;
+  --teal-soft:  #D6E8E9;
+
+  /* type (§4) */
+  --ff-slab: 'Zilla Slab', serif;
+  --ff-text: 'Fira Sans', sans-serif;
+  --ff-code: 'Fira Mono', monospace;
+  --fs-balance: 40px;
+  --fs-title: 22px;
+  --fs-amount: 17px;
+  --fs-body: 15px;
+  --fs-small: 12px;
+
+  /* shapes (§5) */
+  --radius-card: 16px;
+  --radius-button: 12px;
+  --border: 1.5px;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-plum: var(--plum);
+  --color-pink: var(--pink);
+  --color-mint: var(--mint);
+  --color-teal: var(--teal);
+  --color-plum-soft: var(--plum-soft);
+  --color-pink-soft: var(--pink-soft);
+  --color-mint-soft: var(--mint-soft);
+  --color-teal-soft: var(--teal-soft);
+
+  --shadow-*: initial;
+  --font-sans: var(--ff-text);
+  --font-slab: var(--ff-slab);
+  --font-mono: var(--ff-code);
+  --text-big: var(--fs-balance);
+  --text-title: var(--fs-title);
+  --text-amount: var(--fs-amount);
+  --text-body: var(--fs-body);
+  --text-small: var(--fs-small);
+}
+
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--ff-text);
+    font-size: var(--fs-body);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--ff-slab);
+    font-weight: 700;
+  }
+}
+
+/* ---------- components (§5, §7) ---------- */
+
+@utility card {
+  background: var(--surface);
+  border: var(--border) solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+
+/* A part waiting for me, an insolvency: pink border on pink-soft. */
+@utility card-attention {
+  background: var(--pink-soft);
+  border: var(--border) solid var(--pink);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+
+@utility btn {
+  border-radius: var(--radius-button);
+  padding: 10px 16px;
+  font-weight: 600;
+  border: var(--border) solid transparent;
+  &:disabled {
+    background: var(--line);
+    border-color: var(--line);
+    color: var(--ink-muted);
+  }
+}
+
+@utility btn-primary {
+  background: var(--plum);
+  color: var(--surface);
+}
+
+@utility btn-secondary {
+  background: transparent;
+  border-color: var(--plum);
+  color: var(--plum);
+}
+
+@utility badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink);
+  border: var(--border) solid transparent;
+}
+
+@utility field {
+  background: var(--surface);
+  border: var(--border) solid var(--line);
+  border-radius: var(--radius-button);
+  padding: 8px 12px;
+  color: var(--ink);
+  &[aria-invalid='true'] {
+    border-color: var(--pink);
+  }
+}
+
+@utility amount {
+  font-family: var(--ff-slab);
+  font-weight: 500;
+  font-size: var(--fs-amount);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- limit slider (§7): track --line, filled --teal, round --plum thumb ---------- */
+
+@utility range-input {
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  &::-webkit-slider-runnable-track {
+    height: 28px;
+    background: transparent;
+  }
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    margin-top: 2px;
+    border-radius: 999px;
+    background: var(--plum);
+    border: 3px solid var(--surface);
+  }
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--plum);
+    border: 3px solid var(--surface);
+  }
+  &::-moz-range-track {
+    background: transparent;
+  }
+}
+
+/* ---------- mascot (§8): the paw waves, pivot on the shoulder ---------- */
+
+@keyframes paw-wave {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+
+.mascot-paw {
+  transform-box: view-box;
+  transform-origin: 68px 58px;
+  animation: paw-wave 0.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-paw {
+    animation: none;
+  }
+}

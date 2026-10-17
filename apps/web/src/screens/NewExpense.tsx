@@ -5,10 +5,11 @@ import {
   type SplitAssignment,
   type SplitPreview,
 } from '@kitty/shared';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState } from 'react';
 import { ErrorBox, Money, ScreenHeader } from '../components.js';
 import { formatMinor, parseMinor, receiptGap, withItemTotal } from '../receipt-edit.js';
-import { toClientError, useNow } from '../state.js';
+import { Loading } from '../Mascot.js';
+import { toClientError } from '../state.js';
 import type { ScreenProps } from './types.js';
 
 // New expense (SPEC §6.3): photo of the receipt → the on-device AI reads it → the payer fixes
@@ -176,7 +177,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
       />
       <div className="space-y-4 px-4" data-noswipe={step !== 'pick' ? '' : undefined}>
         {s?.ai && (
-          <p className="text-xs text-gray-500">
+          <p className="text-small text-ink-muted">
             {s.ai.fake ? 'Simulated AI (fakes on)' : 'AI runs on this device'} ·{' '}
             {s.ai.status === 'ready' ? 'ready' : s.ai.status === 'loading' ? 'loading…' : 'error'}
           </p>
@@ -185,7 +186,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
 
         {step === 'pick' && <Pick blocked={blocked} onCamera={() => fileInput.current?.click()} />}
         {step === 'reading' && (
-          <Waiting since={startedAt}>Reading the receipt on this device…</Waiting>
+          <Loading since={startedAt}>Reading the receipt on your phone…</Loading>
         )}
 
         {receipt !== null && step !== 'reading' && (
@@ -194,13 +195,13 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
               <img
                 src={photo.url}
                 alt="Your receipt"
-                className="max-h-40 rounded-xl object-contain shadow-sm"
+                className="max-h-40 rounded-[16px] border-[1.5px] border-line object-contain"
               />
             )}
             <ReceiptEditor receipt={receipt} onChange={edit} disabled={step !== 'review'} />
 
             <section className="space-y-2">
-              <label htmlFor="who" className="block text-sm font-medium">
+              <label htmlFor="who" className="block font-semibold">
                 Who had what?
               </label>
               <textarea
@@ -209,36 +210,38 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
                 value={sentence}
                 onChange={(e) => setSentence(e.target.value)}
                 placeholder="Bob and I had the pho, Charlie only beers, water for all three"
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+                className="field w-full"
               />
               <button
                 type="button"
                 onClick={() => void split()}
                 disabled={sentence.trim() === '' || step !== 'review'}
-                className="w-full rounded-full border border-pink-600 py-2 text-sm font-semibold text-pink-700 disabled:opacity-40"
+                className="btn btn-secondary w-full"
               >
                 Split with AI
               </button>
               {step === 'splitting' && (
-                <Waiting since={startedAt}>Splitting on this device…</Waiting>
+                <Loading since={startedAt} size={48}>
+                  Splitting on your phone…
+                </Loading>
               )}
-              {note && <p className="text-sm text-amber-800">{note}</p>}
+              {note && <p className="card-attention py-3">{note}</p>}
               {question && (
                 <form
-                  className="space-y-2 rounded-xl bg-amber-50 p-3"
+                  className="card-attention space-y-2"
                   onSubmit={(e) => {
                     e.preventDefault();
                     void split({ question, answer });
                   }}
                 >
-                  <p className="text-sm">{question}</p>
+                  <p>{question}</p>
                   <input
                     value={answer}
                     onChange={(e) => setAnswer(e.target.value)}
                     required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="field w-full"
                   />
-                  <button type="submit" className="text-sm font-semibold text-pink-700">
+                  <button type="submit" className="btn btn-primary">
                     Answer
                   </button>
                 </form>
@@ -250,10 +253,12 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
             )}
 
             {step === 'sending' && (
-              <Waiting since={startedAt}>Creating payment requests and signing…</Waiting>
+              <Loading since={startedAt} size={48}>
+                Creating payment requests and signing…
+              </Loading>
             )}
             {step === 'sent' ? (
-              <p className="rounded-xl bg-green-50 p-3 text-sm text-green-900">
+              <p className="card bg-mint-soft">
                 Sent: the payment requests are signed by your node.
               </p>
             ) : (
@@ -261,7 +266,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
                 type="button"
                 onClick={() => void send()}
                 disabled={preview === null || step !== 'review' || blocked !== null}
-                className="w-full rounded-full bg-pink-600 py-3 font-semibold text-white disabled:opacity-40"
+                className="btn btn-primary w-full py-3"
               >
                 Send
               </button>
@@ -276,41 +281,30 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
 function Pick({ blocked, onCamera }: { blocked: string | null; onCamera: () => void }) {
   return (
     <div className="flex min-h-[55dvh] flex-col items-center justify-end gap-3">
-      <p className="text-center text-sm text-gray-500">
+      <p className="text-center text-ink-muted">
         {blocked ?? 'Take a photo of the receipt. It never leaves this phone.'}
       </p>
-      <div className="flex overflow-hidden rounded-full border border-gray-300 bg-white shadow-sm">
+      <div className="flex overflow-hidden rounded-full bg-plum">
         <button
           type="button"
           onClick={onCamera}
           disabled={blocked !== null}
           aria-label="Photo of the receipt"
-          className="px-8 py-3 text-2xl disabled:opacity-40"
+          className="px-8 py-3 text-title text-surface disabled:text-ink-muted"
         >
           📷
         </button>
-        <span className="w-px bg-gray-300" />
+        <span className="w-[1.5px] bg-surface" />
         <button
           type="button"
           disabled
           aria-label="Voice, coming soon"
-          className="flex items-center gap-1 px-8 py-3 text-2xl opacity-40"
+          className="flex items-center gap-1 px-8 py-3 text-title text-plum-soft"
         >
-          🎤<span className="text-xs font-medium">soon</span>
+          🎤<span className="text-small font-semibold">soon</span>
         </button>
       </div>
     </div>
-  );
-}
-
-function Waiting({ since, children }: { since: number; children: ReactNode }) {
-  const now = useNow(500);
-  const s = Math.max(0, Math.floor((now - since) / 1000));
-  return (
-    <p className="flex items-center gap-2 text-sm text-gray-600" role="status">
-      <span className="size-3 animate-spin rounded-full border-2 border-pink-600 border-t-transparent" />
-      {children} <span className="tabular-nums">{s} s</span>
-    </p>
   );
 }
 
@@ -326,7 +320,7 @@ function ReceiptEditor({
   const gap = receiptGap(r);
   const extra = (key: 'tax' | 'tip', label: string) =>
     r[key] !== undefined && (
-      <div className="flex justify-between text-gray-600">
+      <div className="flex items-center justify-between text-ink-muted">
         <span>{label}</span>
         <AmountInput
           value={r[key]}
@@ -337,15 +331,15 @@ function ReceiptEditor({
       </div>
     );
   return (
-    <section className="space-y-2 rounded-2xl bg-white p-3 text-sm shadow-sm">
+    <section className="card space-y-2">
       <input
         value={r.merchant}
         disabled={disabled}
         onChange={(e) => onChange({ ...r, merchant: e.target.value })}
         aria-label="Merchant"
-        className="w-full rounded-lg px-1 font-semibold"
+        className="field w-full font-slab text-amount font-bold"
       />
-      <p className="px-1 text-xs text-gray-500">
+      <p className="px-1 text-small text-ink-muted">
         {r.date} · {r.currency}
       </p>
       <ul className="space-y-1">
@@ -361,7 +355,7 @@ function ReceiptEditor({
                   items: r.items.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
                 })
               }
-              className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1"
+              className="field min-w-0 flex-1 py-1"
             />
             <AmountInput
               value={it.total}
@@ -374,7 +368,7 @@ function ReceiptEditor({
       </ul>
       {extra('tax', 'Tax')}
       {extra('tip', 'Tip')}
-      <div className="flex justify-between border-t border-gray-100 pt-2 font-semibold">
+      <div className="flex items-center justify-between border-t-[1.5px] border-line pt-2 font-semibold">
         <span>Total</span>
         <AmountInput
           value={r.total}
@@ -384,13 +378,13 @@ function ReceiptEditor({
         />
       </div>
       {gap !== 0n && (
-        <p className="text-xs text-red-700">
+        <p className="card-attention py-2 text-small">
           The rows {gap > 0n ? 'exceed' : 'are short of'} the total by{' '}
           {formatMinor(gap > 0n ? gap : -gap, r.currency)} {r.currency}. Fix an item or the total.
         </p>
       )}
       {r.warnings.map((w) => (
-        <p key={w} className="text-xs text-amber-800">
+        <p key={w} className="text-small text-ink">
           {w}
         </p>
       ))}
@@ -425,7 +419,7 @@ function AmountInput({
         if (v !== null) onChange(v);
         setText(null);
       }}
-      className={`w-24 rounded-lg border px-2 py-1 text-right tabular-nums ${invalid ? 'border-red-500' : 'border-gray-200'}`}
+      className="field amount w-28 py-1 text-right"
     />
   );
 }
@@ -442,15 +436,15 @@ function Parts({
   me: string;
 }) {
   return (
-    <section className="space-y-2 rounded-2xl bg-white p-3 text-sm shadow-sm">
-      <ul className="space-y-1 text-xs text-gray-600">
+    <section className="card space-y-2">
+      <ul className="space-y-1 text-small text-ink-muted">
         {assignments.map((a) => (
           <li key={a.itemIndex}>
             {receipt.items[a.itemIndex]?.label}: {a.members.join(', ')}
           </li>
         ))}
       </ul>
-      <ul className="space-y-1 border-t border-gray-100 pt-2">
+      <ul className="space-y-1 border-t-[1.5px] border-line pt-2">
         {preview.shares.map((sh) => (
           <li key={sh.member} className="flex justify-between">
             <span>{sh.member === me ? 'Your part' : `${sh.member}'s part`}</span>
@@ -458,7 +452,7 @@ function Parts({
           </li>
         ))}
       </ul>
-      <p className="text-xs text-gray-500">
+      <p className="text-small text-ink-muted">
         Total {formatCents(preview.totalUsdCents)} DUSD at {preview.rate} {receipt.currency} per USD
         ({preview.rateAsOf}). Parts are computed by the ledger, not the AI.
       </p>

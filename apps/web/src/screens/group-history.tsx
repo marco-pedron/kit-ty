@@ -1,6 +1,6 @@
-import { formatCents, type ApiClientError, type LineView, type MemberId } from '@kitty/shared';
+import { formatCents, type ApiClientError, type LineView } from '@kitty/shared';
 import { useState, type ReactNode } from 'react';
-import { EmptyState, ErrorBox } from '../components.js';
+import { Avatar, EmptyState, ErrorBox } from '../components.js';
 import {
   canApprove,
   canDispute,
@@ -27,7 +27,7 @@ export function GroupHistory(props: ScreenProps) {
   return (
     <>
       {pending.length > 0 && (
-        <div className="space-y-2 pb-2">
+        <div className="space-y-3 pb-3">
           {pending.map((r) => (
             <PartCard
               key={r.key}
@@ -38,7 +38,7 @@ export function GroupHistory(props: ScreenProps) {
           ))}
         </div>
       )}
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y-[1.5px] divide-line">
         {rows.map((r) => (
           <Row key={r.key} row={r} />
         ))}
@@ -56,31 +56,22 @@ const when = (iso: string) =>
   });
 
 function Row({ row: r }: { row: TransactionRow }) {
-  const color =
-    r.sign === '+' ? 'text-green-700' : r.sign === '-' ? 'text-red-700' : 'text-gray-500';
+  const color = r.sign === '+' ? 'text-teal' : r.sign === '-' ? 'text-pink' : 'text-ink-muted';
   return (
-    <li className={`flex items-center gap-3 py-3 ${r.state === 'voided' ? 'opacity-50' : ''}`}>
+    <li className={`flex items-center gap-3 py-3 ${r.state === 'voided' ? 'line-through' : ''}`}>
       <Avatar m={r.who} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium capitalize">{r.title}</p>
-        <p className="truncate text-xs text-gray-500">{r.description}</p>
+        <p className="truncate font-semibold capitalize">{r.title}</p>
+        <p className="truncate text-small font-normal text-ink-muted">{r.description}</p>
       </div>
       <div className="text-right">
-        <p className={`font-semibold tabular-nums ${color}`}>
+        <p className={`amount font-bold ${color}`}>
           {r.sign === '+' ? '+' : r.sign === '-' ? '−' : ''}
           {formatCents(r.cents)}
         </p>
-        <p className="text-xs text-gray-400">{when(r.at)}</p>
+        <p className="text-small font-normal text-ink-muted">{when(r.at)}</p>
       </div>
     </li>
-  );
-}
-
-export function Avatar({ m }: { m: MemberId | string }) {
-  return (
-    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gray-100 text-sm font-semibold uppercase">
-      {m.slice(0, 1)}
-    </span>
   );
 }
 
@@ -112,26 +103,22 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
 
   const windowOpen = l.state === 'awaiting_decision';
   return (
-    <div className="rounded-xl border border-pink-200 bg-white p-3 shadow-sm" data-noswipe>
-      <p className="mb-1 text-xs font-medium text-gray-500">
+    <div className="card-attention" data-noswipe>
+      <p className="mb-1 text-small font-semibold text-ink">
         {l.payer} paid {merchant} · your part {formatCents(l.cents)}
       </p>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm">
-          {l.agent?.reason ?? `Your part: ${formatCents(l.cents)} to ${l.payer}.`}
-        </p>
+        <p>{l.agent?.reason ?? `Your part: ${formatCents(l.cents)} to ${l.payer}.`}</p>
         {left !== null && (
           <span
-            className="shrink-0 rounded-full bg-gray-900 px-2 py-0.5 font-mono text-xs text-white tabular-nums"
+            className={`amount shrink-0 ${left < 10 ? 'text-pink' : 'text-ink-muted'}`}
             title={windowOpen ? 'Time left to dispute' : 'Time left to approve'}
           >
             {formatCountdown(left)}
           </span>
         )}
       </div>
-      {l.resolution?.note && (
-        <p className="mt-1 text-xs text-gray-500">Dave: {l.resolution.note}</p>
-      )}
+      {l.resolution?.note && <p className="mt-1 text-small text-ink">Dave: {l.resolution.note}</p>}
 
       {disputing ? (
         <form
@@ -141,7 +128,7 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
             if (reason.trim() !== '') decide('contest');
           }}
         >
-          <label className="block text-xs font-medium text-gray-600" htmlFor={`why-${l.expenseId}`}>
+          <label className="block text-small font-semibold" htmlFor={`why-${l.expenseId}`}>
             Why do you dispute it? Dave will read this.
           </label>
           <input
@@ -151,20 +138,20 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
             value={reason}
             onChange={(ev) => setReason(ev.target.value)}
             placeholder="I only had water"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="field w-full"
           />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setDisputing(false)}
-              className="flex-1 rounded-full border border-gray-300 py-2 text-sm font-medium"
+              className="btn btn-secondary flex-1"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={reason.trim() === '' || busy !== null}
-              className="flex-1 rounded-full bg-red-600 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              className="btn btn-primary flex-1"
             >
               {busy === 'contest' ? 'Signing…' : 'Send dispute'}
             </button>
@@ -177,7 +164,7 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
               type="button"
               onClick={() => setDisputing(true)}
               disabled={busy !== null}
-              className="flex-1 rounded-full border border-gray-300 py-2 text-sm font-medium disabled:opacity-40"
+              className="btn btn-secondary flex-1"
             >
               Dispute
             </button>
@@ -187,7 +174,7 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
               type="button"
               onClick={() => decide('approve')}
               disabled={busy !== null}
-              className="flex-1 rounded-full bg-pink-600 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              className="btn btn-primary flex-1"
             >
               {busy === 'approve' ? 'Signing…' : 'Approve'}
             </button>
@@ -195,7 +182,7 @@ function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: strin
         </div>
       )}
       {!canDispute(l) && canApprove(l) && (
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-small text-ink">
           Dave upheld this part: the dispute window is over.
         </p>
       )}
@@ -223,22 +210,22 @@ export const DEMO_SECOND_GROUP = {
 /** The grey, inert card of the simulated group; `header` is its title row. */
 export function DemoSecondGroup({ header }: { header: ReactNode }) {
   return (
-    <section aria-hidden className="pointer-events-none opacity-40 grayscale select-none">
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
-        {header}
-        <ul className="mt-1 divide-y divide-gray-100">
-          {DEMO_SECOND_GROUP.rows.map((r) => (
-            <li key={r.label} className="flex items-center gap-3 py-3">
-              <Avatar m={r.from} />
-              <div className="flex-1">
-                <p className="font-medium">{r.label}</p>
-                <p className="mt-1 h-2 w-24 rounded bg-gray-200" />
-              </div>
-              <span className="h-3 w-12 rounded bg-gray-200" />
-            </li>
-          ))}
-        </ul>
-      </div>
+    <section aria-hidden className="card pointer-events-none text-ink-muted select-none">
+      {header}
+      <ul className="mt-1 divide-y-[1.5px] divide-line">
+        {DEMO_SECOND_GROUP.rows.map((r) => (
+          <li key={r.label} className="flex items-center gap-3 py-3">
+            <span className="grid size-10 place-items-center rounded-full bg-line font-slab font-bold">
+              {r.from}
+            </span>
+            <div className="flex-1">
+              <p className="font-semibold">{r.label}</p>
+              <p className="mt-1 h-2 w-24 rounded-full bg-line" />
+            </div>
+            <span className="h-3 w-12 rounded-full bg-line" />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
