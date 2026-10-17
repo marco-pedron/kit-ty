@@ -1,0 +1,54 @@
+{
+  "receipts": {
+    "vnd-dinner": {
+      "date": "2026-10-17",
+      "currency": "VND",
+      "items": [
+        { "quantity": 2, "unitPrice": "65000", "total": "130000" },
+        { "quantity": 3, "unitPrice": "25000", "total": "75000" },
+        { "quantity": 3, "unitPrice": "10000", "total": "30000" }
+      ],
+      "tax": null,
+      "tip": "20000",
+      "total": "255000"
+    },
+    "eur-taxi": {
+      "date": "2026-10-15",
+      "currency": "EUR",
+      "items": [
+        { "quantity": 1, "unitPrice": "3850", "total": "3850" },
+        { "quantity": 1, "unitPrice": "200", "total": "200" }
+      ],
+      "tax": null,
+      "tip": "450",
+      "total": "4500"
+    },
+    "usd-supermarket": {
+      "date": "2026-10-16",
+      "currency": "USD",
+      "items": [
+        { "quantity": 1, "unitPrice": "80", "total": "80" },
+        { "quantity": 2, "unitPrice": "125", "total": "250" },
+        { "quantity": 1, "unitPrice": "340", "total": "340" },
+        { "quantity": 3, "unitPrice": "90", "total": "270" }
+      ],
+      "tax": "75",
+      "tip": null,
+      "total": "1015"
+    }
+  },
+  "split": {
+    "receipt": "vnd-dinner",
+    "payer": "alice",
+    "members": ["alice", "bob", "charlie"],
+    "sentences": [
+      "Bob e io la pho, Charlie solo birre, l'acqua in tre",
+      "Bob and I had the pho, Charlie only beers, water for all three"
+    ],
+    "assignments": [
+      { "itemIndex": 0, "members": ["alice", "bob"] },
+      { "itemIndex": 1, "members": ["charlie"] },
+      { "itemIndex": 2, "members": ["alice", "bob", "charlie"] }
+    ]
+  }
+}

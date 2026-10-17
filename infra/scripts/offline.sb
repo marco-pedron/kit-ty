@@ -1,0 +1,6 @@
+; macOS sandbox profile for `pnpm ai:eval:offline`: everything allowed except IP networking,
+; to prove the on-device AI works with the Wi-Fi off (SPEC §11) without turning it off.
+(version 1)
+(allow default)
+(deny network-outbound (remote ip))
+(deny network-inbound (local ip))
