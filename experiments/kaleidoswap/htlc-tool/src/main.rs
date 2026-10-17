@@ -243,6 +243,8 @@ fn htlc_info(a: &Args) -> Result<Value> {
         "claim_leaf": h.claim_leaf.to_hex_string(),
         "refund_leaf": h.refund_leaf.to_hex_string(),
         "timeout": h.timeout,
+        "internal_key": h.spend_info.internal_key().to_string(),
+        "output_key": h.spend_info.output_key().to_x_only_public_key().to_string(),
     }))
 }
 
