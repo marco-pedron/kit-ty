@@ -7,6 +7,7 @@ import {
   type DecodedInvoice,
   type PaymentProof,
 } from '@kitty/shared';
+import { explorerTxUrl, type Esplora, type Miner } from './chain.js';
 import { toWalletError, WalletError } from './errors.js';
 import type { Wallet, WalletBalances } from './types.js';
 
@@ -27,6 +28,39 @@ export interface RlnWalletOptions {
   /** Default pay timeout (SPEC §10.1: 30 s). */
   payTimeoutMs?: number;
   now?: () => number;
+  /** /refreshtransfers before a balance read at most this often (default 15 s). */
+  refreshEveryMs?: number;
+  /** dave only (loadMemberWalletOptions sets it for dave): what closing channels needs. */
+  coordinator?: CoordinatorChain;
+}
+
+export interface CoordinatorChain {
+  esplora: Esplora;
+  miner: Miner;
+  /** Pause after each block so the nodes can see it and broadcast sweeps (default 1.5 s). */
+  blockWaitMs?: number;
+  /** How long a cooperative close may take to reach the mempool (default 60 s). */
+  mempoolTimeoutMs?: number;
+  /** How long to wait for the nodes to broadcast their sweeps before mining again (45 s). */
+  sweepWaitMs?: number;
+}
+
+/** Blocks closeChannelsWith may mine in all: 1 to confirm + ~6 for the sweep (SPEC §6.7). */
+export const CLOSE_BLOCK_BUDGET = 12;
+
+/**
+ * Blocks after the confirming one before the nodes can sweep (LDK waits 6 confirmations).
+ * Spike Q7: close confirmed at h164, sweep confirmed at h170.
+ */
+const SWEEP_DEPTH = 5;
+
+export interface CloseResult {
+  txids: string[];
+  /** esplora REST /tx/<txid>, one per txid (SPEC §16 step 6). */
+  explorerUrls: string[];
+  /** Every output of the closing txs was swept and confirmed within the block budget. */
+  swept: boolean;
+  blocksMined: number;
 }
 
 /** An invoice expiring within this window is treated as expired: a payment takes seconds. */
@@ -72,6 +106,20 @@ function sendOutcomeUnknown(e: RlnError): boolean {
 
 export type LnProof = Extract<PaymentProof, { rail: 'ln' }>;
 
+type RlnChannel = {
+  channel_id: string;
+  peer_pubkey: string;
+  status: string;
+  funding_txid?: string | null;
+  capacity_sat: number;
+};
+
+/** The funding output of a channel, whose spender is the closing tx. */
+type ClosingChannel = { channelId: string; fundingTxid: string; vout: number };
+
+const PUBKEY = /^(02|03)[0-9a-f]{64}$/;
+const NOT_FORCING = 'Not forcing a close: ask the member to come online and retry.';
+
 type RlnPayment = {
   payment_hash: string;
   inbound: boolean;
@@ -93,6 +141,8 @@ export class RlnWallet implements Wallet {
   private nodeInfo: Promise<{ pubkey: string; htlcMinMsat: number }> | null = null;
   /** Payments of one member run one at a time (in-flight value limit, SPEC §10.1, §20). */
   private payQueue: Promise<unknown> = Promise.resolve();
+  private readonly refreshEveryMs: number;
+  private lastRefreshAt = -Infinity;
 
   constructor(private readonly opts: RlnWalletOptions) {
     if (!HEX32.test(opts.appSecretHex)) throw new Error('appSecretHex must be 32 bytes of hex');
@@ -102,6 +152,7 @@ export class RlnWallet implements Wallet {
     this.pollIntervalMs = opts.pollIntervalMs ?? 250;
     this.payTimeoutMs = opts.payTimeoutMs ?? 30_000;
     this.now = opts.now ?? Date.now;
+    this.refreshEveryMs = opts.refreshEveryMs ?? 15_000;
   }
 
   /** One REST call: network failure → RlnError 'Unreachable', non-2xx → RlnError from body. */
@@ -229,8 +280,23 @@ export class RlnWallet implements Wallet {
     };
   }
 
+  /** /refreshtransfers with the body verified in the spike (Q7): settles incoming sweeps. */
+  private async refreshTransfers(): Promise<void> {
+    await this.call('/refreshtransfers', () =>
+      this.rln.POST('/refreshtransfers', {
+        body: { asset_id: null, filter: [], skip_sync: false },
+      }),
+    );
+  }
+
   async balances(): Promise<WalletBalances> {
     try {
+      // The DUSD of a closed channel come back on-chain with a sweep and only show after a
+      // refresh (SPEC §6.7). Throttled; a failed refresh never hides the balance.
+      if (this.now() - this.lastRefreshAt >= this.refreshEveryMs) {
+        this.lastRefreshAt = this.now();
+        await this.refreshTransfers().catch(() => undefined);
+      }
       const b = await this.assetBalance();
       return {
         tripOutboundCents: b.offchainOutbound,
@@ -348,11 +414,190 @@ export class RlnWallet implements Wallet {
     throw new WalletError('NOT_IMPLEMENTED', 'openLiquidity is not implemented in B3 (task B9)');
   }
 
-  async closeChannelsWith(): Promise<{ txids: string[] }> {
-    throw new WalletError(
-      'NOT_IMPLEMENTED',
-      'closeChannelsWith is not implemented in B3 (task B7)',
-    );
+  /**
+   * dave only (SPEC §6.7): cooperative close of every channel with the member (trip and
+   * liquidity), then mines until the closes confirm and their outputs are swept, within
+   * CLOSE_BLOCK_BUDGET blocks. Never a forced close: if the peer cannot cooperate, it fails.
+   */
+  async closeChannelsWith(peerPubkey: string): Promise<CloseResult> {
+    const chain = this.opts.coordinator;
+    if (!chain) throw new WalletError('NOT_ALLOWED', 'only dave closes channels with a member');
+    if (!PUBKEY.test(peerPubkey))
+      throw new WalletError('VALIDATION_ERROR', `not a node pubkey: ${peerPubkey}`);
+    try {
+      const targets = await this.closingChannels(chain, peerPubkey);
+      const txids = await this.closeCooperatively(chain, peerPubkey, targets);
+      const { swept, blocksMined } = await this.mineUntilSwept(chain, txids);
+      // dave's own share of the closes (the liquidity channel) settles on his node too.
+      await this.refreshTransfers().catch(() => undefined);
+      return {
+        txids,
+        explorerUrls: txids.map((t) => explorerTxUrl(chain.esplora, t)),
+        swept,
+        blocksMined,
+      };
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
+  }
+
+  /** Checks before closing anything: the member is online and every channel is Opened. */
+  private async closingChannels(
+    chain: CoordinatorChain,
+    peerPubkey: string,
+  ): Promise<ClosingChannel[]> {
+    const [{ channels }, { peers }] = await Promise.all([
+      this.call('/listchannels', () => this.rln.GET('/listchannels')),
+      this.call('/listpeers', () => this.rln.GET('/listpeers')),
+    ]);
+    const mine = (channels as RlnChannel[]).filter((c) => c.peer_pubkey === peerPubkey);
+    if (mine.length === 0)
+      throw new WalletError('NOT_FOUND', `dave has no channel with ${peerPubkey}`);
+    if (!peers.some((p) => p.pubkey === peerPubkey))
+      throw new WalletError(
+        'RECEIVER_UNREACHABLE',
+        `the node ${peerPubkey} is not connected to dave: a cooperative close needs both online`,
+        NOT_FORCING,
+      );
+    const out: ClosingChannel[] = [];
+    for (const c of mine) {
+      if (c.status !== 'Opened' || !c.funding_txid)
+        throw new WalletError(
+          'INTERNAL',
+          `channel ${c.channel_id} is ${c.status}, not Opened: nothing was closed`,
+          'Wait for the channel to settle, then retry.',
+        );
+      const tx = await chain.esplora.tx(c.funding_txid);
+      const vouts = (tx?.vout ?? []).flatMap((o, i) =>
+        o.value === c.capacity_sat && o.scriptpubkey_type === 'v0_p2wsh' ? [i] : [],
+      );
+      if (vouts.length !== 1 || vouts[0] === undefined)
+        throw new WalletError(
+          'INTERNAL',
+          `cannot find the funding output of channel ${c.channel_id} in ${c.funding_txid}`,
+        );
+      out.push({ channelId: c.channel_id, fundingTxid: c.funding_txid, vout: vouts[0] });
+    }
+    return out;
+  }
+
+  /** /closechannel force:false one by one, then waits for each closing tx in the mempool. */
+  private async closeCooperatively(
+    chain: CoordinatorChain,
+    peerPubkey: string,
+    targets: ClosingChannel[],
+  ): Promise<string[]> {
+    const requested: ClosingChannel[] = [];
+    for (const t of targets) {
+      try {
+        await this.call('/closechannel', () =>
+          this.rln.POST('/closechannel', {
+            body: { channel_id: t.channelId, peer_pubkey: peerPubkey, force: false },
+          }),
+        );
+      } catch (e) {
+        const done = requested.map((r) => r.channelId).join(', ') || 'none';
+        const why = e instanceof Error ? e.message : String(e);
+        throw new WalletError(
+          'INTERNAL',
+          `cooperative close of channel ${t.channelId} refused (${why}); already closing: ${done}`,
+          NOT_FORCING,
+        );
+      }
+      requested.push(t);
+    }
+
+    const timeoutMs = chain.mempoolTimeoutMs ?? 60_000;
+    const deadline = this.now() + timeoutMs;
+    const txids = new Map<string, string>();
+    for (;;) {
+      for (const t of requested) {
+        if (txids.has(t.channelId)) continue;
+        const spend = (await chain.esplora.outspends(t.fundingTxid))[t.vout];
+        if (spend?.spent && spend.txid) txids.set(t.channelId, spend.txid);
+      }
+      if (txids.size === requested.length)
+        return requested.flatMap((t) => txids.get(t.channelId) ?? []);
+      if (this.now() >= deadline) {
+        const missing = requested.filter((t) => !txids.has(t.channelId)).map((t) => t.channelId);
+        throw new WalletError(
+          'INTERNAL',
+          `no closing tx after ${timeoutMs} ms for ${missing.join(', ')}; ` +
+            `closing txs seen: ${[...txids.values()].join(', ') || 'none'}`,
+          NOT_FORCING,
+        );
+      }
+      await sleep(this.pollIntervalMs);
+    }
+  }
+
+  /** Mines one block at a time: first until the closes confirm, then until they are swept. */
+  private async mineUntilSwept(
+    chain: CoordinatorChain,
+    txids: string[],
+  ): Promise<{ swept: boolean; blocksMined: number }> {
+    const blockWaitMs = chain.blockWaitMs ?? 1_500;
+    let blocksMined = 0;
+    const mineOne = async () => {
+      const height = await chain.miner.mine(1);
+      blocksMined += 1;
+      const deadline = this.now() + 30_000;
+      while ((await chain.esplora.tipHeight()) < height) {
+        if (this.now() >= deadline)
+          throw new WalletError('INTERNAL', `esplora did not reach height ${height} in 30 s`);
+        await sleep(this.pollIntervalMs);
+      }
+      await sleep(blockWaitMs);
+    };
+
+    const confirmed = async () => {
+      for (const t of txids) if (!(await chain.esplora.tx(t))?.status.confirmed) return false;
+      return true;
+    };
+    while (!(await confirmed())) {
+      if (blocksMined >= CLOSE_BLOCK_BUDGET)
+        throw new WalletError(
+          'INTERNAL',
+          `closing txs ${txids.join(', ')} not confirmed after ${blocksMined} blocks`,
+        );
+      await mineOne();
+    }
+
+    // Mine to the sweep depth, then let the nodes see it and broadcast: mining faster than
+    // they sync wastes blocks (first run on regtest: sweep 10 blocks after the close).
+    const confirmedAt = blocksMined;
+    while (blocksMined - confirmedAt < SWEEP_DEPTH && blocksMined < CLOSE_BLOCK_BUDGET)
+      await mineOne();
+
+    // Each spendable output of the closing txs: spent by a confirmed tx, in the mempool, or not.
+    const sweepState = async (): Promise<'confirmed' | 'mempool' | 'unspent'> => {
+      let state: 'confirmed' | 'mempool' = 'confirmed';
+      for (const t of txids) {
+        const tx = await chain.esplora.tx(t);
+        const spends = await chain.esplora.outspends(t);
+        for (const [i, o] of (tx?.vout ?? []).entries()) {
+          if (o.scriptpubkey_type === 'op_return') continue;
+          if (!spends[i]?.spent) return 'unspent';
+          if (!spends[i]?.status?.confirmed) state = 'mempool';
+        }
+      }
+      return state;
+    };
+    const sweepWaitMs = chain.sweepWaitMs ?? 45_000;
+    let waitingSince = this.now();
+    for (;;) {
+      const state = await sweepState();
+      if (state === 'confirmed') break;
+      if (state === 'unspent' && this.now() - waitingSince < sweepWaitMs) {
+        await sleep(this.pollIntervalMs);
+        continue;
+      }
+      // sweeps in the mempool (or not broadcast in time): one more block, if the budget allows
+      if (blocksMined >= CLOSE_BLOCK_BUDGET) return { swept: false, blocksMined };
+      await mineOne();
+      waitingSince = this.now();
+    }
+    return { swept: true, blocksMined };
   }
 
   async backupNow(): Promise<{ version: string }> {

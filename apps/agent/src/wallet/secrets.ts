@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { ActorId } from '@kitty/shared';
+import { createEsplora, dockerMiner } from './chain.js';
 import { deriveAppSecretHex, type RlnWalletOptions } from './rln-wallet.js';
 
 // Reads the files written by the seed (B2) and returns the options of ONE member's wallet:
@@ -24,7 +25,7 @@ function readJson(path: string, what: string): unknown {
 
 export function loadMemberWalletOptions(
   actor: ActorId,
-  p: { nodeUrl: string; secretsFile?: string; seedStateFile?: string },
+  p: { nodeUrl: string; secretsFile?: string; seedStateFile?: string; esploraUrl?: string },
 ): RlnWalletOptions {
   const secrets = readJson(
     p.secretsFile ?? process.env.KITTY_SECRETS_FILE ?? DEFAULT_SECRETS_FILE,
@@ -39,5 +40,15 @@ export function loadMemberWalletOptions(
     assetId?: unknown;
   };
   if (typeof seed.assetId !== 'string') throw new Error('no assetId in the seed state');
-  return { nodeUrl: p.nodeUrl, appSecretHex: deriveAppSecretHex(mnemonic), assetId: seed.assetId };
+  const opts: RlnWalletOptions = {
+    nodeUrl: p.nodeUrl,
+    appSecretHex: deriveAppSecretHex(mnemonic),
+    assetId: seed.assetId,
+  };
+  // Only dave closes channels (SPEC §6.7): only his wallet gets the miner and esplora.
+  if (actor === 'dave') {
+    const esploraUrl = p.esploraUrl ?? process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010';
+    opts.coordinator = { esplora: createEsplora(esploraUrl), miner: dockerMiner };
+  }
+  return opts;
 }
