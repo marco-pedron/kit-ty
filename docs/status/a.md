@@ -10,14 +10,13 @@
 - [x] A4 AI con QVAC + ai:eval (sab 17/10 17:20, branch `a/A4-qvac-ai`)
 - [x] A5 Flussi dell'agente (fake → reale): ★1 (A5a, A5b), ★3 wallet reale (#19); passi 2-7 verdi sul reale con `pnpm e2e:demo` (B8, sab 17/10 16:55)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
-- [ ] A6 (P1) Anti-injection e hash dei modelli
+- [x] A6 (P1) Anti-injection e hash dei modelli (sab 17/10 19:40, branch `a/A6-ai-hardening`)
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- A6 (P1, solo dopo il tag `demo-v1`): frasi ostili in `ai:eval` e hash dei GGUF all'avvio.
-- **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
+- Niente di A aperto. **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7) e la nota di B9 sul canale grande almeno quanto la riga più grande.
 
 ## API di `MemberAgent` per C3 (`apps/agent/src/flows/member-agent.ts`)
 Un'istanza per attore (alice, bob, charlie, dave), costruita da chi costruisce gli agenti (`server.ts`):
@@ -70,6 +69,12 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A6, sab 17/10 19:40
+- **Hash dei modelli (SPEC §13 #19):** prima di caricare, `qvac-engine.ts` calcola lo sha256 dei file in cache (`QVAC_CACHE_DIR`, default `~/.qvac/models`, file `<prefisso>_<modelId>`) di `OCR_LATIN`, `OCR_CRAFT` (il rilevatore) e `QWEN3_1_7B_INST_Q4` e lo confronta con `sha256Checksum` della costante dell'SDK (fissato da `@qvac/sdk` 0.21.0). File alterato o mancante → AI in `error`, modulo manuale; l'agente parte comunque. Costo: ~9 s in più al caricamento (1,15 GB), in background.
+- **Anti-injection (SPEC §13 #6):** 5 frasi ostili in `ai:eval` (istruzioni nascoste, membri inventati "mallory"/"eve", articoli 7 e 99, finto JSON): nessuna produce un membro o un articolo fuori dalla richiesta (lo schema `json_schema` lo impedisce già al campionamento, e la validazione lo ricontrolla). Le divisioni prodotte possono essere sbagliate, ma restano entro membri e articoli veri, e il debitore approva gli importi, non la frase. Unit test: 5 risposte "dirottate" del modello rifiutate dopo 2 tentativi, frase sempre passata come dato delimitato dopo le regole.
+- **Misurato:** `pnpm ai:eval:offline` verde (log `infra/.out/logs/*-ai-eval-offline-a6.log`), `e2e:demo` 12/12 (log `20261017-193352-e2e-demo.log`).
+- **Come si prova:** `pnpm ai:eval:offline`; per la manomissione, i test di `model-check.test.ts`.
+
 ### A4, sab 17/10 17:20
 - **Cosa funziona:** AI sul dispositivo con QVAC (`@qvac/sdk` 0.21.0): `OCR_LATIN` per il testo e `QWEN3_1_7B_INST_Q4` per il JSON, caricati una volta in background all'avvio dell'agente (`index.ts`), stato `loading → ready | error` in `/state`. Se i modelli non si caricano l'agente parte comunque: AI in `error`, la UI apre il modulo manuale.
 - **Come è fatto** (`apps/agent/src/ai/`): i blocchi OCR diventano righe stampate (`ocr-lines.ts`, dai bbox). Il modello **non scrive mai importi**: riceve le righe numerate e indica quale riga è un articolo (con etichetta e quantità), il subtotale, le tasse, la mancia e il totale (`receipt.ts`, schema `json_schema` passato a QVAC con gli indici di riga come limiti). Il codice legge l'importo dalla riga (`amounts.ts`, esponenti di `CURRENCY_EXPONENTS`, "2 x 65.000" → quantità e prezzo unitario) e aggiunge gli avvisi (somma delle righe, totale, quantità × prezzo): mostrati, mai corretti in silenzio. Una riga "Tip"/"Mancia" data come articolo diventa la mancia, una riga del totale data come articolo viene scartata, sempre con un avviso. Divisione (`split.ts`): una chiave per articolo ("0. Pho bo") e i membri come enum, quindi il modello non può nominare altri (injection, SPEC §13 #6); due esempi few-shot con nomi e piatti inventati; `proposeSplit` riceve anche il pagatore ("io"). Zod + al massimo 2 tentativi con l'errore passato al modello, poi `ok: false` con il parziale (`ai-service.ts`). `<think>` e blocchi di codice tolti.
