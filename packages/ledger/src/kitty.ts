@@ -1,5 +1,4 @@
 import type {
-  AutoPayDecision,
   DecodedInvoice,
   EventBody,
   LineState,
@@ -410,26 +409,8 @@ export type ValidationResult = { ok: true } | { ok: false; code: 'INVALID_EVENT'
 /** Task A2, SPEC §9.3: in validate.ts. */
 export { validateEvent } from './validate.js';
 
-/**
- * Whether the debtor's agent pays this line now, and the sentence that says why (task A3,
- * SPEC §8). Pays only if: the line is `due`; the expense is verified; the invoice payee is the
- * creditor's registered node and amount and asset match the line; within dailyCapCents for
- * automatic payments; a line upheld after a contest only with payUpheldDisputes. Never pays
- * contested or unverified lines, mismatched totals, or on a closed trip.
- * E.g. "Paid 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00".
- */
-export function decideAutoPay(
-  policy: Policy,
-  line: LineRecord,
-  trip: TripState,
-  now: Date,
-): AutoPayDecision {
-  void policy;
-  void line;
-  void trip;
-  void now;
-  throw new LedgerError('NOT_IMPLEMENTED', 'decideAutoPay: task A3');
-}
+/** Task A3, SPEC §8: in autopay.ts. */
+export { autoPaidLast24h, decideAutoPay } from './autopay.js';
 
 export interface LiquidityNeed {
   memberPubkey: Pubkey;
