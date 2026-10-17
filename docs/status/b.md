@@ -11,7 +11,7 @@
 - [x] B3 Wallet reale e LightningRail (sab 17/10 13:40)
 - [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55, #20)
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
-- [ ] B5 (P1) Rail on-chain
+- [x] B5 (P1) Rail on-chain (sab 17/10 19:45, branch `b/B5-onchain-rail`; livello wallet/rail, non ancora nei flussi)
 - [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, #29; correzione 19:05: solo viaggiatori); `demo:lose-phone` P1 fatto (sab 17/10 19:05, branch `b/B6b-lose-phone`)
 - [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
@@ -19,11 +19,17 @@
 - niente
 
 ## Prossimo passo
-- A6 (anti-injection nella divisione, hash dei GGUF), poi B5 (rail on-chain), poi pulizia Fase 3.
-- Prima di ogni merge rischioso: `pnpm demo:reset && pnpm e2e:demo`.
+- Pulizia Fase 3 (branch remoti mergiati, PR `[chore] cleanup` in bozza), poi verifica finale.
+- B5 nei flussi (pagare un membro escluso on-chain): serve un cambio al contratto shared, vedi registro B5; decide il PM.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B5, sab 17/10 19:45
+- **Cosa funziona:** `OnchainRail` (`apps/agent/src/rail/onchain-rail.ts`, adattato da `_legacy/apps/server/src/rgb/onchain-rail.ts`) implementa `Rail`: il creditore crea un invoice RGB a UTXO cieco per l'importo esatto del DUSD del viaggio (`RlnWallet.createRgbInvoice`, `/rgbinvoice`, proxy `rpc://proxy:3000/json-rpc`); il debitore invia (`RlnWallet.sendRgb`, `/sendrgb` con `donation: true`), un blocco conferma, la prova è il `txid` (link esplora). Se il trasferimento risulta `Failed` → `PAYMENT_FAILED`. `PaymentRequest` on-chain ora porta anche `cents` (file di B, non shared). Campi verificati su `docs/vendor/rln-openapi.yaml`.
+- **Misurato (`pnpm e2e:onchain`, log `infra/.out/logs/20261017-194138-e2e-onchain.log`):** bob paga 1.00 ad alice on-chain in 7,9 s con 1 blocco; txid confermato; alice 51.00 e bob 49.00 on-chain, canali intatti. `e2e:demo` resta 12/12.
+- **Non fatto (richiede il contratto):** l'uso nei flussi per pagare un membro escluso (SPEC §6.7). Il debitore deve ricevere l'invoice on-chain del creditore, e oggi nessun evento lo trasporta: serve un evento nuovo (es. `ONCHAIN_INVOICE_ISSUED { expenseEventHash, debtorPubkey, invoice, recipientId }`) o un campo in `INVOICE_REISSUED`, più la regola in `validateEvent`/`decideAutoPay` (oggi: "has left the trip: pay on-chain"). Modifica additiva a `packages/shared`, ma tocca anche ciò che vede la UI di C4+: decide il PM. Non serve alla demo (Charlie escluso non è creditore di nessuno).
+- **Come si prova:** `pnpm demo:reset && pnpm e2e:onchain`, poi `pnpm demo:reset`; unit test in `rln-wallet.test.ts` (`OnchainRail`).
+
 ### B6 correzione + P1 demo:lose-phone, sab 17/10 19:05
 - **Problema trovato:** dopo B6, `e2e:demo` è fallito 3 volte su 8: un nodo smetteva di rispondere dopo il proprio backup (pagamento di bob `Pending` 30 s su Dave, oppure invio della spesa appeso su alice). **Riprodotto:** RLN `d4762ac` si blocca per sempre se una richiesta REST gli arriva durante o subito dopo un `/unlock` (log fermi dopo "Unlock completed"; `infra/.out/logs/*-rln-*-hang.log`). Con richieste concorrenti, come quelle degli agenti, il blocco arriva al primo ciclo; senza traffico 24 cicli su 25 sono andati bene.
 - **Cura nel wallet:** durante un backup nessun'altra richiesta parte verso il nodo (cancello in `RlnWallet.call`, si aspetta che quelle in volo finiscano prima del lock), e dopo l'unlock 3 s di quiete (`BACKUP_SETTLE_MS`) prima di qualsiasi richiesta. Verifica: 16 cicli su 16 sotto carico concorrente (8 alice, 8 dave); poi `e2e:demo` **3 su 3** e `e2e:lose-phone` verdi (log `20261017-191332`, `-191740`, `-192137`, `-192534`). In più un timeout di 60 s riapre il cancello e libera la coda dei pagamenti se un nodo resta comunque bloccato (`NODE_UNREACHABLE`, azione "restart its container, then pnpm demo:unlock"). In `/state` il saldo durante un backup risponde "non disponibile" dopo 1,5 s invece di restare appeso. Un backup ora dura ~6 s.
