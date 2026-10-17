@@ -12,6 +12,7 @@ import { GroupSettingsScreen, GroupsScreen } from './screens/Groups.js';
 import { HomeScreen } from './screens/Home.js';
 import { NewExpenseScreen } from './screens/NewExpense.js';
 import { ProfileScreen } from './screens/Profile.js';
+import { DaveApp } from './screens/dave/DaveApp.js';
 import { QrScreen } from './screens/Qr.js';
 import { Styleguide } from './screens/Styleguide.js';
 import type { ScreenProps } from './screens/types.js';
@@ -23,8 +24,8 @@ import { Banner, ErrorNote } from './ui/Notes.js';
 import { StateView, Toasts } from './ui/Overlays.js';
 import { Wordmark } from './ui/Text.js';
 
-// The traveler app, phone-sized (?as=alice|bob|charlie; ?as=styleguide shows the primitives).
-// Dave's screens are task C5.
+// The app, phone-sized: travelers (?as=alice|bob|charlie), the operator (?as=dave, DaveApp),
+// and ?as=styleguide for the primitives.
 
 const TOAST_MS = 3000;
 
@@ -39,16 +40,7 @@ export function App() {
   const route = routeFromUrl();
   if (route === 'styleguide') return <Styleguide />;
   if (route === null) return <Picker />;
-  if (!isMemberId(route))
-    return (
-      <PhoneFrame>
-        <StateView
-          kind="empty"
-          title="This is the traveler app"
-          text="Open it as alice, bob or charlie. Dave's screens are coming soon."
-        />
-      </PhoneFrame>
-    );
+  if (!isMemberId(route)) return <DaveApp frame={(c) => <PhoneFrame>{c}</PhoneFrame>} />;
   return <Phone as={route} />;
 }
 

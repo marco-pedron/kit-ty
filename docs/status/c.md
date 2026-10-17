@@ -16,7 +16,7 @@
   - [x] C4e Correzioni dalla revisione del PM (branch `c/C4e-fixes`)
   - [x] C4f Visual identity di `docs/DESIGN.md` (branch `c/C4f-design`)
   - [x] C4f UI del viaggiatore in stile iPhone (branch `c/C4f-ui`)
-- [ ] C5 UI Dave
+- [x] C5 UI Dave (branch `c/C5-dave`)
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
 
@@ -27,7 +27,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C5 UI Dave (contestazioni, insolventi, "Cover and exclude", tasso del giorno), poi C6 Prova e Registro. P1: modulo manuale con `expenseShares`.
+- C6 Prova e Registro verificato, poi C7 attese ed errori.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -45,11 +45,22 @@
 
 5. **R5, non bloccante (C4e, sab 17/10): `pnpm dev:fakes` non riparte su un relay già usato.** Causa verificata con curl: `FakeWallet.decodeInvoice` (`apps/agent/src/dev-fakes/fake-wallet.ts:117`) conosce solo le invoice create nel processo corrente; dopo un riavvio l'agente rifiuta il `MEMBER_JOINED` (seq 3) del run precedente, si congela (`chainValid: false`, 3 eventi), e `seedTrip` ripubblica `MEMBER_JOINED` ogni 2 s: il relay in modalità finta (`apps/relay/src/fake-validate.ts`) li accetta tutti (468 eventi in un caso). Sintomi in UI: nessun membro, nessuna spesa, QR vuoto, "alice is not a member of the trip" sullo slider. Proposte: (a) `dev:fakes` cancella `apps/relay/data/relay.sqlite*` prima di partire, oppure usa un `RELAY_DB` temporaneo (script in `package.json` della root); (b) il relay finto rifiuta un secondo `MEMBER_JOINED` dello stesso autore, come quello reale. Intanto: istruzioni nel README (sezione Development) e avviso rosso in UI quando `ledger.chainValid` è false.
 
+## Decisioni prese in autonomia (da rivedere dal PM)
+- **C5, saldi in Members.** Il wireframe di Dave mostra il saldo di ogni membro, ma SPEC §1 e `TripViewSchema` vietano all'operatore di vedere i saldi dei viaggiatori. Members mostra lo stato e la **garanzia residua** di ciascuno; la pillola in alto di Dave è la **garanzia residua totale** (Σ G − usata), con la didascalia "Guarantee left".
+- **C5, tasso del giorno.** `/state` dà le unità di valuta per 1 USD: mostro "1 DUSD = 0.86 EUR" invece del "1 EUR = x DUSD" del wireframe, per non invertire il numero nel browser. "Set" apre uno sheet che firma un `RATE_SET` con tutti i tassi, la data di oggi e la fonte "Set by the coordinator".
+- **C5, pulsanti delle contestazioni.** In Home "Cancel" annulla **solo la parte** del debitore (`line_voided`, con alert di conferma) e "Confirm" la conferma (`upheld`). Nella schermata Dispute "Cancel expense" annulla **tutta la spesa** (`expense_voided`, con alert). Note fisse: "Confirmed by the coordinator", "Part cancelled by the coordinator", "Expense cancelled by the coordinator".
+- **C5, Log.** Nel wireframe è "(built in C6)": in C5 c'è una versione provvisoria (riepilogo del registro e attività dal `/state` di Dave); C6 la sostituisce.
+
 ## Decisioni del PM
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C5, sab 17/10 22:45
+- Funziona: `?as=dave` apre l'app dell'operatore (`apps/web/src/screens/dave/`), con la barra Members · Home · Log e gli swipe (sinistra Members, destra Log). Home: pillola della garanzia residua con l'occhio, logo → Profile; DISPUTES (motivo, Cancel / Confirm, "opened x ago"), INSOLVENT ("Cover and exclude" destructive, "approval expired x ago", garanzia residua), TODAY'S RATE ("Set" → sheet). Members (stato e garanzia, Dave come operator). Dispute (righe dello scontrino, motivo, divisione, Cancel expense / Confirm). Cover and exclude: alert che spiega cosa succede, poi i tre passi con spunte, barra di avanzamento, gattino e tempo trascorso; la richiesta vive in `DaveApp`, quindi si può uscire dalla schermata e rientrare; alla fine "Charlie excluded. Group covered." con i txid di chiusura. Profile (ruolo, garanzia, FAQ e Assistance "soon"). Correzioni a C4f: titoli delle card su una riga; DESIGN.md §3 documenta i token derivati e il "+" del logo sempre rosa. Nuovi primitivi: `AlertDialog` (pulsanti impilati se l'etichetta è lunga), `Steps`, `ProgressBar`.
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi `pnpm --filter @kitty/web shots` (crea contestazione e insolvenza vere sul fake; il giro dark finisce con "Cover and exclude", quindi rilanciarlo solo dopo aver ripulito il relay). Test: `dave.test.ts`.
+- Problemi noti: con i fake "Cover and exclude" finisce in meno di un secondo, quindi lo screenshot dell'avanzamento coincide con quello finale; sui nodi reali i passi si vedono uno alla volta (~73 s).
+
 ### C4f UI iPhone, sab 17/10 22:00
 - Funziona: `apps/web` rifatta sul nuovo `docs/DESIGN.md` (stile HIG) e sui wireframe in `docs/design/`. Token del §3 copiati come sono, light e dark con `prefers-color-scheme`; la palette di Tailwind è spenta. Token derivati solo con `color-mix`: `--danger-soft`, `--scrim`, `--accent-text` (accento come testo, AA in entrambi i temi), `--qr-ink`/`--qr-paper` (QR scuro su bianco anche in dark). Primitivi in `src/ui/`: Button (filled, gray, plain, destructive), Badge/LimitBadge, lista inset grouped, NavBar con Large Title, TabBar flottante, Segmented, Slider iOS, Sheet, Toast, StateView, Mascot (`docs/design/kitty-mascot.svg` inline, zampa animata), BalancePill, TransactionRow, ApprovalCard. Pagina `?as=styleguide`. Schermate: Home (approvazioni in cima, storico a timeline con +/−), sheet di Dispute, New expense in 3 passi, QR con Scan/Show, Groups, Group settings (Dave come operator), Profile (Funds = saldo vero, FAQ e Assistance "soon").
 - Screenshot: `pnpm --filter @kitty/web shots` (WebKit, 390×844, light e dark, in `apps/web/.shots/`, gitignored), con `pnpm dev:fakes` su un relay pulito. `@playwright/test` è fissato a **1.59.0**: è l'ultima versione compatibile con il WebKit per macOS 14 (dalla 1.60 Playwright invia `PushAPIEnabled`, che quella build non conosce). WebKit: `npx playwright install webkit`.

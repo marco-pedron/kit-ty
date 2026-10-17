@@ -111,3 +111,66 @@ export function StateView({
     </div>
   );
 }
+
+/** iOS alert: a centred dialog that says what will happen, Cancel and one action. */
+export function AlertDialog({
+  title,
+  message,
+  confirm,
+  destructive = false,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: ReactNode;
+  confirm: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-center px-12" data-noswipe>
+      <div className="animate-fade absolute inset-0 bg-scrim" aria-hidden />
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="alert-title"
+        aria-describedby="alert-message"
+        className="animate-fade relative w-full max-w-[290px] overflow-hidden rounded-card bg-bg-cell text-center"
+      >
+        <div className="px-4 pt-5 pb-4">
+          <h2 id="alert-title" className="text-headline font-semibold">
+            {title}
+          </h2>
+          <div id="alert-message" className="mt-1 text-footnote text-label">
+            {message}
+          </div>
+        </div>
+        {/* Side by side like iOS; stacked when the action label is long. */}
+        <div className={`hairline-t grid ${confirm.length > 12 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="pressable min-h-11 text-body text-accent-text"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            autoFocus
+            className={`pressable min-h-11 border-separator text-body font-semibold ${confirm.length > 12 ? 'order-first border-b-[0.5px]' : 'border-l-[0.5px]'} ${destructive ? 'text-danger' : 'text-accent-text'}`}
+          >
+            {confirm}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
