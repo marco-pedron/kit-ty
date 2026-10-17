@@ -1,152 +1,174 @@
 # kit+ty: identità visiva e regole di interfaccia
 
-> Fonte per tutto ciò che si vede in `apps/web`. I flussi stanno in `docs/FLOWS.md`; qui c'è solo l'aspetto.
+> Fonte per tutto ciò che si vede in `apps/web`. Flussi: `docs/FLOWS.md`. Layout: `docs/design/wireframe-traveler.pdf`, `docs/design/wireframe-dave.pdf` (posizioni vincolanti). Mascotte: `docs/design/kitty-mascot.svg`.
 > Testi della UI in **inglese**. Questo documento è in italiano.
+
+## 0. In una riga
+
+**Un'app iPhone pulita** (linguaggio delle Human Interface Guidelines di Apple), con l'identità di kit+ty: bianco che respira, accento rosa, il gattino +ty. Gira nel browser a larghezza telefono (in demo tre finestre affiancate), quindi niente sidebar desktop.
 
 ## 1. L'idea: +ty
 
-**kit+ty** si legge "kitty" (la cassa comune) oppure "kit plus thank you". Tutta l'esperienza gira intorno a **+ty**:
+**kit+ty** si legge "kitty" (la cassa comune) oppure "kit plus thank you":
 
-- soldi che **arrivano** → **+ty**: un grazie;
-- debito **saldato** → **-ty**: un conto chiuso.
-
-Il "+" del nome è il segno distintivo: rosa nel logo, e ricorre come segno degli importi in entrata.
+- soldi che **arrivano** → **+ty!** (un grazie);
+- debito **saldato** → **-ty!** (un conto chiuso).
 
 ## 2. Tono
 
-Giocoso ma chiaro. Una battuta al massimo per schermata; gli importi e le azioni sono sempre detti in modo esplicito.
+Giocoso ma chiaro: una battuta al massimo per schermata; importi e azioni sempre espliciti.
 
 | Momento | Testo |
 |---|---|
-| Pagamento ricevuto (notifica/toast) | `+ty! 3.09 DUSD from Bob` |
+| Pagamento ricevuto | `+ty! 3.09 DUSD from Bob` |
 | Debito saldato | `-ty! You settled 3.50 DUSD with Alice` |
 | Nuova spesa da approvare | `Alice paid for Taxi. Your part: 17.44 DUSD` |
-| Auto mode attivo | badge `Auto mode` |
-| Saldo | sotto il saldo: `Only you can spend it` |
-| Caricamento AI | `Reading the receipt on your phone…` + tempo trascorso |
-| Attesa agente | `Waiting for Bob's agent…` + tempo trascorso |
+| Sotto il saldo | `Only you can spend it` |
+| Lettura scontrino | `Reading the receipt on your phone…` + tempo trascorso |
+| Attesa | `Waiting for Bob's agent…` + tempo trascorso |
 | Errore | frase umana + azione: `Bob's node is not answering. Try again in a few seconds.` |
 
-Mai "quota" o "threshold" nella UI: si dice **your part** e **limit**.
+Nella UI si dice **your part** e **limit**, mai "quota" o "threshold".
 
-## 3. Palette
+## 3. Colori
 
-Stile **plain**: colori opachi, base neutra calda, accenti dalla palette. Niente ombre, gradienti, bagliori o trasparenze.
+I quattro colori del progetto sono **due coppie, una per tema**, e non si usano tutti insieme:
 
-Variabili da mettere in `apps/web/src/index.css` (tutto il resto del CSS usa solo queste):
+| Tema | Accento (tint iOS) | Positivo (al posto del verde di sistema) |
+|---|---|---|
+| **Light** (default) | `#F25481` rosa | `#9CE7AB` menta |
+| **Dark** | `#81366F` prugna | `#42848A` teal |
+
+Il resto è la scala neutra di iOS (sfondi raggruppati, etichette a opacità, separatori sottili), scaldata appena verso il rosa. Il rosso di sistema si usa **solo** per errori e azioni distruttive (`Cover and exclude`).
 
 ```css
 :root {
-  /* base neutra (bianco caldo, tinto verso il rosa della palette) */
-  --bg:         #F7F1EE;  /* sfondo dell'app */
-  --surface:    #FFFBF8;  /* card */
-  --line:       #EADDE0;  /* bordi e divisori */
-  --ink:        #2B1B28;  /* testo principale (prugna quasi nera) */
-  --ink-muted:  #7D6A78;  /* testo secondario, date */
+  /* sfondi stile iOS (grouped) */
+  --bg-grouped:    #F6F2F4;   /* systemGroupedBackground, appena caldo */
+  --bg-cell:       #FFFEFE;   /* celle e card: il bianco che domina */
+  --bg-fill:       rgba(120,110,116,0.12);  /* fill di controlli e campi */
+  --separator:     rgba(60,50,58,0.18);     /* 0.5px */
 
-  /* palette del progetto */
-  --plum:       #81366F;  /* primario: pulsanti principali, barra in basso, titoli forti */
-  --pink:       #F25481;  /* accento: il "+" del logo, notifiche, cose che chiedono attenzione */
-  --mint:       #9CE7AB;  /* successo: Auto mode, active, pagato */
-  --teal:       #42848A;  /* informazione: importi in entrata, link, limite, avanzamento */
+  /* etichette */
+  --label:         #1C1A1C;
+  --label-2:       rgba(28,26,28,0.60);
+  --label-3:       rgba(28,26,28,0.30);
 
-  /* tinte chiare per sfondi di badge e banner (stessa tinta, più chiara) */
-  --plum-soft:  #EBD9E5;
-  --pink-soft:  #FDDCE6;
-  --mint-soft:  #DDF6E3;
-  --teal-soft:  #D6E8E9;
+  /* identità */
+  --accent:        #F25481;
+  --accent-soft:   #FDE7EE;
+  --on-accent:     #FFFFFF;
+  --positive:      #9CE7AB;
+  --positive-soft: #E9F9ED;
+  --on-positive:   #1F3B27;
+  --danger:        #FF3B30;
+
+  --kitty-cat-line: #F25481;
+  --kitty-cat-fill: #FFFFFF;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-grouped:    #000000;
+    --bg-cell:       #1C1C1E;
+    --bg-fill:       rgba(120,120,128,0.24);
+    --separator:     rgba(84,84,88,0.65);
+
+    --label:         #FFFFFF;
+    --label-2:       rgba(235,235,245,0.60);
+    --label-3:       rgba(235,235,245,0.30);
+
+    --accent:        #81366F;
+    --accent-soft:   #3A2034;
+    --on-accent:     #FFFFFF;
+    --positive:      #42848A;
+    --positive-soft: #1E3335;
+    --on-positive:   #FFFFFF;
+    --danger:        #FF453A;
+
+    --kitty-cat-line: #F25481;   /* il gattino resta rosa e bianco */
+    --kitty-cat-fill: #FFFFFF;
+  }
 }
 ```
 
-**Ruoli fissi**
+Nel CSS si usano **solo** queste variabili, mai un colore scritto a mano.
 
-| Cosa | Colore |
+**Ruoli**
+
+| Cosa | Stile |
 |---|---|
-| Pulsante primario (Approve, Send, Confirm) | fondo `--plum`, testo `--surface` |
-| Pulsante secondario (Dispute, Cancel) | bordo `--plum`, testo `--plum`, fondo trasparente |
-| Importo in entrata `+3.09` | `--teal`, grassetto |
-| Importo in uscita `−3.50` | `--pink`, grassetto |
-| Card da approvare / insolvenza | bordo `--pink`, fondo `--pink-soft` |
-| Conto alla rovescia | `--pink` sotto i 10 s, altrimenti `--ink-muted` |
-| Barra di avanzamento | `--teal` su `--teal-soft` |
+| Pulsante primario (Approve, Send, Confirm) | *filled*: fondo `--accent`, testo `--on-accent` |
+| Pulsante secondario (Dispute, Cancel) | *gray*: fondo `--bg-fill`, testo `--label` |
+| Azione leggera (See all, Edit) | *plain*: testo `--accent` |
+| Azione distruttiva (Cover and exclude) | *tinted* rosso: testo `--danger` su fill rosso al 12% |
+| Importo in entrata `+17.44` | testo `--label` su pillola `--positive-soft` |
+| Importo in uscita `−3.09` | testo `--label` |
+| Card da approvare | fondo `--accent-soft`, conto alla rovescia in `--accent` |
 
-Contrasto: rosa e menta **non** si usano per testo piccolo su fondo chiaro; per i testi piccoli c'è sempre `--ink` su una tinta `-soft`.
+## 4. Tipografia
 
-## 4. Font
-
-- **Titoli, saldo e importi:** **Zilla Slab** (il font slab di Mozilla, su Google Fonts). Pesi 500 e 700. Gli importi con `font-variant-numeric: tabular-nums`.
-- **Testo e pulsanti:** **Fira Sans** (famiglia nata per Mozilla). Pesi 400 e 600.
-- **ID, hash, chiavi (Registro, Prova, QR):** **Fira Mono** 400.
+- **UI:** font di sistema iPhone: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif` (sul Mac e sull'iPhone è SF; Inter come fallback). Nessun file SF incluso.
+- **Importi:** stesso font con `font-variant-numeric: tabular-nums`.
+- **Solo per il marchio:** **Zilla Slab** 700 (il font slab di Mozilla) per il logo `kit+ty` e per i prefissi `+ty!` / `-ty!` nei toast. Da nessun'altra parte.
+- **Hash e ID** (QR, Registro, Prova): `ui-monospace, "SF Mono", "Fira Mono", monospace`.
 
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Mono&family=Fira+Sans:wght@400;600&family=Zilla+Slab:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@700&family=Inter:wght@400;600;700&display=swap');
 ```
 
-> Da confermare dal PM: "il font di Mozilla, mono con le grazie" → interpretato come **Zilla Slab** (slab con l'aria da macchina da scrivere). Se si intendeva un mono vero, si sostituisce con un mono slab (es. Courier Prime) solo nelle variabili qui sotto.
+Scala HIG (dimensione / interlinea):
 
-| Token | Uso | Font, dimensione |
-|---|---|---|
-| `--fs-balance` | saldo in Home | Zilla Slab 700, 40px |
-| `--fs-title` | titoli di schermata | Zilla Slab 700, 22px |
-| `--fs-amount` | importi nelle righe | Zilla Slab 500, 17px |
-| `--fs-body` | testo | Fira Sans 400, 15px |
-| `--fs-small` | date, didascalie, badge | Fira Sans 600, 12px |
-
-## 5. Forme e spazi
-
-- Raggi: card **16px**, pulsanti **12px**, badge e barra in basso **pillola** (999px).
-- Bordi: **1.5px** `--line`. Le card si distinguono dal fondo per colore e bordo, mai per ombra.
-- Spaziatura a multipli di 4: 4 / 8 / 12 / 16 / 24 / 32.
-- Margine laterale dello schermo **16px**; padding interno delle card **16px**; spazio tra card **12px**.
-- Larghezza massima 420px, centrata (tre finestre affiancate in demo).
-- Il contenuto scorre **dietro** la barra in basso: padding inferiore della pagina 96px.
-
-## 6. Layout delle schermate
-
-**Home viaggiatore**, dall'alto:
-1. Barra in alto: avatar a sinistra, logo `kit+ty` a destra (apre il Profilo).
-2. **Card Balance**: etichetta `Balance`, importo grande al centro, sotto `Only you can spend it`; fila di chip azione (occhio per nascondere il saldo).
-3. **Card del gruppo**: titolo del gruppo + badge del limite (tocco → slider). In cima le card da approvare (bordo rosa), poi lo storico.
-4. Righe dello storico: avatar tondo con l'iniziale (fondo `-soft` del membro), nome in grassetto, descrizione sotto in `--ink-muted`, a destra importo `+/−` e data piccola.
-5. **Barra flottante**: pillola con **tre pulsanti tondi della stessa dimensione** (Groups · 📷 · QR), stesso stile, icona + etichetta piccola. Fondo `--plum`, icone `--surface`.
-
-**QR**: schermo intero; in basso uno switch a pillola `Scan | Show`. Apre su **Show**.
-
-**Dave**: stessa struttura (wireframe `docs/design/wireframe-dave.pdf`); la barra ha Members · Home · Log.
-
-## 7. Componenti
-
-**Badge** (pillola, 12px Fira Sans 600, padding 4×10, testo sempre `--ink`):
-
-| Badge | Fondo |
+| Stile | Uso in kit+ty |
 |---|---|
-| `Auto mode` | `--mint` |
-| `Limit 10.00` | `--teal-soft` |
-| `Always ask` | `--line` |
-| `active` | `--mint-soft` |
-| `insolvent` | `--pink-soft` (bordo `--pink`) |
-| `excluded` | `--line`, testo barrato |
-| `operator` | `--plum-soft` |
+| Large Title 34/41 bold, tracking −0.4 | titoli di Groups, Profile; saldo |
+| Title2 22/28 bold | titolo del gruppo in Home |
+| Headline 17/22 semibold | titoli delle righe e delle card |
+| Body 17/22 | testo |
+| Subheadline 15/20 | descrizioni sotto i titoli delle righe |
+| Footnote 13/18 | header di sezione (MAIUSCOLO, `--label-2`), date |
+| Caption1 12/16 | badge, etichette della barra in basso |
 
-**Toast +ty / -ty**: pillola in alto, fondo `--mint-soft` per `+ty`, `--plum-soft` per `-ty`; il prefisso `+ty!` / `-ty!` in Zilla Slab 700. Resta 3 secondi.
+## 5. Forme, spazi, materiali
 
-**Slider del limite**: binario `--line`, parte riempita `--teal`, pomello tondo `--plum`. A fine corsa l'etichetta diventa il badge `Auto mode`.
+- Griglia da 8pt (sottomultipli di 4). Margini laterali **16px**.
+- Raggi continui: controlli **10px**, card e liste inset **14px**, sheet **24px** in alto, badge e barra in basso a pillola.
+- **Niente ombre, niente gradienti, niente vetro.** Le barre sono **opache** (`--bg-cell`) con separatore 0.5px: la gerarchia nasce dal colore degli sfondi (grouped vs cell), come in Impostazioni.
+- Aree toccabili almeno 44×44px. Supporto `safe-area-inset-*`.
+- Larghezza massima 430px, centrata.
+- Icone: `lucide-react`, tratto 1.75, 22px (coerenti con SF Symbols).
 
-## 8. La mascotte: il gattino +ty
+## 6. Movimento
 
-Un **maneki-neko** (il gattino cinese che saluta con la zampa): solo **contorno** `--ink`, interno **bianco caldo** `--surface`, dettagli (orecchie interne, guance, collarino, campanella) in `--pink` e `--plum`. Niente ombre, tratto uniforme 2px.
+- Spring 300-450ms senza rimbalzo eccessivo; push tra schermate, sheet dal basso.
+- Al tocco: scala 0.97 e opacità 0.7 su `:active`.
+- L'unica animazione "di carattere" è la zampa del gattino.
+- Rispettare `prefers-reduced-motion`.
 
-- **Caricamenti**: compare il gattino e **muove la zampa** (rotazione avanti e indietro di circa 20°, perno sulla spalla, 0,8 s, infinito), con sotto il testo dell'attesa.
-- Con `prefers-reduced-motion` la zampa sta ferma.
-- Un solo SVG inline (`apps/web/src/Mascot.tsx`), con la zampa in un gruppo separato per l'animazione. Va bene una prima versione semplice disegnata in codice; il PM può sostituirla.
-- Dove compare: caricamento iniziale, lettura dello scontrino, attesa di pagamenti, "Cover and exclude". Piccolo (48px) nei toast di `+ty`.
+## 7. Componenti (primitivi in `apps/web/src/ui/`)
+
+- **Lista inset grouped**: header di sezione in Footnote maiuscolo; righe con avatar o icona in quadratino colorato (raggio 7), titolo Headline, sottotitolo Subheadline `--label-2`, valore a destra, chevron dove si naviga; separatori 0.5px rientrati.
+- **Riga transazione**: avatar tondo con iniziale, titolo, descrizione, importo a destra (tabular), data sotto in Footnote.
+- **Card di approvazione**: blocco `--accent-soft` raggio 14, titolo Headline, frase dell'agente in Subheadline, conto alla rovescia a destra, due pulsanti affiancati (gray `Dispute`, filled `Approve`).
+- **Badge** (pillola Caption1 semibold): `Auto mode` fondo `--positive` testo `--on-positive`; `Limit 10.00` e `Always ask` fondo `--bg-fill`; `active` `--positive-soft`; `insolvent` `--accent-soft`; `excluded` `--bg-fill` barrato; `operator` `--bg-fill`.
+- **Barra in basso**: pillola flottante opaca `--bg-cell` con bordo 0.5px `--separator`, **tre pulsanti identici** (Groups · Expense · QR), icona + Caption; l'attivo in `--accent`. Il contenuto scorre dietro (padding inferiore 104px).
+- **Navigation bar** (schermate secondarie): back in `--accent` con chevron, titolo inline; Large Title che si comprime allo scroll in Groups e Profile.
+- **Segmented control** `Scan | Show` (QR). **Slider** iOS del limite: binario `--bg-fill`, parte piena `--positive`, pomello bianco tondo 28px con bordo 0.5px.
+- **Sheet** dal basso con grabber (Dispute); fondo dello schermo scurito al 30%.
+- **Toast +ty / -ty**: pillola in alto, gattino 22px, prefisso in Zilla Slab; `+ty` su `--positive-soft`, `-ty` su `--accent-soft`. 3 secondi.
+- **Stati**: caricamento con il gattino che saluta + testo; vuoto con gattino + titolo + testo + azione; errore con frase umana + `Try again`.
+- **Mascot**: l'SVG di `docs/design/kitty-mascot.svg` incorporato **inline** (non `<img>`, altrimenti variabili e animazione non funzionano), prop `size` e `waving`.
+
+## 8. Layout delle schermate
+
+Posizioni dai wireframe, **non spostare gli elementi**. In sintesi, Home viaggiatore dall'alto: pillola del saldo con l'occhio (sinistra) e sotto `Only you can spend it`; logo `kit+ty` (destra, apre Profile); titolo del gruppo + badge del limite (tocco → slider); card del gruppo con le approvazioni in cima e lo storico; Group 2 tratteggiato e non attivo; barra in basso.
 
 ## 9. Cosa capisce un giudice in 3 secondi
 
-- **Home viaggiatore**: "ho X dollari che solo io posso spendere, sono in Auto mode in questo gruppo, c'è una spesa che aspetta me (bordo rosa)".
-- **Home Dave**: "c'è una contestazione e un insolvente: io decido".
-- **Ogni pagamento**: un `+ty!` che arriva in tempo reale sull'altra finestra.
+- **Home viaggiatore**: "ho X dollari che solo io posso spendere; in questo gruppo sono in Auto mode; c'è una spesa che aspetta me".
+- **Home Dave**: "c'è una contestazione e un insolvente: decido io".
+- **Ogni pagamento**: un `+ty!` che compare in tempo reale nell'altra finestra.
 
 ## 10. Cosa non si fa
 
-Ombre, gradienti, effetti vetro, animazioni oltre alla zampa del gattino, colori fuori palette, testo piccolo rosa o menta su fondo chiaro, più di un accento forte per card.
+Look Material o da template SaaS, ombre, gradienti, vetro e blur, bordi spessi, i quattro colori insieme nello stesso tema, colori fuori dai token, loghi o asset di Apple (si imita il linguaggio, non il marchio), spostare elementi rispetto ai wireframe.
