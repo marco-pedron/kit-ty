@@ -49,6 +49,10 @@ function sendError(reply: FastifyReply, status: number, error: ApiError) {
 export function buildRelay(opts: RelayOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: opts.logger === false ? false : { level: process.env.LOG_LEVEL ?? 'info' },
+    // On shutdown, drop every connection: after an SSE client aborts, undici opens a fresh
+    // keep-alive socket with no request, which 'idle' does not close, so close() would wait
+    // for the client's own 4 s timeout. Agents reconnect and catch up by themselves.
+    forceCloseConnections: true,
   });
   const db = opts.db ?? openRelayDb(':memory:');
   const log = createEventLog({
