@@ -13,6 +13,7 @@
   - [x] C4b Home con Approve/Dispute (branch `c/C4b-home`)
   - [x] C4c New expense (branch `c/C4c-new-expense`)
   - [x] C4d Groups e Group settings (branch `c/C4d-groups`)
+  - [x] C4e Correzioni dalla revisione del PM (branch `c/C4e-fixes`)
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -40,11 +41,19 @@
 4. **R4, approvata dal PM (sab 17/10), la implementa Marco con l'override nel seed, opzione (b):** finestra di contestazione **45 s** e scadenza di approvazione **120 s** da `LINE_SEEN`. Il PM pensava bastasse il seed, ma **i tempi non sono configurabili**: `seedTrip` (`apps/agent/src/flows/runtime.ts:95`) scrive in `TRIP_CREATED` la costante `DEMO_TRIP_PARAMS` (`packages/shared/src/domain.ts:145`, 20/30). Opzioni: (a) cambiare i due valori in `DEMO_TRIP_PARAMS`, da verificare contro i test di ledger, agent e relay che la importano e contro le attese di `e2e:demo`; (b) un override nel seed (es. `params` facoltativo in `seedTrip`, oppure variabili d'ambiente lette da `index.ts`), che lascia i test su 20/30. Raccomando (b). Dopo serve `demo:reset`: i parametri restano fissi per tutto il viaggio. Effetto collaterale: dopo una contestazione confermata la scadenza è risoluzione + 120 s (`packages/ledger/src/kitty.ts:315`), quindi la storia 2 si allunga (FLOWS.md §E12).
 - R3 (contestare una parte sopra limite dopo la finestra) **non serve**: è già permesso finché la parte non scade (`packages/ledger/src/validate.ts:285-291`, `kitty.ts:266-283`).
 
+5. **R5, non bloccante (C4e, sab 17/10): `pnpm dev:fakes` non riparte su un relay già usato.** Causa verificata con curl: `FakeWallet.decodeInvoice` (`apps/agent/src/dev-fakes/fake-wallet.ts:117`) conosce solo le invoice create nel processo corrente; dopo un riavvio l'agente rifiuta il `MEMBER_JOINED` (seq 3) del run precedente, si congela (`chainValid: false`, 3 eventi), e `seedTrip` ripubblica `MEMBER_JOINED` ogni 2 s: il relay in modalità finta (`apps/relay/src/fake-validate.ts`) li accetta tutti (468 eventi in un caso). Sintomi in UI: nessun membro, nessuna spesa, QR vuoto, "alice is not a member of the trip" sullo slider. Proposte: (a) `dev:fakes` cancella `apps/relay/data/relay.sqlite*` prima di partire, oppure usa un `RELAY_DB` temporaneo (script in `package.json` della root); (b) il relay finto rifiuta un secondo `MEMBER_JOINED` dello stesso autore, come quello reale. Intanto: istruzioni nel README (sezione Development) e avviso rosso in UI quando `ledger.chainValid` è false.
+
 ## Decisioni del PM
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4e, sab 17/10 20:30
+- Bug "alice non è membro / nessuna spesa / QR vuoto": non è un bug della UI. Un `relay.sqlite` lasciato da un run precedente di `pnpm dev:fakes` non è verificabile dai nuovi agenti finti (R5 a Marco). Con il database pulito: 3 membri attivi, catena valida, `PUT /policy` accettato. Istruzioni nel README; avviso rosso in UI quando il registro è rifiutato.
+- Design dalla revisione: barra in basso con tre pulsanti di pari peso; limite per gruppo con badge a pillola ("Auto mode" verde / "Always ask" / "Limit X.XX") in Home e in Groups, il tocco apre lo slider del gruppo; tolto dal Profilo. Home con card Balance (importo grande, occhio come chip) e card del gruppo con righe di transazione (avatar, nome, descrizione, + verde / − rosso, data e ora), card di approvazione in cima. QR a schermo intero con switch Scan / Show (apre su Show; Scan = cornice e "Join group: coming soon", nessuna camera).
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi `?as=alice`. Test: `lines.test.ts` (righe + / −), `mode.test.ts` (badge).
+- Problemi noti: colori e font rimandati alla PR della visual identity; nessuna verifica visiva automatica.
+
 ### C4d, sab 17/10 19:50
 - Funziona: Groups con il gruppo reale (saldo del canale e modalità), "Group 2" simulato in grigio e non cliccabile se `SHOW_DEMO_SECOND_GROUP`, "Join group" disattivato. Group settings: slider unico da 0 a D (`trip.params.tripChannelCents`) a passi di 0.50, etichette "Always ask me" / "Pay automatically up to X DUSD" / "Automatic payment", salvataggio al rilascio con `PUT /policy` (policy intera, tetto giornaliero rimandato invariato e mostrato in sola lettura), membri con stato active / insolvent (una parte `overdue`) / excluded, durate delle finestre lette dai parametri del viaggio.
 - Come si prova: `pnpm dev:fakes`, `?as=charlie#/group`, spostare lo slider; la barra in alto della Home mostra la nuova modalità. Test: `slider.test.ts`.

@@ -1,25 +1,20 @@
+import { formatCents, type ApiClientError, type LineView, type MemberId } from '@kitty/shared';
+import { useState, type ReactNode } from 'react';
+import { EmptyState, ErrorBox } from '../components.js';
 import {
-  formatCents,
-  type ApiClientError,
-  type ExpenseView,
-  type LineView,
-  type MemberId,
-} from '@kitty/shared';
-import { useState } from 'react';
-import { EmptyState, ErrorBox, Money } from '../components.js';
-import {
-  LINE_LABEL,
   canApprove,
   canDispute,
   formatCountdown,
   needsMe,
   secondsLeft,
+  transactionRows,
+  type TransactionRow,
 } from '../lines.js';
 import { toClientError, useNow } from '../state.js';
 import type { ScreenProps } from './types.js';
 
-// The history of a group: every expense, newest first, with who pays whom. My parts stand out;
-// one waiting for me opens inline (PM prototype: the box with Decline/Approve in the list).
+// The history of a group as transaction rows (avatar, name, what for, + or − amount, date and
+// time), seen by the member. Parts waiting for me come first, as cards with Dispute and Approve.
 
 export function GroupHistory(props: ScreenProps) {
   const expenses = props.trip.state?.expenses ?? [];
@@ -27,76 +22,70 @@ export function GroupHistory(props: ScreenProps) {
     return (
       <EmptyState>No expenses yet. When someone pays for the group, it shows here.</EmptyState>
     );
+  const rows = transactionRows(expenses, props.as);
+  const pending = rows.filter((r) => r.line.debtor === props.as && needsMe(r.line));
   return (
-    <ul className="divide-y divide-gray-100">
-      {expenses.map((e) => (
-        <ExpenseItem key={e.expenseId} expense={e} {...props} />
-      ))}
-    </ul>
+    <>
+      {pending.length > 0 && (
+        <div className="space-y-2 pb-2">
+          {pending.map((r) => (
+            <PartCard
+              key={r.key}
+              line={r.line}
+              merchant={r.description.split(' · ')[0] ?? ''}
+              {...props}
+            />
+          ))}
+        </div>
+      )}
+      <ul className="divide-y divide-gray-100">
+        {rows.map((r) => (
+          <Row key={r.key} row={r} />
+        ))}
+      </ul>
+    </>
   );
 }
 
-function ExpenseItem({ expense: e, ...props }: { expense: ExpenseView } & ScreenProps) {
-  const mine = e.payer === props.as;
+const when = (iso: string) =>
+  new Date(iso).toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+function Row({ row: r }: { row: TransactionRow }) {
+  const color =
+    r.sign === '+' ? 'text-green-700' : r.sign === '-' ? 'text-red-700' : 'text-gray-500';
   return (
-    <li className={`py-3 ${e.status === 'voided' ? 'opacity-50' : ''}`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="truncate font-medium">{e.merchant}</p>
-        <Money cents={e.totalUsdCents} />
+    <li className={`flex items-center gap-3 py-3 ${r.state === 'voided' ? 'opacity-50' : ''}`}>
+      <Avatar m={r.who} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium capitalize">{r.title}</p>
+        <p className="truncate text-xs text-gray-500">{r.description}</p>
       </div>
-      <p className="text-xs text-gray-500">
-        Paid by {mine ? 'you' : e.payer} · {e.date}
-        {e.status === 'settled' && ' · settled'}
-        {e.status === 'voided' && ' · voided'}
-      </p>
-      <ul className="mt-2 space-y-1.5">
-        {e.lines.map((l) => (
-          <li key={l.debtor}>
-            <TransferRow line={l} me={props.as} />
-            {l.debtor === props.as && needsMe(l) && <PartCard line={l} {...props} />}
-          </li>
-        ))}
-      </ul>
+      <div className="text-right">
+        <p className={`font-semibold tabular-nums ${color}`}>
+          {r.sign === '+' ? '+' : r.sign === '-' ? '−' : ''}
+          {formatCents(r.cents)}
+        </p>
+        <p className="text-xs text-gray-400">{when(r.at)}</p>
+      </div>
     </li>
   );
 }
 
-/** "bob → alice 3.09 · Paid", the way the prototype draws it: circle, arrow, circle. */
-function TransferRow({ line: l, me }: { line: LineView; me: MemberId }) {
-  const involved = l.debtor === me || l.payer === me;
-  const name = (m: MemberId) => (m === me ? 'you' : m);
-  const final = l.state === 'paid' || l.state === 'guaranteed';
+export function Avatar({ m }: { m: MemberId | string }) {
   return (
-    <div
-      className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${involved ? 'bg-pink-50' : ''}`}
-    >
-      <Avatar m={l.debtor} />
-      <span className="text-gray-400">→</span>
-      <Avatar m={l.payer} />
-      <span className="min-w-0 flex-1 truncate">
-        {name(l.debtor)} → {name(l.payer)}
-      </span>
-      <Money cents={l.cents} unit={false} />
-      <span
-        className={`w-24 text-right text-xs ${final ? 'text-green-700' : l.state === 'overdue' || l.state === 'contested' ? 'text-red-700' : 'text-gray-500'}`}
-      >
-        {final ? '✓ ' : ''}
-        {LINE_LABEL[l.state]}
-      </span>
-    </div>
-  );
-}
-
-function Avatar({ m }: { m: MemberId }) {
-  return (
-    <span className="grid size-6 shrink-0 place-items-center rounded-full border border-gray-300 bg-white text-[0.65rem] font-semibold uppercase">
+    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gray-100 text-sm font-semibold uppercase">
       {m.slice(0, 1)}
     </span>
   );
 }
 
 /** My part waiting for me: what my agent will do, the time left, Dispute and Approve. */
-function PartCard({ line: l, trip }: { line: LineView } & ScreenProps) {
+function PartCard({ line: l, merchant, trip }: { line: LineView; merchant: string } & ScreenProps) {
   const now = useNow();
   const [disputing, setDisputing] = useState(false);
   const [reason, setReason] = useState('');
@@ -123,10 +112,10 @@ function PartCard({ line: l, trip }: { line: LineView } & ScreenProps) {
 
   const windowOpen = l.state === 'awaiting_decision';
   return (
-    <div
-      className="mt-2 ml-8 rounded-xl border border-pink-200 bg-white p-3 shadow-sm"
-      data-noswipe
-    >
+    <div className="rounded-xl border border-pink-200 bg-white p-3 shadow-sm" data-noswipe>
+      <p className="mb-1 text-xs font-medium text-gray-500">
+        {l.payer} paid {merchant} · your part {formatCents(l.cents)}
+      </p>
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm">
           {l.agent?.reason ?? `Your part: ${formatCents(l.cents)} to ${l.payer}.`}
@@ -231,25 +220,25 @@ export const DEMO_SECOND_GROUP = {
   ],
 } as const;
 
-export function DemoSecondGroup() {
+/** The grey, inert card of the simulated group; `header` is its title row. */
+export function DemoSecondGroup({ header }: { header: ReactNode }) {
   return (
     <section aria-hidden className="pointer-events-none opacity-40 grayscale select-none">
-      <h2 className="text-lg font-semibold">{DEMO_SECOND_GROUP.name}</h2>
-      <ul className="mt-2 space-y-2 rounded-2xl bg-white p-3 shadow-sm">
-        {DEMO_SECOND_GROUP.rows.map((r) => (
-          <li key={r.label} className="flex items-center gap-2 text-sm">
-            <span className="grid size-6 place-items-center rounded-full border border-gray-300 text-[0.65rem]">
-              {r.from}
-            </span>
-            <span className="text-gray-400">→</span>
-            <span className="grid size-6 place-items-center rounded-full border border-gray-300 text-[0.65rem]">
-              {r.to}
-            </span>
-            <span className="flex-1 text-gray-500">{r.label}</span>
-            <span className="h-2 w-10 rounded bg-gray-200" />
-          </li>
-        ))}
-      </ul>
+      <div className="rounded-2xl bg-white p-4 shadow-sm">
+        {header}
+        <ul className="mt-1 divide-y divide-gray-100">
+          {DEMO_SECOND_GROUP.rows.map((r) => (
+            <li key={r.label} className="flex items-center gap-3 py-3">
+              <Avatar m={r.from} />
+              <div className="flex-1">
+                <p className="font-medium">{r.label}</p>
+                <p className="mt-1 h-2 w-24 rounded bg-gray-200" />
+              </div>
+              <span className="h-3 w-12 rounded bg-gray-200" />
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }

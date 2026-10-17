@@ -58,6 +58,17 @@ Everything below was done **before the hackathon**; nothing in the new repo's ap
 - **Lightning RGB spike** (16 October morning): results above, with the exact working requests in [`docs/spike-lightning.md`](docs/spike-lightning.md).
 - **Design and planning docs**: spec, work plan, pitch, session prompts (below). No UI designs or mobile app yet.
 
+## Development
+
+```sh
+pnpm install
+rm -f apps/relay/data/relay.sqlite*   # before every pnpm dev:fakes (see below)
+pnpm dev:fakes                        # relay + agents with fake wallet and AI + web on :5173
+open "http://127.0.0.1:5173/?as=alice"   # also ?as=bob, ?as=charlie
+```
+
+**Start `pnpm dev:fakes` from an empty relay database.** The fake wallet keeps its invoices in the agent's memory, so after a restart the agents cannot verify the events a previous run left in `apps/relay/data/relay.sqlite`: they reject the log from the first `MEMBER_JOINED`, and the app shows no members, no expenses, an empty QR and "not a member of the trip" errors (the red banner "The relay sent an entry this phone rejects"). Stop the stack, delete the database as above, start again. Before `pnpm dev` on the real nodes, run `pnpm demo:reset`, which also wipes it.
+
 ## Documents
 
 | Document | What it is |

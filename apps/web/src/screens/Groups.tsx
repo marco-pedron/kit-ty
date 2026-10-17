@@ -1,6 +1,6 @@
 import { DEFAULT_POLICY, formatCents, type ApiClientError } from '@kitty/shared';
 import { useState } from 'react';
-import { EmptyState, ErrorBox, ScreenHeader } from '../components.js';
+import { EmptyState, ErrorBox, LimitBadge, ScreenHeader } from '../components.js';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { paymentMode } from '../mode.js';
 import {
@@ -14,7 +14,7 @@ import { toClientError } from '../state.js';
 import { DEMO_SECOND_GROUP } from './group-history.js';
 import type { ScreenProps } from './types.js';
 
-// Groups (PM prototype): each group with my balance and my limit, "Join group" not available
+// Groups (PM prototype): each group with my balance and its limit badge (tap: the slider), "Join group" not available
 // yet. Group settings: the one limit slider, the daily cap read-only, the members.
 
 export function GroupsScreen({ trip, go }: ScreenProps) {
@@ -28,30 +28,30 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
         {s?.trip == null ? (
           <EmptyState>Your groups appear here.</EmptyState>
         ) : (
-          <button
-            type="button"
-            onClick={() => go('group')}
-            className="block w-full rounded-2xl bg-white p-4 text-left shadow-sm"
-          >
-            <p className="font-semibold">{s.trip.name}</p>
-            <p className="mt-1 flex justify-between text-sm text-gray-600">
-              <span className="tabular-nums">
+          <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+            <button type="button" onClick={() => go('group')} className="min-w-0 flex-1 text-left">
+              <p className="truncate font-semibold">{s.trip.name}</p>
+              <p className="mt-1 text-sm text-gray-600 tabular-nums">
                 {balance === null ? '—' : formatCents(balance.tripOutboundCents)} DUSD
-              </span>
-              <span>{paymentMode(limit, s.trip.params.tripChannelCents).short}</span>
-            </p>
-          </button>
+              </p>
+            </button>
+            <LimitBadge
+              limitCents={limit}
+              channelCents={s.trip.params.tripChannelCents}
+              onClick={() => go('group')}
+            />
+          </div>
         )}
         {SHOW_DEMO_SECOND_GROUP && (
           <div
             aria-hidden
             className="pointer-events-none rounded-2xl bg-white p-4 opacity-40 grayscale select-none"
           >
-            <p className="font-semibold">{DEMO_SECOND_GROUP.name}</p>
-            <p className="mt-2 flex justify-between">
-              <span className="h-3 w-20 rounded bg-gray-200" />
-              <span className="h-3 w-16 rounded bg-gray-200" />
+            <p className="flex items-center justify-between font-semibold">
+              {DEMO_SECOND_GROUP.name}
+              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs">Limit</span>
             </p>
+            <p className="mt-2 h-3 w-20 rounded bg-gray-200" />
           </div>
         )}
         <button
