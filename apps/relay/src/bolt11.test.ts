@@ -31,6 +31,25 @@ const base = {
   assetAmount: 309n,
 };
 
+describe('decodeBolt11 on the DUSD of the demo stack (RLN d4762ac, asset id with _)', () => {
+  // dave's /lninvoice and /decodelninvoice on the B1/B2 stack, sab 17/10 (sent by stream B).
+  const DUSD_INVOICE =
+    'lnbcrt30u1p4dx44mdqadd5hgare943ksetrdvaxyctfvsmrgnp4qthq2ennawfgpaxm57p37weze5dszfqvcr63x6wpkmsu0tykj5v6wpp5r5pyyrlws4t6n3l8wcdkxhkdrkdwmjjapjzq7sdzdrjqmegr9tkssp5luuqq6vxhwzyd4fj6rxtes7eedt9359vzkvepaaz4mlxzdwt05dq9qyysgqcqzp2xqrrsslp5674sxqttydafmygthgswd0v77dfwe9pgj4zm90n9rps2y970e77q7qzf4mk778zqa84telhyd8v84k2g58q3zswhu8lyc5s7r6rcv8a6jhwux64k6t5wv85gvdxg6rnykm9r877pacx4yzplttq9mwwm8re9mvrcqxew9gz';
+
+  it('reads the same fields as /decodelninvoice, including the baid64 _', () => {
+    expect(decodeBolt11(DUSD_INVOICE)).toEqual({
+      bolt11: DUSD_INVOICE,
+      payeePubkey: '02ee056673eb9280f4dba7831f3b22cd1b01240cc0f51369c1b6e1c7ac969519a7',
+      paymentHash: '1d02420fee8557a9c7e7761b635ecd1d9aedca5d0c840f41a268e40de5032aed',
+      assetId: 'rgb:16sDAWsj-ep2RC7o-g5r2e81-LslCiVR-bK_ZRhg-ohfPz7w',
+      cents: 309n,
+      amtMsat: 3_000_000n,
+      description: 'kitty-check:baid64',
+      expiresAt: new Date((1792235195 + 3600) * 1000).toISOString(),
+    });
+  });
+});
+
 describe('decodeBolt11 on a real rgb-lightning-node invoice', () => {
   it('reads the same fields as /decodelninvoice', () => {
     expect(decodeBolt11(REAL_INVOICE)).toEqual({

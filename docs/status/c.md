@@ -16,6 +16,9 @@
 ## Bloccato da
 - niente
 
+## TODO
+- niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
+
 ## Prossimo passo
 - C4 UI viaggiatore.
 
@@ -46,6 +49,9 @@
   - `server.ts`: `buildAgentServer(config, { agents?, wallets?, ai?, now?, onchainFound? })` riceve gli agenti dal runtime invece di costruirne di suoi; `index.ts` (di A) non cambia finché non passa il runtime.
 - Come si prova: `pnpm test`, `apps/agent/src/routes/routes.test.ts` con il `demo()` di A (4 `MemberAgent`, relay in memoria con il vero `validateEvent`). Coperto: viste di ogni finestra; demo **dalle rotte**: split con quote 3.09/3.09/3.50, invio, charlie contesta, Dave vede la contestazione con gli articoli, bob paga da solo a 20 s, alice vede i crediti, prova verificata con i tre controlli verdi; policy, annullamento, estrazione; ruoli, validazione, 501 per Dave, agente o AI assenti, nodo che non risponde.
 - Problemi noti: `/state` mostra la copia dell'agente all'ultimo `tick()` (entro 1 s nel server). `liquidityMarginCents` non conta la liquidità aperta dopo il primo canale (`extraLiquidity` di A7, la conosce solo il nodo di Dave, B9).
+### C1b, verifica sul nodo reale, sab 17/10 13:30
+- Invoice di dave su DUSD dello stack B1/B2 (`rgb:16sDAWsj-ep2RC7o-g5r2e81-LslCiVR-bK_ZRhg-ohfPz7w`, contiene `_`), con 3,000,000 msat, 309, 3600 s. `decodeBolt11` dà esattamente i campi del `/decodelninvoice` del nodo, e l'id fa andata e ritorno. Con `_` = 62 confermato, anche `~` = 63 è fissato (l'alfabeto ha solo quei due caratteri oltre a `A-Za-z0-9`). Nessun asset di test emesso. Diventato vettore dorato in `apps/relay/src/bolt11.test.ts`.
+- `apps/relay/src/tools/check-bolt11.ts` resta per ripetere il controllo su un nodo vivo.
 ### C2, sab 17/10 12:45
 - Funziona: `createRelayClient({ baseUrl, fetch?, timeoutMs?, backoff?, idleTimeoutMs? })` (`apps/agent/src/relay/http-client.ts`), che implementa `RelayClient`.
   - `append`, `list(since)`, `putBackup`, `getBackup` (404 → `null`). Timeout di 10 s per richiesta. Se il relay non risponde → `RelayError` `RELAY_UNREACHABLE`; se rifiuta → il suo `ApiError` (es. `INVALID_EVENT` con il motivo del ledger) con `httpStatus`.
