@@ -221,6 +221,12 @@ importers:
       '@kitty/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@noble/curves':
+        specifier: ^2.4.0
+        version: 2.4.0
+      '@noble/hashes':
+        specifier: ^2.0.1
+        version: 2.4.0
       fastify:
         specifier: ^5.12.7
         version: 5.12.7

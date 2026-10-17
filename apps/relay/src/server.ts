@@ -1,7 +1,6 @@
 import type { ValidationDeps } from '@kitty/ledger';
 import {
   apiError,
-  NotImplementedError,
   PubkeySchema,
   signatureVerifier,
   StoredEventSchema,
@@ -10,6 +9,7 @@ import {
 } from '@kitty/shared';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { decodeBolt11 } from './bolt11.js';
 import { openRelayDb, type RelayDb } from './db.js';
 import { createEventLog, type Validate } from './log.js';
 import { serveStream } from './sse.js';
@@ -22,7 +22,7 @@ export interface RelayOptions {
   db?: RelayDb;
   /** Default: the ledger's validateEvent. Tests inject a fake one. */
   validate?: Validate;
-  /** Default: the real signature verifier and an invoice decoder that is not written yet. */
+  /** Default: the real ed25519 verifier and the JS BOLT11 decoder. */
   deps?: ValidationDeps;
   now?: () => Date;
   /** Largest backup accepted, in bytes (a RLN backup is ≈440 KB, SPEC §12). */
@@ -35,9 +35,7 @@ export const DEFAULT_MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 
 export const defaultDeps: ValidationDeps = {
   verify: signatureVerifier,
-  decodeInvoice: () => {
-    throw new NotImplementedError('decodeInvoice: JS BOLT11 decoder, stream B');
-  },
+  decodeInvoice: decodeBolt11,
 };
 
 const SinceSchema = z.coerce.number().int().nonnegative().default(0);

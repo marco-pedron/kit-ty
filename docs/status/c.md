@@ -5,6 +5,7 @@
 ## Task
 - [x] K0 Sessione contratto (revisione): `api.ts` e `views.ts` approvati dal PM; registro in `a.md`
 - [x] C1 Relay (branch `c/C1-relay`)
+- [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [ ] C2 RelayClient
 - [ ] C3 Rotte dell'agente
 - [ ] C4 UI viaggiatore
@@ -13,14 +14,23 @@
 - [ ] C7 Attese ed errori
 
 ## Bloccato da
-- EXPENSE_SUBMITTED reali non passano dal relay finché non c'è decodeInvoice (B)
-- Senza fake, finché il verificatore di B4 è uno stub ogni `POST /events` risponde 409 `INVALID_EVENT` ("rule check failed: NotImplementedError…"): il `validateEvent` di A2 (mergiato) non lancia mai e trasforma l'errore dello stub in un rifiuto. Con `KITTY_FAKES=1` il relay funziona (validatore permissivo)
+- niente
+
+## TODO
+- C1b: confermare con un /decodelninvoice reale quando lo stack di B1 è su (opzione A): un invoice per un asset il cui id contiene `_` o `~`, decodificato dal nodo e da `decodeBolt11`, campi identici.
 
 ## Prossimo passo
 - C2 `RelayClient` (`apps/agent/src/relay`): append su `POST /events`, list su `GET /events?since=`, subscribe su `GET /events/stream` con riconnessione da `Last-Event-ID`; backup su `PUT/GET /backups/:pubkey` (`application/octet-stream`).
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C1b, sab 17/10 12:15
+- Funziona: `decodeBolt11` (`apps/relay/src/bolt11.ts`) è il `decodeInvoice` dei `defaultDeps` del relay. Senza fake il relay ora valida tutto: `validateEvent` di A2, ed25519 di B4, invoice decodificati in JS. Nessuna libreria BOLT11: bech32 scritto a mano, firma con `@noble/curves` secp256k1 (stesse versioni già nel lockfile tramite B4, aggiunte a `apps/relay/package.json` in un commit separato).
+- Formato RGB, verificato sull'unico invoice reale che abbiamo (`spikes/wdk/calls.log:78`) contro il `/decodelninvoice` del nodo (riga 79): tag 30 = `asset_amount`, tag 31 = `asset_id` (32 byte). L'id si mostra come `rgb:` + baid64 senza padding, a gruppi 8-7-7-7-7-7. Alfabeto del crate `baid64`: `…0123456789_~` (`_` = 62, `~` = 63). RLN `d4762ac` usa `baid64` **0.4.1** (Cargo.lock), il PM aveva indicato 0.4.2: confrontati i sorgenti dei due crate, alfabeto, gruppi e decodifica sono identici (cambia solo un `debug_assert`).
+- Sicurezza: la firma dell'invoice è sempre verificata contro il `payee` (tag `n`; se manca, pubkey recuperata dalla firma), altrimenti il controllo del creditore di SPEC §13 #1 non varrebbe nulla. Solo `lnbcrt` (regola 9). Campi ripetuti rifiutati (il nodo e noi non devono poter leggere valori diversi dallo stesso invoice); `p`/`s`/`n` di lunghezza sbagliata ignorati come vuole BOLT11.
+- Nessuna modifica a `validateEvent`: asset e importo si leggono dall'invoice.
+- Come si prova: `pnpm test`. `apps/relay/src/bolt11.test.ts`: vettore dorato reale, andata e ritorno di id con `_` e `~`, firma di un altro nodo, hrp non regtest, unità di importo. `apps/relay/src/validate-real.test.ts`: relay con `defaultDeps` e chiavi vere; invoice di legame dal proprio nodo accettato, da un altro nodo o falsificato rifiutato; spesa accettata; asset, importo, payee, descrizione, mainnet o invoice scaduto rifiutati.
+- Problemi noti: l'alfabeto non è ancora provato su un id reale con `_` o `~` (vedi TODO). `amtMsat` ≥ `rgb_htlc_min_msat` non è controllato dal ledger (non necessario).
 ### C1, sab 17/10 10:50
 - Funziona: relay Fastify (`apps/relay`) su `node:sqlite` (nessuna dipendenza nuova). Un database = un viaggio = una catena.
   - `POST /events` (validato dal `validateEvent` reale di A2, mergiato su `main`; test di integrazione in `log.test.ts` e `server.test.ts`): parse zod di `SignedEvent` → `StoredEvent` candidato (`seq`, `prevHash`, `receivedAt`, `hash = storedEventHash`) → `validateEvent(candidato, deriveTrip(precedenti, receivedAt), deps)` → INSERT. Risposte: 201 `StoredEvent`; 400 `VALIDATION_ERROR`; 409 `INVALID_EVENT` (rifiuto del ledger, nonce già usato, `tripId` diverso); 501 `NOT_IMPLEMENTED` solo se un validatore lancia `NOT_IMPLEMENTED` (oggi non succede: A2 non lancia mai). Sempre `ApiErrorBody`. L'append è sincrono (nessun `await` tra lettura della testa e INSERT), quindi niente `seq` doppi.
