@@ -14,10 +14,11 @@ import { assetBalance, height, mine, post, preimageAndHash, rawTx, refresh, RlnE
 import { lnDeadlineBound, verifySwap, type SwapExpectation, type SwapVerdict } from './swap-verify.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const FINAL_CLTV_DELTA = 42; // LDK MIN_FINAL_CLTV_EXPIRY_DELTA
-export const MAX_SHADOW_CLTV = 3 * 72; // 3 random-walk hops × cltv_expiry_delta 72 of every channel in this graph
+export const FINAL_CLTV_DELTA = 42; // requested (LDK MIN_FINAL_CLTV_EXPIRY_DELTA); the node writes 45
+export const FINAL_CLTV_RANGE = [42, 48] as const; // dave accepts the invoice's delta only in here
+export const MAX_SHADOW_CLTV = 3 * 144; // LDK MAX_SHADOW_CLTV_EXPIRY_DELTA_OFFSET: worst case, any graph
 export const MARGIN_BLOCKS = 72;
-export const T_DELTA = 300;
+export const T_DELTA = 600; // ≥ 1 + 48 + 432 + 72 = 553 after the payment, plus the lock and verify blocks
 const HTLC_MSAT = 3_000_000;
 
 // ---------- persistence ----------
@@ -188,7 +189,8 @@ export async function daveVerify(d: DaveSwap, p: { invoice: string; announced: H
     travelerRefundKey: d.refundKey,
     daveClaimKey: d.claimKey,
     timeout: d.timeout,
-    finalCltvDelta: FINAL_CLTV_DELTA,
+    minFinalCltvDelta: FINAL_CLTV_RANGE[0],
+    maxFinalCltvDelta: FINAL_CLTV_RANGE[1],
     maxShadowCltv: MAX_SHADOW_CLTV,
     marginBlocks: MARGIN_BLOCKS,
   };

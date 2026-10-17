@@ -78,8 +78,8 @@ async function swap(m: Member, id: string, amount: number, opts: { claimAtLastBl
   const hPay = d.payHeight!;
   const cltv = heldHtlcCltvExpiry(m, s.hash);
   const deadline = cltv - HTLC_FAIL_BACK_BUFFER;
-  const info: Record<string, unknown> = { lockBlock: hLock + 1, payHeight: hPay, T: d.timeout, cltvExpiry: cltv, lnDeadline: deadline, lnDeadlineBound: verdict.lnDeadlineBound, margin: d.timeout - deadline };
-  assert(deadline <= verdict.lnDeadlineBound, `measured LN deadline ${deadline} above the bound ${verdict.lnDeadlineBound}`);
+  const info: Record<string, unknown> = { lockBlock: hLock + 1, payHeight: hPay, T: d.timeout, cltvExpiry: cltv, claimDeadline: deadline, worstCaseExpiry: verdict.lnDeadlineBound, blocksTtoClaimDeadline: d.timeout - deadline };
+  assert(cltv <= verdict.lnDeadlineBound, `measured cltv_expiry ${cltv} above the worst case ${verdict.lnDeadlineBound}`);
   if (!travelerClaims) return { s, d, info };
   if (opts.claimAtLastBlock) {
     const target = deadline - 1;
@@ -119,10 +119,37 @@ async function swap(m: Member, id: string, amount: number, opts: { claimAtLastBl
 // ======================= setup =======================
 await ensureMiner();
 for (const m of ['dave', ...TRAVELERS] as Member[]) pk[m] = await setupNode(m);
-await fundNode('dave', 1, 5, 1_100_000);
+await fundNode('dave', 1, 10, 1_100_000);
 for (const m of TRAVELERS) await fundNode(m, 0.2, 5, 100_000);
-const issued = await post('dave', '/issueassetnia', { amounts: [1_000_000], ticker: 'DUSD', name: 'Demo USD', precision: 2 });
+// one allocation per channel + two spares (B9 extra liquidity, guarantee): a single allocation
+// allows one channel open at a time (docs/spike-wdk.md, trap 6)
+const ALLOCS = [D + L, D + L, D + L, D + L, D + L];
+const issued = await post('dave', '/issueassetnia', { amounts: [...ALLOCS, 1_000_000 - ALLOCS.reduce((a, b) => a + b, 0)], ticker: 'DUSD', name: 'Demo USD', precision: 2 });
 assetId = issued.asset.asset_id;
+async function allocations() {
+  const { unspents } = await post('dave', '/listunspents', { settled_only: false, skip_sync: false });
+  return unspents
+    .map((u) => ({ outpoint: u.utxo.outpoint, sat: u.utxo.btc_amount, allocs: u.rgb_allocations.filter((a) => a.asset_id === assetId).map((a) => ({ amount: (a.assignment as { value?: number }).value ?? 0, settled: a.settled })) }))
+    .filter((u) => u.allocs.length > 0);
+}
+{
+  let utxos = await allocations();
+  log('dave allocations after issuance (listunspents)', { utxos });
+  const separate = utxos.filter((u) => u.allocs.length === 1 && u.allocs[0].amount === D + L).length >= ALLOCS.length;
+  if (!separate) {
+    log('issuance did not separate the allocations: self-sends, one confirmed per allocation');
+    for (let i = 0; i < ALLOCS.length; i++) {
+      const rid = await (await import('./htlc.ts')).rlnRgbInvoice('dave', assetId, D + L);
+      await post('dave', '/sendrgb', { donation: true, fee_rate: 5, min_confirmations: 1, expiration_timestamp: Math.floor(Date.now() / 1000) + 3600, recipient_map: { [assetId]: [{ recipient_id: rid, assignment: { type: 'Fungible', value: D + L }, transport_endpoints: ['rpc://proxy:3000/json-rpc'] }] } });
+      await mine(1);
+      await refresh('dave');
+    }
+    utxos = await allocations();
+    log('dave allocations after self-sends', { utxos });
+  }
+  const distinct = new Set(utxos.filter((u) => u.allocs.some((a) => a.amount >= D + L)).map((u) => u.outpoint));
+  assert(distinct.size >= TRAVELERS.length, `only ${distinct.size} UTXOs with ≥ ${D + L}`);
+}
 setAssetId(assetId);
 for (const w of ['dave-htlc', ...TRAVELERS.map((m) => `${m}-htlc`)]) await sendBtc(tool('address', { wallet: w }).address, 0.02);
 await mine(1);
@@ -135,27 +162,16 @@ await runCase('0. on-ramp 100.00 on-chain to each traveler (RLN → RLN)', async
 });
 
 await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side, push 300k sat)', async () => {
-  const retries: string[] = [];
-  for (const m of TRAVELERS) {
-    // back-to-back opens: the DUSD change of the previous funding tx needs a block (as in seed.ts)
-    for (let attempt = 1; ; attempt++) {
-      try {
-        await post('dave', '/openchannel', {
-          peer_pubkey_and_opt_addr: `${pk[m]}@${peerAddr(m)}`, capacity_sat: CAPACITY_SAT, push_msat: PUSH_MSAT,
-          asset_amount: D + L, asset_id: assetId, public: true, with_anchors: true, fee_base_msat: 0, fee_proportional_millionths: 0,
-        });
-        break;
-      } catch (e) {
-        if (attempt >= 5) throw e;
-        retries.push(`${m}#${attempt}: ${(e as Error).message.slice(0, 60)}`);
-        await mine(1);
-        await refresh('dave');
-      }
-    }
-    await waitFor('funding in mempool', async () => (await mempool()).length > 0, 60_000, 500);
-    await mine(1);
-    await refresh('dave'); // the DUSD change of this funding becomes spendable only after a refresh
-  }
+  const tx0 = (await mempool()).length;
+  for (const m of TRAVELERS)
+    await post('dave', '/openchannel', {
+      peer_pubkey_and_opt_addr: `${pk[m]}@${peerAddr(m)}`, capacity_sat: CAPACITY_SAT, push_msat: PUSH_MSAT,
+      asset_amount: D + L, asset_id: assetId, public: true, with_anchors: true, fee_base_msat: 0, fee_proportional_millionths: 0,
+    });
+  await waitFor('3 funding txs in mempool', async () => (await mempool()).length >= tx0 + TRAVELERS.length, 60_000, 500);
+  const funding = await mempool();
+  await mine(6);
+  await refresh('dave');
   let n = 0;
   while (n < 12) {
     const ok = await Promise.all(TRAVELERS.map(async (m) => (await chan('dave', m))?.is_usable && (await chan(m, 'dave'))?.is_usable));
@@ -170,7 +186,7 @@ await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side
   }, 120_000, 2000);
   const c = await chan('dave', 'alice');
   const a = await chan('alice', 'dave');
-  return { sats: `per channel: dave ${c.local_balance_sat} sat, traveler ${a.local_balance_sat} sat (capacity ${CAPACITY_SAT})`, note: `usable after ${n} extra blocks; retries [${retries.join(', ')}]; dave asset ${c.asset_local_amount}, traveler ${c.asset_remote_amount}` };
+  return { sats: `per channel: dave ${c.local_balance_sat} sat, traveler ${a.local_balance_sat} sat (capacity ${CAPACITY_SAT})`, note: `3 opens back to back, ${funding.length} funding txs, 6 blocks at once + ${n} extra; dave asset ${c.asset_local_amount}, traveler ${c.asset_remote_amount}` };
 });
 
 // ======================= 1. the atomic swap, for each traveler =======================
@@ -214,7 +230,7 @@ await runCase('6. guarantee: dave pays an invoice of charlie (3.50)', async () =
 await runCase('8. traveler claims LN at the last usable block, dave still claims before T', async () => {
   const r = await swap('alice', 'swap-alice-last', 100, { claimAtLastBlock: true });
   assert(r.d.state === 'claimed_onchain' && r.d.claimHeight! < r.d.timeout, 'dave claim before T');
-  return { sats: r.sats, note: JSON.stringify({ ...r.info, daveClaimHeight: r.d.claimHeight, blocksLeftToT: r.d.timeout - r.d.claimHeight! }) };
+  return { sats: r.sats, note: JSON.stringify({ ...r.info, daveClaimHeight: r.d.claimHeight, residualMarginBlocks: r.d.timeout - r.d.claimHeight! }) };
 });
 await runCase('9. dave restarts between the LN claim and his on-chain claim', async () => {
   const r = await swap('bob', 'swap-bob-restart', 100, { restartDaveBeforeClaim: true });

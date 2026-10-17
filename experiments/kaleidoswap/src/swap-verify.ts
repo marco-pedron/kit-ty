@@ -15,8 +15,9 @@ export interface SwapExpectation {
   travelerRefundKey: string; // x-only, registered for this swap
   daveClaimKey: string; // x-only, dave's own
   timeout: number; // T, agreed absolute height
-  finalCltvDelta: number; // min_final_cltv_expiry_delta the invoice must carry
-  maxShadowCltv: number; // upper bound of LDK's shadow CLTV offset on this graph
+  minFinalCltvDelta: number; // accepted range of the invoice's min_final_cltv_expiry_delta (42..48)
+  maxFinalCltvDelta: number;
+  maxShadowCltv: number; // LDK's cap on the shadow CLTV offset: 3 * 144 = 432, whatever the graph
   marginBlocks: number; // blocks dave needs to confirm his claim after the latest reveal (72)
 }
 
@@ -38,18 +39,21 @@ export interface SwapObservation {
 export interface SwapVerdict {
   pay: boolean;
   failures: string[];
-  /** Latest height at which the traveler can still claim the held payment (bound). */
+  /** Worst-case cltv_expiry of the held HTLC: the traveler can reveal P before this height. */
   lnDeadlineBound: number;
 }
 
-/** Upper bound of the held HTLC's claim deadline if dave pays at `height` (see RESULTS.md). */
+/** Worst case of the held HTLC's cltv_expiry if dave pays at `height`: LDK sets it to
+ *  height + 1 + final delta + shadow offset (≤ 432). The traveler's claim deadline is 39 blocks
+ *  earlier (HTLC_FAIL_BACK_BUFFER); the bound ignores that, on the safe side. */
 export function lnDeadlineBound(height: number, finalCltvDelta: number, maxShadowCltv: number): number {
-  return height + 1 + finalCltvDelta + maxShadowCltv - HTLC_FAIL_BACK_BUFFER;
+  return height + 1 + finalCltvDelta + maxShadowCltv;
 }
 
 export function verifySwap(x: SwapExpectation, o: SwapObservation): SwapVerdict {
   const f: string[] = [];
-  const deadline = lnDeadlineBound(o.currentHeight, x.finalCltvDelta, x.maxShadowCltv);
+  const delta = o.invoice.minFinalCltvExpiryDelta;
+  const deadline = lnDeadlineBound(o.currentHeight, delta, x.maxShadowCltv);
   const H = o.invoice.paymentHash;
 
   // on-chain: confirmed, not just in mempool, and exactly the script dave computed
@@ -72,7 +76,8 @@ export function verifySwap(x: SwapExpectation, o: SwapObservation): SwapVerdict 
   if (o.invoice.assetId !== x.assetId) f.push(`invoice asset ${o.invoice.assetId} ≠ ${x.assetId}`);
   if (o.invoice.assetAmount !== x.amount) f.push(`invoice amount ${o.invoice.assetAmount} ≠ D ${x.amount}`);
   if (o.invoice.payeePubkey !== x.travelerNodePubkey) f.push('invoice payee is not the traveler node');
-  if (o.invoice.minFinalCltvExpiryDelta !== x.finalCltvDelta) f.push(`invoice final CLTV delta ${o.invoice.minFinalCltvExpiryDelta} ≠ ${x.finalCltvDelta}`);
+  if (!(delta >= x.minFinalCltvDelta && delta <= x.maxFinalCltvDelta))
+    f.push(`invoice final CLTV delta ${delta} outside ${x.minFinalCltvDelta}..${x.maxFinalCltvDelta}`);
   if (o.invoice.expiresAt <= o.nowSec) f.push('invoice expired');
 
   // the announced terms, one by one
@@ -82,8 +87,8 @@ export function verifySwap(x: SwapExpectation, o: SwapObservation): SwapVerdict 
   if (o.announced.timeout !== x.timeout) f.push(`HTLC timeout ${o.announced.timeout} ≠ agreed T ${x.timeout}`);
 
   // timing: the traveler's latest possible reveal leaves dave marginBlocks to confirm his claim
-  if (x.timeout - deadline < x.marginBlocks)
-    f.push(`T too close: T ${x.timeout} − LN deadline ${deadline} = ${x.timeout - deadline} < ${x.marginBlocks}`);
+  if (x.timeout < deadline + x.marginBlocks)
+    f.push(`T too close: T ${x.timeout} < worst-case LN expiry ${deadline} + ${x.marginBlocks}`);
 
   return { pay: f.length === 0, failures: f, lnDeadlineBound: deadline };
 }
