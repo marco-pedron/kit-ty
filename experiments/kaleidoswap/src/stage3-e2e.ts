@@ -341,7 +341,10 @@ await runCase('11. (cont.) dave wakes up after the refund: his claim fails, loss
 await runCase('7. dave closes charlie channel: DUSD back to charlie on-chain after the sweep', async () => {
   const c = await chan('dave', 'charlie');
   const charlieSide = c.asset_remote_amount!;
+  const daveSide = c.asset_local_amount!;
   const before = await settled('charlie');
+  const daveBefore = await settled('dave');
+  const swept = async () => (await refresh('charlie'), await refresh('dave'), (await settled('charlie')) === before + charlieSide && (await settled('dave')) === daveBefore + daveSide);
   const hClose = await height();
   await post('dave', '/closechannel', { channel_id: c.channel_id, peer_pubkey: pk.charlie, force: false });
   await waitFor('close tx in mempool', async () => (await mempool()).length > 0, 60_000, 500);
@@ -353,12 +356,13 @@ await runCase('7. dave closes charlie channel: DUSD back to charlie on-chain aft
     await mine(1);
     n++;
     const t = Date.now();
-    await waitFor('sweep or timeout', async () => (await refresh('charlie'), (await settled('charlie')) === before + charlieSide || (await mempool()).length > 0), 20_000, 2000).catch(() => undefined);
+    await waitFor('sweeps or timeout', async () => (await swept()) || (await mempool()).length > 0, 20_000, 2000).catch(() => undefined);
     tSweep += Date.now() - t;
-    if ((await settled('charlie')) === before + charlieSide) break;
+    if (await swept()) break;
   }
   assert((await settled('charlie')) === before + charlieSide, `charlie settled ${await settled('charlie')} expected ${before + charlieSide}`);
-  return { note: `charlie side ${charlieSide} → on-chain after ${n} blocks (close at ${hClose}, ${Math.round(tSweep / 1000)} s waiting for the sweeper); charlie settled ${before}→${await settled('charlie')}` };
+  assert((await settled('dave')) === daveBefore + daveSide, `dave settled ${await settled('dave')} expected ${daveBefore + daveSide}`);
+  return { note: `charlie side ${charlieSide} → on-chain after ${n} blocks (close at ${hClose}, ${Math.round(tSweep / 1000)} s waiting for the sweeper); charlie settled ${before}→${await settled('charlie')}; dave side ${daveSide} swept back to dave too` };
 });
 
 // ======================= conservation =======================
