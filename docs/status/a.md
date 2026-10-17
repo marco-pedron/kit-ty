@@ -7,7 +7,7 @@
 - [x] A1 deriveTrip (branch `a/A1-derive-trip`)
 - [x] A2 validateEvent (branch `a/A2-validate-event`)
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
-- [ ] A4 AI con QVAC + ai:eval
+- [x] A4 AI con QVAC + ai:eval (sab 17/10 17:20, branch `a/A4-qvac-ai`)
 - [x] A5 Flussi dell'agente (fake → reale): ★1 (A5a, A5b), ★3 wallet reale (#19); passi 2-7 verdi sul reale con `pnpm e2e:demo` (B8, sab 17/10 16:55)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
@@ -16,9 +16,8 @@
 - niente
 
 ## Prossimo passo
-- A4: AI con QVAC (timebox fino alle 20:30, poi modulo manuale).
+- A6 (P1, solo dopo il tag `demo-v1`): frasi ostili in `ai:eval` e hash dei GGUF all'avvio.
 - **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
-- A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
 ## API di `MemberAgent` per C3 (`apps/agent/src/flows/member-agent.ts`)
 Un'istanza per attore (alice, bob, charlie, dave), costruita da chi costruisce gli agenti (`server.ts`):
@@ -71,6 +70,13 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A4, sab 17/10 17:20
+- **Cosa funziona:** AI sul dispositivo con QVAC (`@qvac/sdk` 0.21.0): `OCR_LATIN` per il testo e `QWEN3_1_7B_INST_Q4` per il JSON, caricati una volta in background all'avvio dell'agente (`index.ts`), stato `loading → ready | error` in `/state`. Se i modelli non si caricano l'agente parte comunque: AI in `error`, la UI apre il modulo manuale.
+- **Come è fatto** (`apps/agent/src/ai/`): i blocchi OCR diventano righe stampate (`ocr-lines.ts`, dai bbox). Il modello **non scrive mai importi**: riceve le righe numerate e indica quale riga è un articolo (con etichetta e quantità), il subtotale, le tasse, la mancia e il totale (`receipt.ts`, schema `json_schema` passato a QVAC con gli indici di riga come limiti). Il codice legge l'importo dalla riga (`amounts.ts`, esponenti di `CURRENCY_EXPONENTS`, "2 x 65.000" → quantità e prezzo unitario) e aggiunge gli avvisi (somma delle righe, totale, quantità × prezzo): mostrati, mai corretti in silenzio. Una riga "Tip"/"Mancia" data come articolo diventa la mancia, una riga del totale data come articolo viene scartata, sempre con un avviso. Divisione (`split.ts`): una chiave per articolo ("0. Pho bo") e i membri come enum, quindi il modello non può nominare altri (injection, SPEC §13 #6); due esempi few-shot con nomi e piatti inventati; `proposeSplit` riceve anche il pagatore ("io"). Zod + al massimo 2 tentativi con l'errore passato al modello, poi `ok: false` con il parziale (`ai-service.ts`). `<think>` e blocchi di codice tolti.
+- **Misurato:** `pnpm ai:eval`: cena VND, taxi EUR e supermercato USD (con articolo a peso) con **0 correzioni**; la frase della demo in italiano e in inglese dà esattamente la divisione attesa. Estrazione ~15 s, divisione ~2 s, caricamento 4-5 s con i modelli in cache. `pnpm ai:eval:offline` (stesso eval dentro `sandbox-exec` senza rete IP, verificato che blocca anche `127.0.0.1`): verde. `pnpm e2e:demo` ora fa il passo 2 vero: foto → AI → frase → 3.09/3.09/3.50 → invio, 11/11 verdi sui nodi (log `infra/.out/logs/20261017-171307-e2e-demo.log`).
+- **Come si prova:** `pnpm ai:eval`, `pnpm ai:eval:offline`; immagini rigenerabili con `python3 infra/fixtures/receipts/make-images.py`.
+- **Problemi noti:** la data non è controllata contro le date del viaggio (l'`AiService` non le riceve). L'OCR prende ~10 s su questo portatile: in UI serve l'attesa con il tempo trascorso (C7). Gira su Node 24 qui, anche se `engines` dice 22. Gli scontrini di prova sono generati (font monospazio): uno scontrino fotografato vero sarà più difficile.
+
 ### A5 ★3, wallet reale (sab 17/10, branch `a/A5-real-wallet`, PR #19)
 - **Prova reale (B, stack regtest): verde in 25.5 s.** 20 eventi, firme 20/20, catena valida, stessa testa `387bf500da96` su 4/4, ultima riga `OK: real Lightning payment, proof verified, same log on 4/4 agents`.
 - Funziona: senza `KITTY_FAKES`, `index.ts` crea un `RlnWallet` (B3) per attore con `realSetup(config)` (`flows/real-setup.ts`): ogni wallet legge solo i segreti del proprio membro. I loop degli agenti partono in entrambe le modalità.
