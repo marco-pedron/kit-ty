@@ -394,7 +394,7 @@ describe('agent routes: roles, validation and errors', () => {
     expect(send).toMatchObject({
       status: 503,
       json: {
-        error: { code: 'NODE_UNREACHABLE', action: expect.stringMatching(/Start the agents/) },
+        error: { code: 'AGENT_NOT_READY', action: expect.stringMatching(/Start the agents/) },
       },
     });
     const extract = await call(a, 'POST', '/api/alice/expenses/extract', {
