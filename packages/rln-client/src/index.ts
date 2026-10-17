@@ -7,8 +7,15 @@ import type { components, paths } from './schema.js';
 export type RlnPaths = paths;
 export type RlnSchemas = components['schemas'];
 
-export function createRlnClient(baseUrl: string) {
-  return createClient<paths>({ baseUrl });
+export interface RlnClientOptions {
+  /** Injected in unit tests; defaults to the global fetch. */
+  fetch?: (input: Request) => Promise<Response>;
+}
+
+export function createRlnClient(baseUrl: string, opts: RlnClientOptions = {}) {
+  return createClient<paths>(opts.fetch ? { baseUrl, fetch: opts.fetch } : { baseUrl });
 }
 
 export type RlnClient = ReturnType<typeof createRlnClient>;
+
+export { RlnError, isRlnErrorBody, toRlnError, type RlnErrorBody } from './errors.js';
