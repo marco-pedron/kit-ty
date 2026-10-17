@@ -1,3 +1,5 @@
+import { createAiService } from './ai/ai-service.js';
+import { createQvacEngine } from './ai/qvac-engine.js';
 import { loadConfig } from './config.js';
 import { FakeLightningNetwork } from './dev-fakes/fake-wallet.js';
 import { realSetup, walletsOf } from './flows/real-setup.js';
@@ -16,7 +18,15 @@ const config = loadConfig();
 // The routes (C3) read the runtime through a getter: it is created right below, with the
 // server's logger, and the routes only answer after listen.
 let runtime: AgentRuntime | null = null;
-const app = buildAgentServer(config, { runtime: () => runtime });
+// On-device AI (SPEC §11): starts loading now, in the background. If it cannot load, the
+// agent still runs: the AI is in error and the payer uses the manual form.
+const ai = config.KITTY_FAKES
+  ? undefined
+  : createAiService({
+      engine: createQvacEngine(),
+      log: { info: (m) => app.log.info(m), error: (m) => app.log.error(m) },
+    });
+const app = buildAgentServer(config, { runtime: () => runtime, ...(ai && { ai }) });
 
 // One relay client for the process (C2); one agent per actor on it, each with only its own
 // wallet (SPEC §14).

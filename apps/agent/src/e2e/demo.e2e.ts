@@ -1,15 +1,21 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ActorId, AgentClient, LineView, TripView } from '@kitty/shared';
+import type {
+  ActorId,
+  AgentClient,
+  LineView,
+  Receipt,
+  SplitAssignment,
+  TripView,
+} from '@kitty/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { DEMO_RECEIPT, DEMO_SPLIT } from '../dev-fakes/fake-ai.js';
 import { ESPLORA, startStack, tipHeight, waitFor, type Stack } from './harness.js';
 
 // B8: the demo of SPEC §16, steps 2-7, without the UI: through the agent API (SPEC §14.3) on
-// the real regtest stack. The AI is skipped (task A4): alice submits the demo dinner and its
-// split as the UI would after the review. IRREVERSIBLE: charlie is excluded and his channels
+// the real regtest stack, with the real on-device AI on the photo of the dinner
+// (infra/fixtures/receipts/vnd-dinner.png) and the sentence of the demo. IRREVERSIBLE: charlie is excluded and his channels
 // closed; run `pnpm demo:reset` before the next run.
 
 const LOG =
@@ -75,12 +81,51 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
       expect(before[as]?.me?.balance?.tripOutboundCents).toBe(5000n);
   });
 
-  it('step 2: alice submits the dinner; the ledger shares are 3.09 / 3.09 / 3.50', async () => {
+  const photo = readFileSync(
+    fileURLToPath(new URL('../../../../infra/fixtures/receipts/vnd-dinner.png', import.meta.url)),
+  );
+  let receipt: Receipt;
+  let assignments: SplitAssignment[];
+
+  it('step 2: the AI on the device reads the photo of the receipt', async () => {
+    await waitFor(
+      'the on-device AI ready',
+      async () => ((await state('alice')).ai.status === 'ready' ? true : undefined),
+      120_000,
+      1_000,
+    );
+    const ai = (await state('alice')).ai;
+    expect(ai).toEqual({ status: 'ready', fake: false });
+    const r = await api.alice.extractReceipt({
+      image: { mimeType: 'image/png', dataBase64: photo.toString('base64') },
+    });
+    note('extract', r);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    receipt = r.data;
+    expect(receipt).toMatchObject({ currency: 'VND', total: 255_000n, tip: 20_000n, warnings: [] });
+    expect(receipt.items.map((it) => it.total)).toEqual([130_000n, 75_000n, 30_000n]);
+  });
+
+  it('step 2: the sentence gives the split; the ledger shares are 3.09 / 3.09 / 3.50', async () => {
+    const r = await api.alice.proposeSplit({
+      receipt,
+      text: "Bob e io la pho, Charlie solo birre, l'acqua in tre",
+    });
+    note('split', r);
+    expect(r.result.ok).toBe(true);
+    if (!r.result.ok) return;
+    assignments = r.result.data.assignments;
+    const shares = Object.fromEntries((r.preview?.shares ?? []).map((x) => [x.member, x.cents]));
+    expect(shares).toEqual({ alice: 309n, bob: 309n, charlie: 350n });
+  });
+
+  it('step 2: alice submits; the lines are 3.09 for bob and 3.50 for charlie', async () => {
     const t0 = Date.now();
     const expense = await api.alice.submitExpense({
-      receipt: DEMO_RECEIPT,
-      assignments: DEMO_SPLIT.assignments,
-      receiptImageSha256: createHash('sha256').update('kitty e2e demo dinner photo').digest('hex'),
+      receipt,
+      assignments,
+      receiptImageSha256: createHash('sha256').update(photo).digest('hex'),
     });
     expenseId = expense.expenseId;
     const s = await state('alice');

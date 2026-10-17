@@ -207,6 +207,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       activeTravelers(agent),
       body.text,
       body.clarification,
+      as === 'dave' ? undefined : as, // traveler-only route: never dave
     );
     let preview = null;
     if (
