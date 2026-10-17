@@ -135,13 +135,26 @@ await runCase('0. on-ramp 100.00 on-chain to each traveler (RLN → RLN)', async
 });
 
 await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side, push 300k sat)', async () => {
+  const retries: string[] = [];
   for (const m of TRAVELERS) {
-    await post('dave', '/openchannel', {
-      peer_pubkey_and_opt_addr: `${pk[m]}@${peerAddr(m)}`, capacity_sat: CAPACITY_SAT, push_msat: PUSH_MSAT,
-      asset_amount: D + L, asset_id: assetId, public: true, with_anchors: true, fee_base_msat: 0, fee_proportional_millionths: 0,
-    });
+    // back-to-back opens: the DUSD change of the previous funding tx needs a block (as in seed.ts)
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await post('dave', '/openchannel', {
+          peer_pubkey_and_opt_addr: `${pk[m]}@${peerAddr(m)}`, capacity_sat: CAPACITY_SAT, push_msat: PUSH_MSAT,
+          asset_amount: D + L, asset_id: assetId, public: true, with_anchors: true, fee_base_msat: 0, fee_proportional_millionths: 0,
+        });
+        break;
+      } catch (e) {
+        if (attempt >= 5) throw e;
+        retries.push(`${m}#${attempt}: ${(e as Error).message.slice(0, 60)}`);
+        await mine(1);
+        await refresh('dave');
+      }
+    }
     await waitFor('funding in mempool', async () => (await mempool()).length > 0, 60_000, 500);
     await mine(1);
+    await refresh('dave'); // the DUSD change of this funding becomes spendable only after a refresh
   }
   let n = 0;
   while (n < 12) {
@@ -157,7 +170,7 @@ await runCase('0. ONE channel dave → each traveler (D + L = 80.00 on dave side
   }, 120_000, 2000);
   const c = await chan('dave', 'alice');
   const a = await chan('alice', 'dave');
-  return { sats: `per channel: dave ${c.local_balance_sat} sat, traveler ${a.local_balance_sat} sat (capacity ${CAPACITY_SAT})`, note: `usable after ${n} extra blocks; dave asset ${c.asset_local_amount}, traveler ${c.asset_remote_amount}` };
+  return { sats: `per channel: dave ${c.local_balance_sat} sat, traveler ${a.local_balance_sat} sat (capacity ${CAPACITY_SAT})`, note: `usable after ${n} extra blocks; retries [${retries.join(', ')}]; dave asset ${c.asset_local_amount}, traveler ${c.asset_remote_amount}` };
 });
 
 // ======================= 1. the atomic swap, for each traveler =======================

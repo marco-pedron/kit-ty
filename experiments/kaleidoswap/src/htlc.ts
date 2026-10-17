@@ -73,9 +73,11 @@ export async function voutOf(txid: string, scriptPubkey: string): Promise<number
 
 /** An RLN node's blinded RGB invoice for `amount` of the asset (on-chain receive). */
 export async function rlnRgbInvoice(m: Member, assetId: string, amount: number): Promise<string> {
+  // no asset_id: a node that never saw the contract answers UnknownContractId (first receive)
+  void assetId;
   const r = await post(m, '/rgbinvoice', {
     min_confirmations: 1,
-    asset_id: assetId,
+    asset_id: null,
     assignment: { type: 'Fungible', value: amount },
     expiration_timestamp: Math.floor(Date.now() / 1000) + 3600,
     witness: false,

@@ -30,6 +30,10 @@ echo "== fresh kitty-kaleido stack"
 scripts/stack.sh reset >/dev/null 2>&1 || true
 rm -rf run .secrets
 scripts/stack.sh up full
+until curl -s --user user:password -H 'content-type: text/plain' \
+    --data '{"jsonrpc":"1.0","id":"w","method":"getblockchaininfo","params":[]}' \
+    http://127.0.0.1:28443/ | grep -q '"result":{'; do sleep 1; done
+until (exec 3<>/dev/tcp/127.0.0.1/23501) 2>/dev/null; do sleep 1; done
 for port in 23001 23002 23003 23004; do
     until curl -s "http://127.0.0.1:$port/nodeinfo" >/dev/null; do sleep 1; done
 done
