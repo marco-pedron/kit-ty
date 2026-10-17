@@ -34,13 +34,16 @@ export function startAgents(p: {
   wallets: Record<ActorId, Wallet>;
   log: Log;
   tickMs?: number;
+  /** Clock of the agents (tests); default the wall clock. */
+  now?: () => Date;
 }): AgentRuntime {
   // FakeWallet signs with fakeSign; the real wallet (B3) with ed25519 (B4).
   const verifier = p.fakes ? fakeVerifier : signatureVerifier;
-  const dave = new CoordinatorAgent({ wallet: p.wallets.dave, relay: p.relay, verifier });
+  const common = { relay: p.relay, verifier, ...(p.now !== undefined && { now: p.now }) };
+  const dave = new CoordinatorAgent({ ...common, wallet: p.wallets.dave });
   const agents = new Map<ActorId, MemberAgent>([['dave', dave]]);
   for (const id of MEMBER_IDS)
-    agents.set(id, new MemberAgent({ actor: id, wallet: p.wallets[id], relay: p.relay, verifier }));
+    agents.set(id, new MemberAgent({ ...common, actor: id, wallet: p.wallets[id] }));
 
   const lastError = new Map<ActorId, string>();
   const timer = setInterval(() => {
