@@ -13,18 +13,25 @@
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [ ] B5 (P1) Rail on-chain
 - [ ] B6 Backup automatico (lock → backup → unlock); demo:lose-phone = P1
-- [ ] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan)
+- [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- B9: `openLiquidity` + loop di Dave su `liquidityPlan`, con scenario e2e separato "L piccola" (`pnpm e2e:liquidity`).
-- B6 (backup automatico) e P1 solo dopo il tag `demo-v1`.
+- Freeze alle 21:30: verifica finale su main (`pnpm typecheck && pnpm lint && pnpm test`, `demo:reset`, `e2e:demo`, `demo:reset`).
+- B6 (backup automatico) e P1 (`demo:lose-phone`, B5) solo dopo il tag `demo-v1`.
 - Prima di ogni merge rischioso: `pnpm demo:reset && pnpm e2e:demo`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B9, sab 17/10 17:40
+- **Cosa funziona:** `RlnWallet.openLiquidity(peer, cents)` (solo Dave): `/openchannel` con gli stessi parametri del seed (pubblico, anchors, commissioni 0, 1,000,000 sat), aperture in coda una alla volta (un'allocazione DUSD apre un canale alla volta), attesa della funding tx su esplora, poi i 6 blocchi in un colpo solo e attesa del canale usabile (budget 10 blocchi). `CoordinatorAgent` esegue `liquidityPlan` a ogni tick con soglia `LIQUIDITY_THRESHOLD_CENTS` = 10.00: se un margine scende sotto, apre subito, in background, con l'operazione `opening_liquidity` e una riga di attività ("Opened 35.00 of liquidity to alice…"). La vista di Dave mostra il margine con la liquidità aggiunta (`dave.liquidityNeeds()`).
+- **Scelta da segnalare al PM (SPEC §10.5 punto 2):** il canale nuovo contiene **almeno la riga più grande ancora da ricevere**, non solo `soglia − margine`: un pagamento passa da un solo canale (RLN non fa pagamenti multi-percorso), quindi con 15.00 aperti un rimborso da 35.00 non passerebbe. Il ledger (`liquidityPlan`) non cambia; il `max` è nell'agente.
+- **Misurato (`pnpm e2e:liquidity`, log `infra/.out/logs/20261017-173222-e2e-liquidity.log`):** bob deve 35.00 ad alice (più dei 30.00 di L); Dave apre 35.00 verso alice subito dopo l'invio, **9 s e 6 blocchi**; bob approva (sopra il suo limite automatico) e il pagamento da 35.00 passa 2,8 s dopo l'apertura; alice a 85.00. `pnpm e2e:demo` resta 11/11 e verifica che con i numeri della demo Dave **non apre nulla**.
+- **Come si prova:** `pnpm demo:reset && pnpm e2e:liquidity` (irreversibile, non è la demo: poi `pnpm demo:reset`).
+- **Problemi noti:** la liquidità aggiunta è ricordata in memoria dall'agente di Dave: dopo un riavvio potrebbe riaprire una volta (capitale immobilizzato, mai fondi a rischio). Con le scadenze della demo (30 s) un'apertura deve finire prima della scadenza: oggi 9 s; la prima versione minava un blocco alla volta (33 s) e la riga scadeva. Una riga `overdue` non viene pagata in automatico (regola di `decideAutoPay`).
+
 ### B8, sab 17/10 16:55
 - **Cosa funziona:** `pnpm e2e:demo` fa i passi 1-7 di SPEC §16 sui nodi veri, solo tramite l'API dell'agente (client tipizzato `createAgentClient` di shared). Relay e agente (`index.ts`, `KITTY_FAKES=0`) partono come processi figli su porte proprie (4400/4500, `E2E_RELAY_PORT`/`E2E_AGENT_PORT`) e un database del relay temporaneo, quindi non toccano il relay di `pnpm dev`. L'AI è saltata (A4): alice invia la cena e la divisione della demo come farebbe la UI dopo la revisione.
 - **Misurato (log `infra/.out/logs/20261017-164903-e2e-demo.log`, riepilogo `infra/.out/e2e-demo.json`):** quote 3.09/3.09/3.50; bob pagato in automatico 24 s dopo l'invio, motivo "Paid 3.09 to alice automatically: no objection in 20 s, under your limit of 20.00.", prova con i tre controlli verdi, **0 blocchi minati**; charlie contesta, dave conferma, overdue dopo 30 s; "Copri ed escludi": `GUARANTEE_PAID` 3.50, due txid di chiusura confermati, **7 blocchi minati** (asserzione ≤ 8: la correzione dello sweep di B7 è confermata sul reale, il vecchio comportamento a 11 fallirebbe); charlie 100.00 on-chain e canali a zero; alice 56.59 in uscita (+6.59: 3.09 da bob, 3.50 garantiti); bob 46.91; registro 23/23 firme valide, stessa testa su 4/4.
