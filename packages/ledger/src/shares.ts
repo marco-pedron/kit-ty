@@ -1,4 +1,4 @@
-import type { ExpenseDraft, LockedRate, Receipt } from '@kitty/shared';
+import { canonicalHash, type ExpenseDraft, type LockedRate, type Receipt } from '@kitty/shared';
 import { allocateExpense } from './expense.js';
 import { LedgerError, assertUniqueIds } from './errors.js';
 
@@ -96,4 +96,13 @@ export function expenseShares(input: ShareInput): ShareResult {
     payerCents: cents.get(payer) ?? 0n,
     debtors: debtors.map((d) => ({ id: d.id, cents: cents.get(d.id) ?? 0n })),
   };
+}
+
+/**
+ * The duplicate-receipt fingerprint of EXPENSE_SUBMITTED (SPEC §13 #5):
+ * sha256(canonical({ merchant, date, currency, total, receiptImageSha256 })).
+ */
+export function expenseFingerprint(receipt: Receipt, receiptImageSha256: string): string {
+  const { merchant, date, currency, total } = receipt;
+  return canonicalHash({ merchant, date, currency, total, receiptImageSha256 });
 }

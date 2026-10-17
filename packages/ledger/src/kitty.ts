@@ -407,29 +407,8 @@ export interface ValidationDeps {
 
 export type ValidationResult = { ok: true } | { ok: false; code: 'INVALID_EVENT'; reason: string };
 
-/**
- * Checks one event against the trip derived from all the previous ones (task A2, SPEC §9.3):
- * signature of `author` over signingMessage(inner); author admitted (except TRIP_CREATED and
- * MEMBER_JOINED), coordinator types only from dave (EVENT_AUTHOR); nonce never seen; chain
- * (seq = head + 1, prevHash = head hash, hash = storedEventHash); EXPENSE_SUBMITTED totals
- * (items + tax + tip = total; Σ lines + payerCents = totalUsdCents; shares recomputed from the
- * receipt, itemIndexes, payerItemIndexes and rate), active debtors, fresh fingerprint, each
- * invoice decodable, payee = payer's node, trip asset and line amount; LINE_SEEN/LINE_DECIDED
- * by a debtor of that expense with matching cents; PAYMENT_MADE/GUARANTEE_PAID with
- * sha256(preimage) = the invoice payment hash and matching amount; MEMBER_JOINED bind invoice
- * from nodePubkey with description `kitty-bind:<sha256(appPubkey)>` (SPEC §9.1).
- * `trip` is null before TRIP_CREATED.
- */
-export function validateEvent(
-  stored: StoredEvent,
-  trip: TripState | null,
-  deps: ValidationDeps,
-): ValidationResult {
-  void stored;
-  void trip;
-  void deps;
-  throw new LedgerError('NOT_IMPLEMENTED', 'validateEvent: task A2');
-}
+/** Task A2, SPEC §9.3: in validate.ts. */
+export { validateEvent } from './validate.js';
 
 /**
  * Whether the debtor's agent pays this line now, and the sentence that says why (task A3,
