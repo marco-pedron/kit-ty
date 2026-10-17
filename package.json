@@ -17,7 +17,10 @@
     "infra:up": "./infra/scripts/up.sh",
     "infra:down": "./infra/scripts/down.sh",
     "infra:reset": "./infra/scripts/reset.sh",
-    "infra:check": "./infra/scripts/check.sh"
+    "infra:check": "./infra/scripts/check.sh",
+    "demo:reset": "./infra/scripts/demo-reset.sh",
+    "demo:unlock": "./infra/scripts/unlock.sh",
+    "e2e:wallet": "vitest run -c apps/agent/src/wallet/vitest.integration.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
