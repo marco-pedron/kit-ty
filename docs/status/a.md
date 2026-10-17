@@ -9,18 +9,28 @@
 - [x] A3 decideAutoPay (branch `a/A3-decide-auto-pay`)
 - [ ] A4 AI con QVAC + ai:eval
 - [ ] A5 Flussi dell'agente (fake → reale)
-- [ ] A7 liquidityPlan (SPEC §10.5)
+- [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [ ] A6 (P1) Anti-injection e hash dei modelli
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- A7 `liquidityPlan(trip, thresholdCents)`: trasformare in test gli `it.todo` di A7 (ultimi del ledger). Poi A5 (flussi dell'agente con `FakeWallet`).
+- Ledger completo (A1, A2, A3, A7). Prossimo: A5 flussi dell'agente con `FakeWallet`, o A4 (AI).
+- **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7).
 - A4: il prompt dell'AI deve dire che `quantity` è intera; articoli a peso o volume → `quantity = 1`, misura nel label ("Bananas (0.73 kg)"), `unitPrice = total`. La divisione usa sempre il total della riga (JSDoc di `ReceiptItemSchema` e di `AiService.extractReceipt`).
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### A7, sab 17/10
+- Funziona: `liquidityPlan(trip, thresholdCents, extraLiquidity?)` (`packages/ledger/src/liquidity.ts`, riesportato da `kitty.ts`): una voce per membro attivo (canali pronti, non escluso) con `inboundCents`, `toReceiveCents`, `marginCents`, `openCents`.
+- `inbound = L + extra + inviato − ricevuto`: L = `params.liquidityCents`; inviato = righe pagate da m via Lightning; ricevuto = righe a favore di m pagate via Lightning o coperte dalla garanzia; i pagamenti on-chain non toccano i canali. `daRicevere` = righe aperte a favore di m, contestate e scadute incluse.
+- **Scelte approvate:**
+  - apertura = `soglia − margine` quando margine < soglia. La formula di SPEC §10.5 (`daRicevere − margine + soglia`) apre troppo, esattamente di `daRicevere`: con inbound 30.00, da ricevere 45.00, soglia 5.00 aprirebbe 65.00 invece di 20.00. **Proposta di modifica alla SPEC per il PM**, non applicata.
+  - terzo parametro `extraLiquidity: ReadonlyMap<Pubkey, bigint>` (default vuoto): la liquidità aperta da Dave dopo il primo canale, che il registro non contiene; la passa l'agente di Dave dal proprio nodo (B9). Senza, il piano richiederebbe la stessa apertura a ogni evento.
+- Come si prova: `pnpm test` (blocco "A7 liquidityPlan": i 5 casi della checklist, più on-chain che non conta, `extraLiquidity` che azzera l'apertura, cena della demo: alice inbound 30.00, da ricevere 6.59, margine 23.41).
+- Problemi noti: la soglia la sceglie chi chiama (agente di Dave, B9); non c'è ancora un valore in `TripParams`.
+
 ### A3, sab 17/10
 - Funziona: `decideAutoPay(policy, line, trip, now, invoice)` (`packages/ledger/src/autopay.ts`, riesportato da `kitty.ts`) e `autoPaidLast24h(trip, debtor, now)`.
 - **Cambio di firma (approvato, opzione A; avvisare C):** quinto parametro `invoice: DecodedInvoice | null`, decodificato dall'agente con il proprio nodo (`Wallet.decodeInvoice` di `line.bolt11`). `null` = non leggibile → non paga. Per `LineView.agent` di un debitore le rotte possono passare il decodificato o `null` (la frase degli stati non `due` non dipende dall'invoice).
