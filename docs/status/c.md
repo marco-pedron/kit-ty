@@ -8,7 +8,11 @@
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [x] C2 RelayClient (branch `c/C2-relay-client`)
 - [x] C3 Rotte dell'agente (branch `c/C3-agent-routes`)
-- [ ] C4 UI viaggiatore
+- [ ] C4 UI viaggiatore (piano ridotto, 4 PR)
+  - [x] C4a shell, polling, navigazione, QR, Profile (branch `c/C4a-shell`)
+  - [ ] C4b Home con Approve/Dispute
+  - [ ] C4c New expense
+  - [ ] C4d Groups e Group settings
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -20,7 +24,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C4 UI viaggiatore.
+- C4b Home con le card Approve/Dispute.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -41,6 +45,10 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4a, sab 17/10 19:10
+- Funziona: app a larghezza telefono (max 420 px, centrata), `?as=alice|bob|charlie`, polling di `/state` ogni secondo (`apps/web/src/state.ts`, con lo scarto tra orologio del server e del browser per i conti alla rovescia). Barra in basso flottante Groups · 📷 · QR; swipe da Home (sinistra → New expense, destra → QR) e ritorno; schermata nell'hash dell'URL (`#/qr`). Home con barra in alto (saldo del canale di viaggio, occhio per nasconderlo, modalità di pagamento, logo → Profile). QR della pubkey del membro ("Your kit+ty ID", libreria `uqr` 0.1.3). Profile con nome e modalità. New expense, Groups e Group settings sono gusci navigabili. Costante `SHOW_DEMO_SECOND_GROUP` in `apps/web/src/config.ts` (usata da C4b e C4d).
+- Come si prova: `pnpm dev:fakes`, poi `http://127.0.0.1:5173/?as=bob`. Test: `nav.test.ts` (hash, swipe), `mode.test.ts` (etichetta dello slider).
+- Problemi noti: layout non verificato con screenshot automatici (Chrome assente sulla macchina); dave vede solo un avviso (C5). Dopo `pnpm dev:fakes` il database del relay contiene il viaggio finto: prima di `pnpm dev` reale serve `pnpm demo:reset`.
 ### C3, sab 17/10 15:00 (completa C3a, sotto)
 - `buildAgentServer(config, { runtime?, ai?, now?, onchainFound? })`: `runtime` è un getter dell'`AgentRuntime` di `startAgents`. Il server non crea agenti, wallet o reti finte; senza runtime le rotte degli agenti rispondono 503 con un'azione (vedi richiesta 4).
 - Rotte di Dave su `CoordinatorAgent` (A5b): `POST /dave/disputes/:expenseId/:member`, `POST /dave/defaults/:expenseId/:member/cover-and-exclude`, `PUT /dave/rates`. Rifiuti dei flussi con il loro codice (es. riga non contestata → 403 `NOT_ALLOWED` con il motivo).
