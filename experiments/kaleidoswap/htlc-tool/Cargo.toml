@@ -13,9 +13,8 @@ description = "Experiment CLI: RGB assets locked in a P2TR swap-tree HTLC, claim
 # kaleidoswap/rgb-lib with the HTLC operation APIs (psbt_op_*, accept by recipient id); the
 # same revision kaleidoswap-sdk's examples/rgb-regtest pins (385254a).
 rgb-lib = { git = "https://github.com/kaleidoswap/rgb-lib", rev = "dbdf82dac3ffd2a41b1ec3cc9b410c5a4fa56f2f", default-features = false, features = ["electrum"] }
-# rgb-lib's pre-release invoice dependency otherwise selects incompatible stable consensus
-# (same pin as kaleidoswap-sdk examples/rgb-regtest).
-rgb-consensus = "=0.11.1-rc.11"
+# Cargo.lock starts from kaleidoswap/rgb-lib@dbdf82d's own lock: it resolves secp256k1
+# 0.32.0-beta.2 (yanked on crates.io, required by rgb-consensus 0.11.1-rc.11).
 anyhow = "1"
 serde_json = "1"
 hex = "0.4"
