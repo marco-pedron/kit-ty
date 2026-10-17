@@ -12,19 +12,27 @@
 - [x] B7 Chiusura canali per l'esclusione (sab 17/10 15:55, #20)
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [ ] B5 (P1) Rail on-chain
-- [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, branch `b/B6-backup`); demo:lose-phone = P1, prossimo
+- [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, #29; correzione 19:05: solo viaggiatori); `demo:lose-phone` P1 fatto (sab 17/10 19:05, branch `b/B6b-lose-phone`)
 - [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
-- P1 `pnpm demo:lose-phone bob`: nodo nuovo, `/restore` dal backup sul relay, stesso saldo, un nuovo pagamento.
-- Poi A6 (anti-injection, hash GGUF), B5 (rail on-chain), pulizia Fase 3.
+- A6 (anti-injection nella divisione, hash dei GGUF), poi B5 (rail on-chain), poi pulizia Fase 3.
 - Prima di ogni merge rischioso: `pnpm demo:reset && pnpm e2e:demo`.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### B6 correzione + P1 demo:lose-phone, sab 17/10 19:05
+- **Problema trovato:** dopo B6, `e2e:demo` è fallito 3 volte su 8: un nodo smetteva di rispondere dopo il proprio backup (pagamento di bob `Pending` 30 s su Dave, oppure invio della spesa appeso su alice). **Riprodotto:** RLN `d4762ac` si blocca per sempre se una richiesta REST gli arriva durante o subito dopo un `/unlock` (log fermi dopo "Unlock completed"; `infra/.out/logs/*-rln-*-hang.log`). Con richieste concorrenti, come quelle degli agenti, il blocco arriva al primo ciclo; senza traffico 24 cicli su 25 sono andati bene.
+- **Cura nel wallet:** durante un backup nessun'altra richiesta parte verso il nodo (cancello in `RlnWallet.call`, si aspetta che quelle in volo finiscano prima del lock), e dopo l'unlock 3 s di quiete (`BACKUP_SETTLE_MS`) prima di qualsiasi richiesta. Verifica: 16 cicli su 16 sotto carico concorrente (8 alice, 8 dave); poi `e2e:demo` **3 su 3** e `e2e:lose-phone` verdi (log `20261017-191332`, `-191740`, `-192137`, `-192534`). In più un timeout di 60 s riapre il cancello e libera la coda dei pagamenti se un nodo resta comunque bloccato (`NODE_UNREACHABLE`, azione "restart its container, then pnpm demo:unlock"). In `/state` il saldo durante un backup risponde "non disponibile" dopo 1,5 s invece di restare appeso. Un backup ora dura ~6 s.
+- **Decisione (da confermare dal PM, SPEC §12):** **nessun backup automatico del nodo di Dave**: è l'hub, il cancello protegge dalle richieste REST ma non dagli HTLC che arrivano dai peer, e se si blocca si ferma ogni pagamento. I viaggiatori continuano con il backup automatico.
+- **demo:lose-phone** (`pnpm demo:lose-phone bob`, `infra/treasury/lose-phone.ts`, gira con relay e agenti accesi): legge saldo e pubkey del nodo, scarica dal relay l'ultimo backup cifrato, ferma per sempre il vecchio nodo (dati conservati, nessuna cancellazione; un file `infra/.out/lost-<membro>` fa rifiutare `infra:up` finché non si fa `demo:reset`), avvia un nodo nuovo e vuoto (`rln-<membro>-restored`, profilo compose `lose-phone`, stesse porte e stesso nome di rete `rln-<membro>`), `/restore` con la password del nodo, `/unlock`, attende i canali usabili e confronta: stessa pubkey, stessi canali, stesso saldo. `demo:reset` spegne anche i nodi ripristinati e cancella i loro volumi e i file `lost-*`.
+- **Misurato (`pnpm e2e:lose-phone`, log `infra/.out/logs/20261017-181229-e2e-lose-phone.log`):** bob paga 3.09, il suo agente fa il backup; smarrimento e ripristino in **6,6 s**; stesso nodo, 2 canali usabili, **46.91** come prima; un nuovo pagamento dal nodo ripristinato passa (**43.82**). `infra:up` dopo lo smarrimento: rifiutato.
+- **Come si prova:** `pnpm demo:reset && pnpm e2e:lose-phone`, poi `pnpm demo:reset`. In demo: con `pnpm dev` acceso, `pnpm demo:lose-phone bob`.
+- **Problemi noti:** il ripristino è sicuro solo se il backup è l'ultimo (SPEC §12.4): l'agente lo rifà 10 s dopo ogni cambiamento, ma uno smarrimento dentro quei 10 s ripristinerebbe uno stato vecchio. Dave, senza backup automatico, si protegge con la chiusura cooperativa dei canali (SPEC §12.4).
+
 ### B6, sab 17/10 18:10
 - **Cosa funziona:** `RlnWallet.backupNow()`: `/lock` → `/backup` in `/backups` → `/unlock` (sempre, anche se il backup fallisce, con 3 tentativi), poi attesa dei canali di nuovo usabili e lettura del file dalla cartella host montata (`infra/data/backups/<membro>`, gitignored), che viene poi cancellata. Il file è cifrato dal nodo con la sua password: il relay non lo legge. Pagamenti e aperture del wallet aspettano in coda durante il backup. Ogni agente (`MemberAgent`, opzione `backupQuietMs`, 10 s nel runtime) fa il backup e lo carica sul relay (`PUT /backups/<nodePubkey>`) quando il suo nodo è cambiato ed è fermo da 10 s: per un viaggiatore i suoi canali, i suoi invoice (spese e riemissioni), i pagamenti in cui è debitore o creditore, la sua esclusione; per Dave ogni pagamento (passano tutti dal suo nodo), i canali e le sue aperture di liquidità; più un backup all'avvio. Mai durante un proprio pagamento; Dave mai mentre una riga è `due` o un'apertura è in corso. Un fallimento si riprova dopo `retryMs`. Operazione `backing_up` visibile in `/state`.
 - **Misurato a mano (spike Q8 rifatto su questo stack):** lock 1,0 s, backup 0,6-0,9 s, unlock 1,0 s; i peer si riconnettono da soli in ~1 s anche su Dave (6 canali usabili, 3 peer). `pnpm e2e:demo` 12/12 con i backup attivi (log `infra/.out/logs/20261017-180429-e2e-demo.log`): a fine demo tutti e quattro i nodi hanno un backup sul relay (106-222 KB), tempi della demo invariati.
