@@ -2,7 +2,14 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sha256Hex } from './canonical.js';
-import { checkBindInvoice, fakeSign, fakeVerify, signatureVerifier } from './crypto.js';
+import {
+  checkBindInvoice,
+  ed25519PublicKeyHex,
+  ed25519Sign,
+  fakeSign,
+  fakeVerify,
+  signatureVerifier,
+} from './crypto.js';
 import type { DecodedInvoice } from './domain.js';
 
 afterEach(() => {
@@ -89,6 +96,30 @@ describe('signatureVerifier (ed25519, SPEC §9.1)', () => {
       expect(() => verify(pub, msg, s)).not.toThrow();
       expect(verify(pub, msg, s)).toBe(false);
     }
+  });
+});
+
+describe('ed25519Sign and ed25519PublicKeyHex (Wallet.sign, B3)', () => {
+  const rfcSecret = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+
+  it('reproduces RFC 8032 test vector 1', () => {
+    expect(ed25519PublicKeyHex(rfcSecret)).toBe(
+      'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+    );
+    expect(ed25519Sign(rfcSecret, '')).toBe(
+      'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b',
+    );
+  });
+
+  it('produces signatures the verifier accepts, bound to the message', () => {
+    const sig = ed25519Sign(rfcSecret, message);
+    expect(verify(ed25519PublicKeyHex(rfcSecret), message, sig)).toBe(true);
+    expect(verify(ed25519PublicKeyHex(rfcSecret), `${message} `, sig)).toBe(false);
+  });
+
+  it('rejects a malformed secret', () => {
+    expect(() => ed25519Sign('ab', message)).toThrow();
+    expect(() => ed25519PublicKeyHex(rfcSecret.toUpperCase())).toThrow();
   });
 });
 

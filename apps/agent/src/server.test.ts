@@ -7,7 +7,9 @@ import { buildAgentServer } from './server.js';
 afterEach(() => vi.unstubAllEnvs());
 
 async function state(as: string, env: Record<string, string> = {}) {
-  const app = buildAgentServer(loadConfig(env), () => new Date('2026-10-17T12:00:00.000Z'));
+  const app = buildAgentServer(loadConfig(env), {
+    now: () => new Date('2026-10-17T12:00:00.000Z'),
+  });
   const res = await app.inject({ method: 'GET', url: `/api/${as}/state` });
   await app.close();
   return res;

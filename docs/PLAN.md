@@ -107,7 +107,7 @@ La **macchina della demo** è quella con più RAM. Da sabato sera tutte le prove
 1. **Un task = un branch = una sessione.** Branch `a/A1-derive-trip`, `b/B2-seed`, `c/C1-relay`. Tra un task e l'altro, `/clear`.
 2. **Avvio di ogni sessione:** incolla il prompt del tuo stream (`docs/prompts/stream-*.md`) seguito da "Task A1". Claude legge `CLAUDE.md` da solo.
 3. **Piano prima del codice.** Claude propone file, documenti letti e rischi; tu approvi. Poi implementa, esegue i controlli, fa commit piccoli.
-4. **Merge spesso**, almeno ogni 2-3 ore: PR piccole con titolo `[A1] deriveTrip`, CI verde, cinque minuti di lettura da parte di un altro dev, merge. Prima di aprire la PR: `git pull --rebase origin main`.
+4. **Merge spesso**, almeno ogni 2-3 ore: PR piccole con titolo `[A1] deriveTrip`. Claude Code fa da solo fetch e merge di origin/main, controlli verdi, push, PR, attesa della CI e, se verde, merge (regola in CLAUDE.md). La lettura di un altro dev è facoltativa. CI rossa o conflitti: Claude si ferma e avvisa.
 5. **Lockfile:** le dipendenze si aggiungono in PR dedicate. In caso di conflitto su `pnpm-lock.yaml`, prendere la versione di `main`, rilanciare `pnpm install`, committare.
 6. **Fake:** finché il pezzo reale non è mergiato si lavora con `KITTY_FAKES=1`. I fake non entrano mai nella demo (`demo:reset` li rifiuta).
 7. **Blocchi:** se Claude fallisce 3 volte sullo stesso errore, si ferma e riassume. Il dev lo scrive in chat e nel file di stato; il PM decide entro 15 minuti (aiuto, taglio o cambio di approccio).

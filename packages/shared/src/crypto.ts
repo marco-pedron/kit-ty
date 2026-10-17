@@ -3,7 +3,7 @@
 // node by an invoice. Never RLN /signmessage (it signs the empty string in d4762ac).
 // Re-exported by index.ts and bundled into the web app: no node:crypto, no Buffer.
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { sha256Hex } from './canonical.js';
 import type { DecodedInvoice } from './domain.js';
 import { apiError } from './errors.js';
@@ -41,6 +41,18 @@ export const signatureVerifier: SignatureVerifier = {
     }
   },
 };
+
+/** The ed25519 public key (lowercase hex) of a 32-byte secret key given as lowercase hex. */
+export function ed25519PublicKeyHex(secretHex: string): string {
+  if (!PUBKEY_HEX.test(secretHex)) throw new Error('ed25519 secret must be 64 lowercase hex chars');
+  return bytesToHex(ed25519.getPublicKey(hexToBytes(secretHex)));
+}
+
+/** Signs the UTF-8 bytes of `message`; the result is what signatureVerifier accepts. */
+export function ed25519Sign(secretHex: string, message: string): string {
+  if (!PUBKEY_HEX.test(secretHex)) throw new Error('ed25519 secret must be 64 lowercase hex chars');
+  return bytesToHex(ed25519.sign(utf8ToBytes(message), hexToBytes(secretHex)));
+}
 
 /**
  * The bind invoice of MEMBER_JOINED (SPEC §9.1): created by the member's own node with
