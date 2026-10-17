@@ -160,7 +160,17 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
         return l?.state === 'paid' ? l : undefined;
       },
       60_000,
-    );
+    ).catch(async (e: unknown) => {
+      // what the agents were doing, for the log
+      for (const as of ['bob', 'alice', 'dave'] as const) {
+        const s = await state(as);
+        note(`diagnostics ${as}`, {
+          line: as === 'bob' ? debt(s) : undefined,
+          operations: s.operations.slice(0, 6),
+        });
+      }
+      throw e;
+    });
     expect(line.paidBy).toBe('debtor');
     expect(line.agent?.reason).toMatch(/3\.09/u);
     expect(line.proof?.rail).toBe('ln');
@@ -275,7 +285,7 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
     expect(s.me?.owedToMeCents).toBe(0n);
   });
 
-  it('B6: every node backed itself up to the relay, encrypted, after the last change', async () => {
+  it('B6: every traveler backed their node up to the relay, encrypted', async () => {
     const seed = JSON.parse(
       readFileSync(
         fileURLToPath(new URL('../../../../infra/.out/seed-state.json', import.meta.url)),
@@ -283,10 +293,11 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
       ),
     ) as { pubkeys: Record<ActorId, string> };
     const sizes = await waitFor(
-      'a backup of every node on the relay',
+      "a backup of every traveler's node on the relay",
       async () => {
         const out: Record<string, number> = {};
-        for (const a of ['alice', 'bob', 'charlie', 'dave'] as const) {
+        // not dave: his node is never locked during the trip (B6)
+        for (const a of ['alice', 'bob', 'charlie'] as const) {
           const res = await fetch(`${stack.relayUrl}/backups/${seed.pubkeys[a]}`);
           if (res.status !== 200) return undefined;
           out[a] = (await res.arrayBuffer()).byteLength;

@@ -8,7 +8,11 @@
 - [x] C1b `decodeInvoice` reale nel relay (branch `c/C1b-decode-invoice`; decisione del PM: lo fa C)
 - [x] C2 RelayClient (branch `c/C2-relay-client`)
 - [x] C3 Rotte dell'agente (branch `c/C3-agent-routes`)
-- [ ] C4 UI viaggiatore
+- [x] C4 UI viaggiatore (piano ridotto, 4 PR; Attività, Prova, Registro e modulo manuale fuori: C6 e P1)
+  - [x] C4a shell, polling, navigazione, QR, Profile (branch `c/C4a-shell`)
+  - [x] C4b Home con Approve/Dispute (branch `c/C4b-home`)
+  - [x] C4c New expense (branch `c/C4c-new-expense`)
+  - [x] C4d Groups e Group settings (branch `c/C4d-groups`)
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -20,7 +24,7 @@
 - niente. Il TODO di C1b è chiuso: Marco ha confermato con l'invoice DUSD reale di dave (id con `_`), vedi registro.
 
 ## Prossimo passo
-- C4 UI viaggiatore.
+- C5 UI Dave (contestazioni, insolventi, "Cover and exclude", tasso del giorno), poi C6 Prova e Registro. P1: modulo manuale con `expenseShares`.
 
 ## Richieste ad A (Paolo)
 1. **`index.ts`:** dopo il merge di C3, `buildAgentServer(config, { runtime: () => runtime })`, con un getter come preferito da Paolo: il server si crea per primo, poi il runtime con `app.log`, poi `listen`. Il parametro è opzionale: senza, le rotte degli agenti rispondono 503 e `/state` dà un viaggio vuoto. Il vecchio secondo argomento `now` ora è `{ now }`.
@@ -29,11 +33,37 @@
 4. ~~**Codice `AGENT_NOT_READY` in `ErrorCodeSchema`**~~ fatto (sab 17/10, PR #27 `[A-contract]`); le rotte rispondono 503 `AGENT_NOT_READY` quando gli agenti non sono partiti (`notRunning` in `routes/index.ts`). Paolo propone 503 `AGENT_NOT_READY` quando il runtime non c'è, ma il codice non esiste: per ora C3 usa `NODE_UNREACHABLE` con il messaggio "… not running yet" e l'azione "Start the agents (pnpm dev, or pnpm dev:fakes) and retry.". Quando esiste, è una riga in `routes/index.ts` (`notRunning`).
 - `apps/agent/src/agent.ts` cancellato in C3, con l'ok di Paolo: non lo importava più nessuno.
 
+## Richieste a Marco (C4, sab 17/10; dettagli in `docs/FLOWS.md`)
+1. ~~**R1** anteprima delle parti per un'assegnazione manuale~~ **chiusa senza backend** (PM, sab 17/10, P1): la UI usa `expenseShares` di `@kitty/ledger`, pura e senza moduli di Node, con le pubkey dei membri come id (FLOWS.md C2). Serve solo aggiungere `@kitty/ledger` come dipendenza workspace di `apps/web`.
+2. **R2, non bloccante:** elenco degli eventi del registro per la schermata Registro (`seq`, `type`, autore come `memberId`, `hash`, `prevHash`, firma valida), es. `GET /api/:as/ledger`. File: `packages/shared/src/{api,views}.ts`, `apps/agent/src/routes/`. SPEC §9.5 è già coperta dal riepilogo `ledger` di `/state`.
+3. ~~MAX del "Pagamento automatico"~~ deciso dal PM: slider da 0 alla capacità del canale di viaggio (D). Nessuna modifica a `decideAutoPay`. Resta aperto solo il tetto giornaliero (FLOWS.md §E2).
+4. **R4, approvata dal PM (sab 17/10), la implementa Marco con l'override nel seed, opzione (b):** finestra di contestazione **45 s** e scadenza di approvazione **120 s** da `LINE_SEEN`. Il PM pensava bastasse il seed, ma **i tempi non sono configurabili**: `seedTrip` (`apps/agent/src/flows/runtime.ts:95`) scrive in `TRIP_CREATED` la costante `DEMO_TRIP_PARAMS` (`packages/shared/src/domain.ts:145`, 20/30). Opzioni: (a) cambiare i due valori in `DEMO_TRIP_PARAMS`, da verificare contro i test di ledger, agent e relay che la importano e contro le attese di `e2e:demo`; (b) un override nel seed (es. `params` facoltativo in `seedTrip`, oppure variabili d'ambiente lette da `index.ts`), che lascia i test su 20/30. Raccomando (b). Dopo serve `demo:reset`: i parametri restano fissi per tutto il viaggio. Effetto collaterale: dopo una contestazione confermata la scadenza è risoluzione + 120 s (`packages/ledger/src/kitty.ts:315`), quindi la storia 2 si allunga (FLOWS.md §E12).
+- R3 (contestare una parte sopra limite dopo la finestra) **non serve**: è già permesso finché la parte non scade (`packages/ledger/src/validate.ts:285-291`, `kitty.ts:266-283`).
+
 ## Decisioni del PM
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4d, sab 17/10 19:50
+- Funziona: Groups con il gruppo reale (saldo del canale e modalità), "Group 2" simulato in grigio e non cliccabile se `SHOW_DEMO_SECOND_GROUP`, "Join group" disattivato. Group settings: slider unico da 0 a D (`trip.params.tripChannelCents`) a passi di 0.50, etichette "Always ask me" / "Pay automatically up to X DUSD" / "Automatic payment", salvataggio al rilascio con `PUT /policy` (policy intera, tetto giornaliero rimandato invariato e mostrato in sola lettura), membri con stato active / insolvent (una parte `overdue`) / excluded, durate delle finestre lette dai parametri del viaggio.
+- Come si prova: `pnpm dev:fakes`, `?as=charlie#/group`, spostare lo slider; la barra in alto della Home mostra la nuova modalità. Test: `slider.test.ts`.
+- Problemi noti: nessuno noto; nessuna verifica visiva automatica.
+
+### C4c, sab 17/10 19:35
+- Funziona: New expense da 📷 (pulsante centrale) o swipe. Foto (JPEG/PNG/WebP) → sha256 calcolato nel browser per `receiptImageSha256` → `POST /expenses/extract` con il tempo trascorso → righe modificabili (esercente, etichette, importi nella valuta dello scontrino come `bigint`, tasse, mancia, totale; scarto mostrato, mai corretto da solo) → frase → `POST /expenses/split` (con la domanda di chiarimento mandata una volta) → parti dall'anteprima del ledger → `POST /expenses` → ritorno alla Home. 🎤 disattivato con "soon".
+- Come si prova: `pnpm dev:fakes`, `?as=alice#/new`, una foto qualsiasi (con i fake l'AI dà sempre la cena: 3.09 / 3.09 / 3.50). Verificato sulle rotte con `infra/fixtures/receipts/vnd-dinner.png`. Test: `receipt-edit.test.ts`.
+- Problemi noti: modulo manuale (assegnazioni a mano con `expenseShares`) = P1; senza anteprima valida "Send" resta disattivato.
+
+### C4b, sab 17/10 19:20
+- Funziona: Home con lo storico del gruppo (spese dalla più recente, chi paga chi, stato di ogni parte, le mie evidenziate). Una parte che aspetta me si apre inline con la frase dell'agente (`LineView.agent.reason`), il conto alla rovescia sull'orologio del server (finestra di contestazione o scadenza di approvazione), "Dispute" (campo motivo obbligatorio) e "Approve" (`POST /expenses/:id/decision`). Approve compare anche su una parte confermata da Dave e non ancora approvata. Due layout con `SHOW_DEMO_SECOND_GROUP`: true = card del gruppo reale più "Group 2" simulato, in grigio e non interattivo; false = titolo e storico a tutta pagina, che scorre dietro la barra.
+- Come si prova: `pnpm dev:fakes`, alice invia una spesa (C4c, oppure `POST /api/alice/expenses`), poi `?as=charlie` → Dispute; `?as=dave` conferma con la rotta; charlie → Approve. Verificato con le rotte sul runtime finto. Test: `lines.test.ts` (conto alla rovescia, regole Approve/Dispute).
+- Problemi noti: nessuna verifica visiva automatica (Chrome assente).
+
+### C4a, sab 17/10 19:10
+- Funziona: app a larghezza telefono (max 420 px, centrata), `?as=alice|bob|charlie`, polling di `/state` ogni secondo (`apps/web/src/state.ts`, con lo scarto tra orologio del server e del browser per i conti alla rovescia). Barra in basso flottante Groups · 📷 · QR; swipe da Home (sinistra → New expense, destra → QR) e ritorno; schermata nell'hash dell'URL (`#/qr`). Home con barra in alto (saldo del canale di viaggio, occhio per nasconderlo, modalità di pagamento, logo → Profile). QR della pubkey del membro ("Your kit+ty ID", libreria `uqr` 0.1.3). Profile con nome e modalità. New expense, Groups e Group settings sono gusci navigabili. Costante `SHOW_DEMO_SECOND_GROUP` in `apps/web/src/config.ts` (usata da C4b e C4d).
+- Come si prova: `pnpm dev:fakes`, poi `http://127.0.0.1:5173/?as=bob`. Test: `nav.test.ts` (hash, swipe), `mode.test.ts` (etichetta dello slider).
+- Problemi noti: layout non verificato con screenshot automatici (Chrome assente sulla macchina); dave vede solo un avviso (C5). Dopo `pnpm dev:fakes` il database del relay contiene il viaggio finto: prima di `pnpm dev` reale serve `pnpm demo:reset`.
 ### C3, sab 17/10 15:00 (completa C3a, sotto)
 - `buildAgentServer(config, { runtime?, ai?, now?, onchainFound? })`: `runtime` è un getter dell'`AgentRuntime` di `startAgents`. Il server non crea agenti, wallet o reti finte; senza runtime le rotte degli agenti rispondono 503 con un'azione (vedi richiesta 4).
 - Rotte di Dave su `CoordinatorAgent` (A5b): `POST /dave/disputes/:expenseId/:member`, `POST /dave/defaults/:expenseId/:member/cover-and-exclude`, `PUT /dave/rates`. Rifiuti dei flussi con il loro codice (es. riga non contestata → 403 `NOT_ALLOWED` con il motivo).
