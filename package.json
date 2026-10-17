@@ -27,7 +27,8 @@
     "ai:eval:offline": "sandbox-exec -f infra/scripts/offline.sb pnpm --offline --filter @kitty/agent ai:eval",
     "e2e:liquidity": "./infra/scripts/e2e.sh liquidity",
     "demo:lose-phone": "./infra/scripts/lose-phone.sh",
-    "e2e:lose-phone": "./infra/scripts/e2e.sh lose-phone"
+    "e2e:lose-phone": "./infra/scripts/e2e.sh lose-phone",
+    "e2e:onchain": "./infra/scripts/e2e.sh onchain"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

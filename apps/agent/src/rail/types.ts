@@ -5,7 +5,7 @@ import type { PaymentProof, RailMode } from '@kitty/shared';
 /** What the creditor hands to the debtor. In RGB the receiver acts first. */
 export type PaymentRequest =
   | { rail: 'ln'; bolt11: string; paymentHash: string; expiresAt: Date }
-  | { rail: 'onchain'; invoice: string; recipientId: string; expiresAt: Date };
+  | { rail: 'onchain'; invoice: string; recipientId: string; cents: bigint; expiresAt: Date };
 
 export interface Rail {
   readonly mode: RailMode;

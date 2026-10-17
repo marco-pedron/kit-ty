@@ -34,6 +34,8 @@ export interface RlnWalletOptions {
   refreshEveryMs?: number;
   /** dave only (loadMemberWalletOptions sets it for dave): what closing channels needs. */
   coordinator?: CoordinatorChain;
+  /** RGB proxy as the nodes see it (on-chain rail, B5); default DEFAULT_PROXY_ENDPOINT. */
+  proxyEndpoint?: string;
   /** B6: what lock → backup → unlock needs; without it backupNow is NOT_ALLOWED. */
   backup?: BackupSettings;
 }
@@ -69,6 +71,11 @@ export interface CoordinatorChain {
   /** How long to wait for the nodes to broadcast their sweeps before mining again (45 s). */
   sweepWaitMs?: number;
 }
+
+/** The RGB proxy inside the compose network (infra/treasury/lib.ts PROXY_INTERNAL). */
+const DEFAULT_PROXY_ENDPOINT = 'rpc://proxy:3000/json-rpc';
+/** sat/vB on regtest, as the old project's on-chain rail. */
+const ONCHAIN_FEE_RATE = 5;
 
 /** BTC capacity of a liquidity channel, as the seed's (SPEC §15). */
 export const LIQUIDITY_CAPACITY_SAT = 1_000_000;
@@ -465,6 +472,98 @@ export class RlnWallet implements Wallet {
       cents: inv.cents,
       payeePubkey: inv.payeePubkey,
     };
+  }
+
+  // ---------- on-chain RGB rail (task B5, SPEC §10.3) ----------
+
+  /**
+   * Receiver side, always first: a blinded-UTXO RGB invoice for exactly `cents` of the trip
+   * asset (as the old project's rail: min 1 confirmation, the trip's proxy as transport).
+   */
+  async createRgbInvoice(p: {
+    cents: bigint;
+    expirySec: number;
+  }): Promise<{ invoice: string; recipientId: string; expiresAt: Date }> {
+    if (p.cents <= 0n || p.cents > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new WalletError('VALIDATION_ERROR', `invalid amount ${p.cents}`);
+    const expiration = Math.floor(this.now() / 1000) + p.expirySec;
+    try {
+      const r = await this.call('/rgbinvoice', () =>
+        this.rln.POST('/rgbinvoice', {
+          body: {
+            asset_id: this.opts.assetId,
+            assignment: { type: 'Fungible', value: Number(p.cents) },
+            min_confirmations: 1,
+            witness: false,
+            expiration_timestamp: expiration,
+            transport_endpoints: [this.proxyEndpoint()],
+          },
+        }),
+      );
+      return {
+        invoice: r.invoice,
+        recipientId: r.recipient_id,
+        expiresAt: new Date((r.expiration_timestamp ?? expiration) * 1000),
+      };
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
+  }
+
+  /** Payer side: one witness transaction to the recipient, broadcast at once. Returns the txid. */
+  async sendRgb(p: { recipientId: string; cents: bigint; expirySec?: number }): Promise<string> {
+    if (p.cents <= 0n || p.cents > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new WalletError('VALIDATION_ERROR', `invalid amount ${p.cents}`);
+    try {
+      const r = await this.call('/sendrgb', () =>
+        this.rln.POST('/sendrgb', {
+          body: {
+            donation: true,
+            fee_rate: ONCHAIN_FEE_RATE,
+            min_confirmations: 1,
+            expiration_timestamp: Math.floor(this.now() / 1000) + (p.expirySec ?? 3600),
+            recipient_map: {
+              [this.opts.assetId]: [
+                {
+                  recipient_id: p.recipientId,
+                  assignment: { type: 'Fungible', value: Number(p.cents) },
+                  transport_endpoints: [this.proxyEndpoint()],
+                },
+              ],
+            },
+          },
+        }),
+      );
+      return r.txid;
+    } catch (e) {
+      throw toWalletError(e, 'pay');
+    }
+  }
+
+  /** Status of this node's side of an on-chain transfer, after a refresh; null if unknown. */
+  async rgbTransferStatus(
+    find: { send: string } | { receive: string },
+  ): Promise<'WaitingCounterparty' | 'WaitingConfirmations' | 'Settled' | 'Failed' | null> {
+    try {
+      await this.refreshTransfers().catch(() => undefined);
+      const r = await this.call('/listtransfers', () =>
+        this.rln.POST('/listtransfers', {
+          body: { asset_filter: { type: 'Id', value: this.opts.assetId } },
+        }),
+      );
+      const t = r.transfers.find((x) =>
+        'send' in find
+          ? x.kind === 'Send' && x.txid === find.send
+          : x.kind === 'ReceiveBlind' && x.recipient_id === find.receive,
+      );
+      return (t?.status as never) ?? null;
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
+  }
+
+  private proxyEndpoint(): string {
+    return this.opts.proxyEndpoint ?? DEFAULT_PROXY_ENDPOINT;
   }
 
   /**
