@@ -73,7 +73,7 @@ export function TransactionRow({
       <Avatar name={name} me={me} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-headline font-semibold">{title}</p>
-        <p className={`truncate text-subhead ${muted ? '' : 'text-label-2'}`}>{subtitle}</p>
+        <p className={`line-clamp-2 text-subhead ${muted ? '' : 'text-label-2'}`}>{subtitle}</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5">
         <Amount cents={cents} sign={sign} />

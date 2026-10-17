@@ -15,6 +15,7 @@
   - [x] C4d Groups e Group settings (branch `c/C4d-groups`)
   - [x] C4e Correzioni dalla revisione del PM (branch `c/C4e-fixes`)
   - [x] C4f Visual identity di `docs/DESIGN.md` (branch `c/C4f-design`)
+  - [x] C4f UI del viaggiatore in stile iPhone (branch `c/C4f-ui`)
 - [ ] C5 UI Dave
 - [ ] C6 Prova e Registro verificato
 - [ ] C7 Attese ed errori
@@ -49,6 +50,12 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### C4f UI iPhone, sab 17/10 22:00
+- Funziona: `apps/web` rifatta sul nuovo `docs/DESIGN.md` (stile HIG) e sui wireframe in `docs/design/`. Token del §3 copiati come sono, light e dark con `prefers-color-scheme`; la palette di Tailwind è spenta. Token derivati solo con `color-mix`: `--danger-soft`, `--scrim`, `--accent-text` (accento come testo, AA in entrambi i temi), `--qr-ink`/`--qr-paper` (QR scuro su bianco anche in dark). Primitivi in `src/ui/`: Button (filled, gray, plain, destructive), Badge/LimitBadge, lista inset grouped, NavBar con Large Title, TabBar flottante, Segmented, Slider iOS, Sheet, Toast, StateView, Mascot (`docs/design/kitty-mascot.svg` inline, zampa animata), BalancePill, TransactionRow, ApprovalCard. Pagina `?as=styleguide`. Schermate: Home (approvazioni in cima, storico a timeline con +/−), sheet di Dispute, New expense in 3 passi, QR con Scan/Show, Groups, Group settings (Dave come operator), Profile (Funds = saldo vero, FAQ e Assistance "soon").
+- Screenshot: `pnpm --filter @kitty/web shots` (WebKit, 390×844, light e dark, in `apps/web/.shots/`, gitignored), con `pnpm dev:fakes` su un relay pulito. `@playwright/test` è fissato a **1.59.0**: è l'ultima versione compatibile con il WebKit per macOS 14 (dalla 1.60 Playwright invia `PushAPIEnabled`, che quella build non conosce). WebKit: `npx playwright install webkit`.
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi `?as=alice` / `?as=bob` / `?as=charlie` / `?as=styleguide`. Test: `history.test.ts` (righe dello storico, testo delle card).
+- Problemi noti: in light il testo bianco del pulsante filled su `--accent` (#F25481) ha contrasto 3.3:1, AA solo per testo grande; DESIGN.md chiede quel fondo. WebKit di Playwright non ha SF Mono: le chiavi in mono negli screenshot cadono su un mono di sistema.
+
 ### C4f, sab 17/10 21:15
 - Funziona: `docs/DESIGN.md` applicato a tutta `apps/web`. Variabili di §3 e §4 in `index.css`, copiate dal documento; la palette predefinita di Tailwind è spenta (`--color-*: initial`, `--shadow-*: initial`), quindi nelle classi esistono solo i token (`bg-plum`, `text-ink-muted`, …). Classi componente scritte solo con variabili: `card`, `card-attention`, `btn-primary`, `btn-secondary`, `badge`, `field`, `amount`, `range-input`. Font Zilla Slab / Fira Sans / Fira Mono. Badge del §7, slider con binario `--line`, riempimento `--teal`, pomello `--plum` e badge "Auto mode" a fine corsa. Barra in basso prugna con tre pulsanti tondi uguali. Mascotte maneki-neko in `Mascot.tsx` (zampa animata, ferma con `prefers-reduced-motion`) nel caricamento iniziale, nella lettura dello scontrino e nelle operazioni in corso dell'agente. Toast `+ty!` / `-ty!` per 3 s dal confronto tra due giri di `/state` (`toasts.ts`).
 - Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, `?as=alice` e `?as=bob` affiancati; alice invia la cena, bob paga dopo la finestra: +ty su alice, -ty su bob. Test: `toasts.test.ts`.
