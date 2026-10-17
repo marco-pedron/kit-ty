@@ -114,6 +114,65 @@ services:
       # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
       - ./data/backups/dave:/backups
 
+  # demo:lose-phone (SPEC §12, P1): the member's NEW phone, an empty node restored from the
+  # backup on the relay. Same ports and the same network name as the lost node, which stays
+  # stopped (its data is kept; infra:up refuses to start it again until demo:reset).
+  rln-alice-restored:
+    <<: *rln
+    profiles: [lose-phone]
+    command: ["/RLNdata", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:3001:3001
+      - 127.0.0.1:9735:9735
+    networks:
+      default:
+        aliases: [rln-alice]
+    volumes:
+      - rln-alice-restored:/RLNdata
+      - ./data/backups/alice:/backups
+
+  rln-bob-restored:
+    <<: *rln
+    profiles: [lose-phone]
+    command: ["/RLNdata", "--daemon-listening-port", "3002", "--ldk-peer-listening-port", "9736", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:3002:3002
+      - 127.0.0.1:9736:9736
+    networks:
+      default:
+        aliases: [rln-bob]
+    volumes:
+      - rln-bob-restored:/RLNdata
+      - ./data/backups/bob:/backups
+
+  rln-charlie-restored:
+    <<: *rln
+    profiles: [lose-phone]
+    command: ["/RLNdata", "--daemon-listening-port", "3003", "--ldk-peer-listening-port", "9737", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:3003:3003
+      - 127.0.0.1:9737:9737
+    networks:
+      default:
+        aliases: [rln-charlie]
+    volumes:
+      - rln-charlie-restored:/RLNdata
+      - ./data/backups/charlie:/backups
+
+  rln-dave-restored:
+    <<: *rln
+    profiles: [lose-phone]
+    command: ["/RLNdata", "--daemon-listening-port", "3004", "--ldk-peer-listening-port", "9738", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:3004:3004
+      - 127.0.0.1:9738:9738
+    networks:
+      default:
+        aliases: [rln-dave]
+    volumes:
+      - rln-dave-restored:/RLNdata
+      - ./data/backups/dave:/backups
+
 volumes:
   bitcoind:
   electrs:
@@ -122,3 +181,7 @@ volumes:
   rln-bob:
   rln-charlie:
   rln-dave:
+  rln-alice-restored:
+  rln-bob-restored:
+  rln-charlie-restored:
+  rln-dave-restored:
