@@ -690,6 +690,117 @@ describe('backupNow (B6)', () => {
   });
 });
 
+describe('automatic unlock of a restarted node', () => {
+  // RLN d4762ac comes back locked after a crash (a panic restarted alice's node during the
+  // demo, and every payment to her failed from then on): every call answered LockedNode.
+  const settings = { password: 'pw', unlockBody: { password: 'pw' }, settleMs: 0, hostDir: '/x' };
+  const info = { json: { pubkey: ALICE_NODE, rgb_htlc_min_msat: 3_000_000 } };
+
+  function lockedSetup(opts: { unlock?: () => ReturnType<typeof rlnError> } = {}) {
+    let locked = true;
+    const warnings: string[] = [];
+    const rln = new FakeRln()
+      .on('/nodeinfo', () => (locked ? rlnError(403, 'LockedNode') : info))
+      .on('/unlock', () => {
+        if (opts.unlock) return opts.unlock();
+        locked = false;
+        return { json: {} };
+      });
+    const { wallet } = setup(rln, { backup: settings, log: { warn: (m) => warnings.push(m) } });
+    return { rln, wallet, warnings, relock: () => (locked = true) };
+  }
+
+  it('unlocks once, warns, and retries the call once', async () => {
+    const { rln, wallet, warnings } = lockedSetup();
+    expect(await wallet.nodePubkey()).toBe(ALICE_NODE);
+    expect(rln.calls.map((c) => c.endpoint)).toEqual(['/nodeinfo', '/unlock', '/nodeinfo']);
+    expect(rln.calls[1]?.body).toEqual({ password: 'pw' });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/LockedNode.*unlocking it automatically/);
+  });
+
+  it('a failed unlock is the error of the call, with no further attempt', async () => {
+    const { rln, wallet, warnings } = lockedSetup({
+      unlock: () => rlnError(401, 'WrongPassword'),
+    });
+    expect(await codeOf(wallet.nodePubkey())).toBeDefined();
+    expect(rln.calls.map((c) => c.endpoint)).toEqual(['/nodeinfo', '/unlock']);
+    expect(warnings).toHaveLength(1);
+  });
+
+  it('concurrent calls that find the node locked share one unlock', async () => {
+    const { rln, wallet } = lockedSetup();
+    rln.on('/refreshtransfers', () => ({ json: {} }));
+    rln.on('/assetbalance', () => ({
+      json: { settled: 0, future: 0, spendable: 0, offchain_outbound: 0, offchain_inbound: 0 },
+    }));
+    await Promise.all([wallet.nodePubkey(), wallet.nodePubkey(), wallet.balances()]);
+    expect(rln.count('/unlock')).toBe(1);
+  });
+
+  it('a node locked again after the retry is not unlocked in a loop', async () => {
+    const { rln, wallet, relock } = lockedSetup();
+    rln.on('/unlock', () => {
+      relock(); // the node answers the unlock but is locked again at once
+      return { json: {} };
+    });
+    expect(await codeOf(wallet.nodePubkey())).toBe('NODE_UNREACHABLE');
+    expect(rln.count('/unlock')).toBe(1);
+    expect(rln.count('/nodeinfo')).toBe(2);
+  });
+
+  it('never unlocks during a lock → backup → unlock cycle: waits for it instead', async () => {
+    const hostDir = mkdtempSync(join(tmpdir(), 'kitty-backup-'));
+    let locked = false;
+    let releaseBackup: () => void = () => undefined;
+    const backupWritten = new Promise<void>((r) => (releaseBackup = r));
+    const rln = new FakeRln()
+      .on('/lock', () => {
+        locked = true;
+        return { json: {} };
+      })
+      .on('/backup', (b) => {
+        writeFileSync(join(hostDir, String(b.backup_path).replace('/backups/', '')), 'ENCRYPTED');
+        return { json: {} };
+      })
+      .on('/unlock', () => {
+        locked = false;
+        return { json: {} };
+      })
+      .on('/nodeinfo', () =>
+        locked
+          ? rlnError(403, 'LockedNode')
+          : { json: { ...info.json, num_channels: 1, num_usable_channels: 1 } },
+      );
+    const warnings: string[] = [];
+    const { wallet } = setup(rln, {
+      backup: { ...settings, hostDir },
+      log: { warn: (m) => warnings.push(m) },
+      // hold the backup until the other request is waiting
+      fetch: async (req) => {
+        if (new URL(req.url).pathname === '/backup') await backupWritten;
+        return rln.fetch(req);
+      },
+    });
+    const backup = wallet.backupNow();
+    await new Promise((r) => setTimeout(r, 5));
+    const read = wallet.nodePubkey();
+    await new Promise((r) => setTimeout(r, 5));
+    releaseBackup();
+    await backup;
+    expect(await read).toBe(ALICE_NODE);
+    expect(rln.count('/unlock')).toBe(1); // the backup's own
+    expect(warnings).toEqual([]);
+  });
+
+  it('without backup settings there is no unlock body: the error stays', async () => {
+    const rln = new FakeRln().on('/nodeinfo', () => rlnError(403, 'LockedNode'));
+    const { wallet } = setup(rln);
+    expect(await codeOf(wallet.nodePubkey())).toBe('NODE_UNREACHABLE');
+    expect(rln.count('/unlock')).toBe(0);
+  });
+});
+
 describe('LightningRail', () => {
   it('requests with an invoice and pays it, returning the matching proof', async () => {
     const { wallet } = setup();
