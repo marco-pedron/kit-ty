@@ -62,8 +62,10 @@ const TOAST_HEAD = { plus: 'happy', minus: 'charlie', error: 'worried' } as cons
 const appIcon = icon.replace('<svg ', '<svg aria-hidden="true" width="100%" height="100%" ');
 
 /**
- * iPhone notifications: the kit+ty app icon on the left, then a small head in the body (happy
- * for +ty!, the wink for -ty!, worried for an error) and the prefix in Zilla Slab.
+ * iPhone notifications, the size of the system banners: full width less 8 px a side, radius 24,
+ * generous padding, the kit+ty app icon on the left, "kit+ty · now", then a small head (happy for
+ * +ty!, the wink for -ty!, worried for an error), the prefix in Zilla Slab and the text on up to
+ * two lines.
  */
 export function Toasts({ toasts }: { toasts: readonly ToastItem[] }) {
   return (
@@ -75,7 +77,7 @@ export function Toasts({ toasts }: { toasts: readonly ToastItem[] }) {
         <div
           key={t.id}
           role={t.kind === 'error' ? 'alert' : undefined}
-          className="hairline animate-toast flex items-center gap-2.5 rounded-sheet bg-bg-cell/90 p-3 text-label backdrop-blur-xl"
+          className="animate-toast flex min-h-[76px] items-center gap-3 rounded-sheet bg-bg-cell/85 px-4 py-3.5 text-label shadow-[0_8px_30px_rgb(0_0_0/0.12),inset_0_0_0_1px_var(--card-edge)] backdrop-blur-xl"
         >
           <span
             aria-hidden
@@ -83,18 +85,18 @@ export function Toasts({ toasts }: { toasts: readonly ToastItem[] }) {
             dangerouslySetInnerHTML={{ __html: appIcon }}
           />
           <div className="min-w-0 flex-1">
-            <p className="flex justify-between text-footnote text-label-2">
+            <p className="flex justify-between text-subhead">
               <span className="font-semibold text-label">kit+ty</span>
-              <span>now</span>
+              <span className="text-footnote text-label-2">now</span>
             </p>
-            <p className="flex items-center gap-1.5 text-subhead">
+            <p className="mt-0.5 flex items-start gap-1.5 text-subhead">
               <CatHead variant={TOAST_HEAD[t.kind]} size={20} />
               <span
-                className={`font-brand text-headline font-bold ${t.kind === 'plus' ? 'rounded-full bg-positive-soft px-1.5' : t.kind === 'minus' ? 'rounded-full bg-accent-soft px-1.5' : ''}`}
+                className={`font-brand text-headline leading-5 font-bold ${t.kind === 'plus' ? 'rounded-full bg-positive-soft px-1.5' : t.kind === 'minus' ? 'rounded-full bg-accent-soft px-1.5' : ''}`}
               >
                 {t.prefix}
               </span>
-              <span className="min-w-0 truncate">{t.text}</span>
+              <span className="line-clamp-2 min-w-0">{t.text}</span>
             </p>
           </div>
         </div>

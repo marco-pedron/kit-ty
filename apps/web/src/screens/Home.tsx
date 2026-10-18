@@ -3,21 +3,16 @@ import { useState } from 'react';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { approvalText, cap, historyRows } from '../history.js';
 import { openProof } from '../nav.js';
-import {
-  canApprove,
-  canDispute,
-  formatCountdown,
-  needsMe,
-  netPosition,
-  secondsLeft,
-} from '../lines.js';
+import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from '../lines.js';
 import { toClientError, useNow } from '../state.js';
 import { Badge, LimitBadge } from '../ui/Badge.js';
 import { Button } from '../ui/Button.js';
 import { CatHead } from '../ui/CatHead.js';
-import { ApprovalCard, BalancePill, TransactionRow } from '../ui/Money.js';
+import { GroupCard } from '../ui/GroupCard.js';
+import { ApprovalCard, BalancePill, TopUpSoon, TransactionRow } from '../ui/Money.js';
 import { Sheet, StateView } from '../ui/Overlays.js';
 import { ErrorNote } from '../ui/Notes.js';
+import { ThemeToggle } from '../ui/Theme.js';
 import { Wordmark } from '../ui/Text.js';
 import type { ScreenProps } from './types.js';
 import { Working } from '../ui/PlusMinus.js';
@@ -38,39 +33,37 @@ export function HomeScreen(props: ScreenProps) {
     <>
       <TopBar {...props} />
       <div className="space-y-6 px-4 pt-4">
-        <section>
-          <div className="flex items-center justify-between gap-3 pb-2">
-            <h2 className="truncate text-title2 font-bold">{s?.trip?.name ?? 'Your group'}</h2>
-            {s?.trip != null && (
+        <GroupCard
+          title={s?.trip?.name ?? 'Your group'}
+          badge={
+            s?.trip != null && (
               <LimitBadge
                 limitCents={limit}
                 channelCents={s.trip.params.tripChannelCents}
                 onClick={() => go('group')}
               />
-            )}
-          </div>
-          <div className={SHOW_DEMO_SECOND_GROUP ? 'rounded-card bg-bg-cell p-4' : ''}>
-            {s?.trip == null ? (
-              <StateView
-                kind="loading"
-                title="Waiting for the trip"
-                text="Dave, the coordinator, is setting it up."
-              />
-            ) : (
-              <GroupBody {...props} limit={limit} onDispute={setDisputing} />
-            )}
-          </div>
-        </section>
+            )
+          }
+        >
+          {s?.trip == null ? (
+            <StateView
+              kind="loading"
+              title="Waiting for the trip"
+              text="Dave, the coordinator, is setting it up."
+            />
+          ) : (
+            <GroupBody {...props} limit={limit} onDispute={setDisputing} />
+          )}
+        </GroupCard>
         {SHOW_DEMO_SECOND_GROUP && (
-          <section aria-label="Group 2, not active yet">
-            <div className="flex items-center justify-between gap-3 pb-2">
-              <h2 className="text-title2 font-bold text-label-3">Group 2</h2>
-              <Badge kind="muted">Limit 10.00</Badge>
-            </div>
-            <p className="rounded-card border border-dashed border-separator py-5 text-center text-subhead text-label-3">
-              not active yet
-            </p>
-          </section>
+          <GroupCard
+            title="Group 2"
+            muted
+            badge={<Badge kind="muted">Limit 10.00 DUSD</Badge>}
+            aria-label="Group 2, not active yet"
+          >
+            <p className="py-1 text-center text-subhead text-label-3">not active yet</p>
+          </GroupCard>
         )}
       </div>
       {disputing !== null && (
@@ -108,38 +101,25 @@ function TopBar({ trip, as, go }: ScreenProps) {
   };
   return (
     <header className="hairline-b sticky top-0 z-20 flex items-start justify-between bg-bg-cell px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-2">
-      <div>
-        <BalancePill
-          cents={trip.state?.me?.balance?.tripOutboundCents ?? null}
-          hidden={hidden}
-          onToggle={toggle}
-        />
-        {trip.state?.me != null && !hidden && <NetChip me={trip.state.me} />}
+      <BalancePill
+        cents={trip.state?.me?.balance?.tripOutboundCents ?? null}
+        hidden={hidden}
+        onToggle={toggle}
+        onOpen={{ label: 'Trip channel balance: change the limit', onClick: () => go('group') }}
+        aside={<TopUpSoon />}
+      />
+      <div className="flex items-center">
+        <ThemeToggle />
+        <button
+          type="button"
+          onClick={() => go('profile')}
+          aria-label="Profile"
+          className="pressable flex min-h-11 items-center"
+        >
+          <Wordmark />
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => go('profile')}
-        aria-label="Profile"
-        className="pressable flex min-h-11 items-center"
-      >
-        <Wordmark />
-      </button>
     </header>
-  );
-}
-
-/** "+ty 6.59 DUSD" when the others owe me, "−ty 3.09 DUSD" when I owe; nothing when even. */
-function NetChip({ me }: { me: { oweCents: bigint; owedToMeCents: bigint } }) {
-  const net = netPosition(me);
-  if (net === null) return null;
-  return (
-    <p
-      className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-subhead text-label ${net.kind === 'plus' ? 'bg-positive-soft' : 'bg-accent-soft'}`}
-    >
-      <span className="font-brand font-bold">{net.kind === 'plus' ? '+ty' : '−ty'}</span>
-      <span className="tabular">{formatCents(net.cents)} DUSD</span>
-      <span className="sr-only">{net.kind === 'plus' ? 'owed to you' : 'you owe'}</span>
-    </p>
   );
 }
 
@@ -152,7 +132,7 @@ function ExcludedScreen({ trip, go }: ScreenProps) {
       <CatHead variant="out" size={128} label="The kitten, out of the group" />
       <h1 className="mt-6 text-title2 font-bold">You're out of {s?.trip?.name ?? 'the group'}.</h1>
       <p className="mt-1 text-body text-label-2">Dave covered your part.</p>
-      <div className="mt-6 rounded-card bg-bg-cell px-5 py-3">
+      <div className="card mt-6 px-5 py-3">
         <p className="text-footnote text-label-2">Your funds, back on-chain</p>
         <p className="tabular text-title2 font-semibold">
           {left == null ? '—' : `${formatCents(left.onchainCents)} DUSD`}
@@ -230,6 +210,7 @@ function GroupBody({
             connector={i < rows.length - 1}
             muted={r.muted}
             waitingSince={r.waitingSince}
+            fiat={r.fiat}
             {...(r.proof !== null && { onClick: () => openProof(r.proof!) })}
           />
         ))}

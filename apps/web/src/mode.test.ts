@@ -15,11 +15,11 @@ describe('paymentMode, the badge and the slider label of a group', () => {
   it('in between is a limit in DUSD', () => {
     expect(paymentMode(2000n, D)).toEqual({
       kind: 'limit',
-      badge: 'Limit 20.00',
+      badge: 'Limit 20.00 DUSD',
       long: 'Pay automatically up to 20.00 DUSD',
     });
     expect(paymentMode(4950n, D).kind).toBe('limit');
-    expect(paymentMode(50n, D).badge).toBe('Limit 0.50');
+    expect(paymentMode(50n, D).badge).toBe('Limit 0.50 DUSD');
   });
 
   it('the channel capacity, or more, is "Auto mode"', () => {

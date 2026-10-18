@@ -20,6 +20,7 @@
 - [x] C6 Prova e Registro verificato (branch `c/C6-proof-log`)
 - [x] C7 Attese ed errori (branch `c/C7-states`)
 - [x] C-design-3 Mascotte e marchio (branch `c/C-design-3`)
+- [x] C-ui-polish-4 Giro UI dal brief del PM (branch `c/C-ui-polish-4`)
 
 ## Bloccato da
 - niente
@@ -179,3 +180,8 @@
   - Modalità fake (`KITTY_FAKES=1`, per I1): `fakeModeValidate` (`apps/relay/src/fake-validate.ts`) al posto di `validateEvent`. Controlla forma, catena di hash, `TRIP_CREATED` per primo e una volta sola, `tripId`, nonce duplicato; **salta firme e invoice**. All'avvio il log dice `relay in FAKE mode: signatures and invoices are not verified`.
 - Come si prova: `pnpm test` (`apps/relay/src/log.test.ts`, `server.test.ts`: 20 test con un `validateEvent` finto iniettato che controlla firma, catena e nonce); a mano: `pnpm --filter @kitty/relay dev` (porta 4000, DB in `apps/relay/data/relay.sqlite`, gitignored; `RELAY_DB`, `RELAY_PORT`, `RELAY_HOST`).
 - Problemi noti: `deriveTrip` viene ricalcolato su tutto il log a ogni append (O(n), basta per la demo). `node:sqlite` stampa un `ExperimentalWarning` all'avvio. I backup crescono senza potatura (≈440 KB a versione).
+
+## C-ui-polish-4 (dom 18/10)
+- **Funziona:** zampa di Kit ricostruita (un braccio dietro il corpo che ruota sulla spalla, spalla fissa sopra il giunto); loader `+`→`−` che si ferma davvero come `−`; pillola `+ty/−ty` sotto il saldo rimossa (era `NetChip`, la posizione netta delle righe aperte: restava finché una riga era aperta e sembrava un toast bloccato); feedback immediato su ogni pressione (`pressable` scatta in 40 ms, righe e bottoni plain con sfondo); `CopyButton` con spunta e "Copied!" per 1,5 s nei dettagli della prova; card dei gruppi con header colorato (titolo + limite); tab Home anche per il viaggiatore; importi sempre con unità, segni `−`/`+`, righe fiat (valuta dello scontrino, ≈ DUSD, data del blocco del tasso) su sfondo diverso dalle righe Lightning; "-ty!" nello storico e nel toast; saldo cliccabile → slider del limite; "Top up · soon" disabilitato; "i" verde al posto del gattino nelle sezioni vuote di Dave e teste più grandi; microfono "soon" nella casella di Split between; attesa dello scontrino ridisegnata (scontrino grande, Kit piccolo, frasi a rotazione con secondi e puntini, frase informativa) e "Read on your phone in N s" nella revisione; avviso sull'AI; contorno leggero delle card (`card`, `--card-edge`); notifiche della misura dei banner iOS; toggle chiaro/scuro con persistenza (`data-theme`, script in `index.html` prima del primo paint); sfumatura in fondo alle schermate scorrevoli.
+- **Come si prova:** `RELAY_DB=<tmp>/relay.sqlite pnpm dev:fakes`, poi `pnpm --filter @kitty/web shots alice-home bob-home alice-reading alice-check alice-proof dave-home`.
+- **Problemi noti:** la data del tasso di una spesa fiat è quella dell'invio (il tasso si blocca lì); `ExpenseView` non porta l'`asOf` del `RATE_SET` usato (servirebbe un campo in `packages/shared`, di A).

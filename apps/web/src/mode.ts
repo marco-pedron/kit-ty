@@ -15,5 +15,5 @@ export function paymentMode(limitCents: bigint, channelCents: bigint): PaymentMo
   if (limitCents >= channelCents)
     return { kind: 'auto', badge: 'Auto mode', long: 'Automatic payment' };
   const x = formatCents(limitCents);
-  return { kind: 'limit', badge: `Limit ${x}`, long: `Pay automatically up to ${x} DUSD` };
+  return { kind: 'limit', badge: `Limit ${x} DUSD`, long: `Pay automatically up to ${x} DUSD` };
 }

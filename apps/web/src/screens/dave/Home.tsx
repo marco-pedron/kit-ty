@@ -16,6 +16,7 @@ import { Section } from '../../ui/List.js';
 import { BalancePill } from '../../ui/Money.js';
 import { EmptyRow, ErrorNote } from '../../ui/Notes.js';
 import { AlertDialog, Sheet } from '../../ui/Overlays.js';
+import { ThemeToggle } from '../../ui/Theme.js';
 import { Wordmark } from '../../ui/Text.js';
 import { Ago, lineKey, type DaveProps } from './DaveApp.js';
 import { Working } from '../../ui/PlusMinus.js';
@@ -54,14 +55,17 @@ export function DaveHome(props: DaveProps) {
           onToggle={toggle}
           caption="Guarantee left"
         />
-        <button
-          type="button"
-          onClick={() => go({ name: 'profile' })}
-          aria-label="Profile"
-          className="pressable flex min-h-11 items-center"
-        >
-          <Wordmark />
-        </button>
+        <div className="flex items-center">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => go({ name: 'profile' })}
+            aria-label="Profile"
+            className="pressable flex min-h-11 items-center"
+          >
+            <Wordmark />
+          </button>
+        </div>
       </header>
       <div className="space-y-6 px-4 pt-4">
         <Section header={<HeadHeader variant="angry" text="Disputes" />}>
@@ -103,7 +107,7 @@ export function DaveHome(props: DaveProps) {
 function HeadHeader({ variant, text }: { variant: HeadVariant; text: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <CatHead variant={variant} size={22} />
+      <CatHead variant={variant} size={30} />
       {text}
     </span>
   );
@@ -145,7 +149,7 @@ function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView;
         <Avatar name={d.debtor} size={32} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-headline font-semibold">
-            {cap(d.debtor)} · {formatCents(d.cents)}
+            {cap(d.debtor)} · {formatCents(d.cents)} DUSD
           </span>
           <span className="block truncate text-subhead text-label-2">{d.merchant}</span>
           <span className="block truncate text-subhead text-label italic">“{d.reason}”</span>
@@ -167,7 +171,7 @@ function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView;
       {confirmVoid && (
         <AlertDialog
           title={`Cancel ${cap(d.debtor)}'s part?`}
-          message={`${cap(d.debtor)} will owe nothing for ${d.merchant}. ${cap(d.payer)} is not repaid this ${formatCents(d.cents)}. Confirm instead to make ${cap(d.debtor)} pay within ${deadline} s.`}
+          message={`${cap(d.debtor)} will owe nothing for ${d.merchant}. ${cap(d.payer)} is not repaid this ${formatCents(d.cents)} DUSD. Confirm instead to make ${cap(d.debtor)} pay within ${deadline} s.`}
           confirm="Cancel part"
           destructive
           onCancel={() => setConfirmVoid(false)}
@@ -188,7 +192,7 @@ function DefaultRow({ d, last, go, covers }: DaveProps & { d: DefaultView; last:
       <div className="flex items-center gap-3">
         <Avatar name={d.debtor} size={32} />
         <span className="min-w-0 flex-1 truncate text-headline font-semibold">
-          {cap(d.debtor)} · {formatCents(d.cents)} overdue
+          {cap(d.debtor)} · {formatCents(d.cents)} DUSD overdue
         </span>
       </div>
       <Button
@@ -202,8 +206,8 @@ function DefaultRow({ d, last, go, covers }: DaveProps & { d: DefaultView; last:
       <p className="mt-2 text-footnote text-label-2">
         <Ago iso={d.overdueSince} prefix="approval expired" /> ·{' '}
         {d.coverable
-          ? `guarantee left ${formatCents(d.guaranteeLeftCents)}`
-          : `above the guarantee left (${formatCents(d.guaranteeLeftCents)})`}
+          ? `guarantee left ${formatCents(d.guaranteeLeftCents)} DUSD`
+          : `above the guarantee left (${formatCents(d.guaranteeLeftCents)} DUSD)`}
       </p>
     </div>
   );

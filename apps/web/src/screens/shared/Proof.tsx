@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { cap } from '../../history.js';
 import { toClientError } from '../../state.js';
 import { NavBar } from '../../ui/Bars.js';
+import { CopyButton } from '../../ui/Flash.js';
 import { Row, Section } from '../../ui/List.js';
 import { ErrorNote } from '../../ui/Notes.js';
 import { StateView } from '../../ui/Overlays.js';
@@ -128,7 +129,7 @@ function ProofBody({ p }: { p: ProofView }) {
                   href={p.explorerUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-accent-text"
+                  className="pressable inline-flex min-h-11 items-center rounded-control px-2 text-accent-text active:bg-bg-fill"
                 >
                   Open
                 </a>
@@ -178,16 +179,7 @@ function Mono({ label, value, last = false }: { label: string; value: string; la
           {shortHash(value)}
         </span>
       }
-      value={
-        <button
-          type="button"
-          onClick={() => void navigator.clipboard?.writeText(value)}
-          className="pressable min-h-11 px-1 text-subhead text-accent-text"
-          aria-label={`Copy ${label}`}
-        >
-          Copy
-        </button>
-      }
+      value={<CopyButton value={value} label={label} />}
       last={last}
     />
   );
