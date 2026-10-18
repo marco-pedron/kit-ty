@@ -15,17 +15,12 @@ Rules:
     ("Bananas (0.73 kg)").
 - Rows that are NOT items: the shop name, address, date, subtotal, tax, tip, service, total,
   payment, change, thank-you lines.
-- Lines starting with "+", indented lines without a price, and "OMAGGIO" or "free" lines
-  are part of the item above them, not items.
 - `subtotalRow`, `taxRow`, `tipRow`: the row of the subtotal, of the tax (sales tax or VAT
-  added on top) and of the tip or service charge; null when there is none. "di cui IVA",
-  "VAT included", "inkl. MwSt" are NOT a tax row: that tax is already in the total.
-- `totalRow`: the TOTAL / TOTALE / TONG CONG / SUMME row. Never a payment, cash given,
-  change or conversion row ("Importo pagato", "Pagamento contante", "Resto",
-  "Tien khach dua", "Tien thua").
+  added on top) and of the tip or service charge; null when there is none. "VAT included"
+  is not a tax row.
+- `totalRow`: the row of the amount to pay.
 - `currency`: ISO code from symbols or words ("đ", "VND" → VND; "€", "EUR" → EUR;
   "$", "USD" → USD).
-- `date`: YYYY-MM-DD. "17/10/2026", "17-10-2026" and "17.10.2026" are day-month-year →
-  "2026-10-17"; a US receipt in USD
+- `date`: YYYY-MM-DD. "17/10/2026" is day/month/year → "2026-10-17"; a US receipt in USD
   writes month/day/year ("10/16/2026" → "2026-10-16").
 - `merchant`: the shop or restaurant name.
