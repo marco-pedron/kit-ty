@@ -1,5 +1,5 @@
 import { formatCents } from '@kitty/shared';
-import { Eye, EyeOff } from 'lucide-react';
+import { Banknote, Eye, EyeOff, Plus, Zap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Avatar } from './Avatar.js';
 import { Amount } from './Text.js';
@@ -16,21 +16,43 @@ export function BalancePill({
   cents,
   hidden,
   onToggle,
+  onOpen,
   caption = 'Only you can spend it',
+  aside,
 }: {
   cents: bigint | null;
   hidden: boolean;
   onToggle: () => void;
+  /** A tap on the amount: the traveler's channel opens the limit slider. */
+  onOpen?: { label: string; onClick: () => void };
   /** Under the pill: whose money this is. */
   caption?: string;
+  /** Next to the caption (the "Top up · soon" pill). */
+  aside?: ReactNode;
 }) {
+  const amount = (
+    <>
+      {cents === null ? '—' : hidden ? '••••' : formatCents(cents)}
+      <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
+    </>
+  );
+  const pill =
+    'hairline tabular flex h-9 items-center rounded-full bg-bg-cell px-3.5 text-headline font-semibold';
   return (
     <div>
       <div className="flex items-center gap-1">
-        <span className="hairline tabular flex h-9 items-center rounded-full bg-bg-cell px-3.5 text-headline font-semibold">
-          {cents === null ? '—' : hidden ? '••••' : formatCents(cents)}
-          <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
-        </span>
+        {onOpen === undefined ? (
+          <span className={pill}>{amount}</span>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpen.onClick}
+            aria-label={onOpen.label}
+            className={`pressable ${pill} active:bg-bg-fill`}
+          >
+            {amount}
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggle}
@@ -41,14 +63,41 @@ export function BalancePill({
           {hidden ? <EyeOff size={22} strokeWidth={1.75} /> : <Eye size={22} strokeWidth={1.75} />}
         </button>
       </div>
-      <p className="mt-0.5 pl-1 text-footnote text-label-2">
-        {cents === null ? 'Your node is not answering' : caption}
-      </p>
+      <div className="mt-0.5 flex items-center gap-2 pl-1">
+        <p className="text-footnote whitespace-nowrap text-label-2">
+          {cents === null ? 'Your node is not answering' : caption}
+        </p>
+        {aside}
+      </div>
     </div>
   );
 }
 
-/** One line of a group's history: avatar on a timeline, title, description, amount and date. */
+/** "Top up" is not built yet (SPEC §6.9: a second trip channel): shown, disabled, with "soon". */
+export function TopUpSoon() {
+  return (
+    <button
+      type="button"
+      disabled
+      aria-label="Top up, coming soon"
+      className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full bg-bg-fill pr-1 pl-2.5 text-caption font-semibold whitespace-nowrap text-label-3"
+    >
+      <Plus size={12} strokeWidth={2.5} />
+      Top up
+      <span className="rounded-full bg-bg-cell px-1.5 text-label-2">soon</span>
+    </button>
+  );
+}
+
+/** "17 Oct": the day a fiat receipt's rate was locked. */
+const day = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+/**
+ * One line of a group's history: avatar on a timeline, title, description, amount and date.
+ * A receipt paid in fiat sits on a tinted background with its currency and the rate's date; a
+ * Lightning payment in DUSD has a plain background and a small "Lightning" tag.
+ */
 export function TransactionRow({
   name,
   me = false,
@@ -61,6 +110,7 @@ export function TransactionRow({
   muted = false,
   onClick,
   waitingSince = null,
+  fiat = null,
 }: {
   name: string;
   me?: boolean;
@@ -76,6 +126,7 @@ export function TransactionRow({
   onClick?: () => void;
   /** Waiting for others: the kitten in place of the avatar and the time elapsed. */
   waitingSince?: string | null;
+  fiat?: { amount: string; currency: string; rateLockedAt: string } | null;
 }) {
   const content = (
     <>
@@ -94,17 +145,47 @@ export function TransactionRow({
             </>
           )}
         </p>
+        <span
+          className={`mt-1 inline-flex h-5 items-center gap-1 rounded-full px-2 text-caption font-semibold ${fiat === null ? 'bg-accent-soft text-label' : 'bg-bg-cell text-label-2'}`}
+        >
+          {fiat === null ? (
+            <>
+              <Zap size={11} strokeWidth={2.5} aria-hidden />
+              Lightning · DUSD
+            </>
+          ) : (
+            <>
+              <Banknote size={12} strokeWidth={2} aria-hidden />
+              {fiat.currency} · cash or card
+            </>
+          )}
+        </span>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <Amount cents={cents} sign={sign} />
+      <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+        {fiat === null ? (
+          <Amount cents={cents} sign={sign} unit />
+        ) : (
+          <>
+            <span className="tabular text-headline font-semibold text-label">
+              {sign === '-' ? '−' : ''}
+              {fiat.amount}
+              <span className="ml-1 text-footnote font-normal text-label-2">{fiat.currency}</span>
+            </span>
+            <span className="tabular text-footnote text-label-2">≈ {formatCents(cents)} DUSD</span>
+            <span className="text-caption text-label-2">rate of {day(fiat.rateLockedAt)}</span>
+          </>
+        )}
         <span className="text-footnote text-label-2">{date}</span>
       </div>
     </>
   );
+  const tint = fiat === null ? '' : 'bg-fiat-tint';
   return (
     <li className="relative">
       {onClick === undefined ? (
-        <div className={`flex gap-3 py-2.5 ${muted ? 'text-label-3 line-through' : ''}`}>
+        <div
+          className={`-mx-2 flex gap-3 rounded-control px-2 py-2.5 ${tint} ${muted ? 'text-label-3 line-through' : ''}`}
+        >
           {content}
         </div>
       ) : (
@@ -112,7 +193,7 @@ export function TransactionRow({
           type="button"
           onClick={onClick}
           aria-label={`${title}: see the proof`}
-          className="pressable flex w-full gap-3 py-2.5 text-left"
+          className={`pressable -mx-2 flex w-[calc(100%+16px)] gap-3 rounded-control px-2 py-2.5 text-left active:bg-bg-fill ${tint}`}
         >
           {content}
         </button>

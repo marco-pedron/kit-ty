@@ -7,6 +7,7 @@ import { paymentMode } from '../mode.js';
 import { limitFromStep, memberStanding, sliderSteps, stepFromLimit } from '../slider.js';
 import { toClientError } from '../state.js';
 import { Avatar } from '../ui/Avatar.js';
+import { GroupCard } from '../ui/GroupCard.js';
 import { Badge, LimitBadge } from '../ui/Badge.js';
 import { NavBar } from '../ui/Bars.js';
 import { Button } from '../ui/Button.js';
@@ -32,39 +33,42 @@ export function GroupsScreen({ trip, go }: ScreenProps) {
         {s?.trip == null ? (
           <StateView kind="loading" title="Looking for your groups" />
         ) : (
-          <div className="rounded-card bg-bg-cell">
-            <button
-              type="button"
-              onClick={() => go('group')}
-              className="pressable flex w-full items-center gap-3 px-4 pt-3.5 pb-1 text-left"
-            >
-              <span className="flex-1 text-headline font-semibold">{s.trip.name}</span>
-              <ChevronRight size={18} strokeWidth={1.75} className="text-label-3" />
-            </button>
-            <div className="flex items-center justify-between px-4 pb-3.5">
-              <span className="tabular text-title2 font-bold">
-                {balance === null ? '—' : formatCents(balance.tripOutboundCents)}
-                <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
-              </span>
+          <GroupCard
+            title={s.trip.name}
+            badge={
               <LimitBadge
                 limitCents={limit}
                 channelCents={s.trip.params.tripChannelCents}
                 onClick={() => go('group')}
               />
-            </div>
-          </div>
+            }
+          >
+            <button
+              type="button"
+              onClick={() => go('group')}
+              aria-label={`${s.trip.name}: settings`}
+              className="pressable -m-2 flex w-[calc(100%+16px)] items-center justify-between rounded-control p-2 text-left active:bg-bg-fill"
+            >
+              <span>
+                <span className="tabular block text-title2 font-bold">
+                  {balance === null ? '—' : formatCents(balance.tripOutboundCents)}
+                  <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
+                </span>
+                <span className="text-footnote text-label-2">in your trip channel</span>
+              </span>
+              <ChevronRight size={18} strokeWidth={1.75} className="text-label-3" />
+            </button>
+          </GroupCard>
         )}
         {SHOW_DEMO_SECOND_GROUP && (
-          <div
+          <GroupCard
+            title="Group 2"
+            muted
+            badge={<Badge kind="muted">Limit 10.00 DUSD</Badge>}
             aria-label="Group 2, not active yet"
-            className="rounded-card border border-dashed border-separator px-4 py-3.5 text-label-3"
           >
-            <p className="text-headline font-semibold">Group 2</p>
-            <div className="mt-1 flex items-center justify-between">
-              <span className="text-subhead">not active yet</span>
-              <Badge kind="muted">Limit 10.00</Badge>
-            </div>
-          </div>
+            <p className="text-subhead text-label-3">not active yet</p>
+          </GroupCard>
         )}
         <div className="flex justify-center pt-3">
           <Button variant="gray" disabled>

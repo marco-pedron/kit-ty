@@ -1,4 +1,5 @@
 import type { ApiClientError } from '@kitty/shared';
+import { Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { humanError } from '../errors.js';
 import { useNow } from '../state.js';
@@ -101,12 +102,30 @@ export function OperationsDock({
   );
 }
 
-/** An empty list inside a section: the kitten, small, and one sentence. */
+/** An empty list inside a section: a small green "i" and one sentence. */
 export function EmptyRow({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5">
-      <Mascot size={40} waving={false} />
+    <div className="flex items-center gap-3 px-4 py-3">
+      <span
+        aria-hidden
+        className="grid size-7 shrink-0 place-items-center rounded-full bg-positive font-brand text-headline leading-none font-bold text-on-positive"
+      >
+        i
+      </span>
       <p className="text-subhead text-label-2">{children}</p>
     </div>
+  );
+}
+
+/**
+ * Under every AI step (reading a receipt, splitting it): the AI can be wrong, the person checks.
+ * Discreet: footnote, a sparkle, no colour.
+ */
+export function AiNote({ className = '' }: { className?: string }) {
+  return (
+    <p className={`text-footnote text-label-2 ${className}`}>
+      <Sparkles size={13} strokeWidth={2} aria-hidden className="mr-1 inline align-[-2px]" />
+      The AI can make mistakes. Check the rows and the parts before sending.
+    </p>
   );
 }

@@ -103,7 +103,7 @@ export function Styleguide() {
           </div>
         </section>
 
-        <div className="rounded-card bg-bg-cell p-4">
+        <div className="card p-4">
           <ApprovalCard
             title="Coffee · Bob paid · 2.10"
             sentence="Paying in 0:38 unless you dispute"

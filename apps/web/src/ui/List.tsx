@@ -22,7 +22,7 @@ export function Section({
           {header}
         </h2>
       )}
-      <div className="overflow-hidden rounded-card bg-bg-cell">{children}</div>
+      <div className="card overflow-hidden">{children}</div>
       {footer !== undefined && <p className="px-4 pt-1.5 text-footnote text-label-2">{footer}</p>}
     </section>
   );
@@ -77,7 +77,7 @@ export function Row({
       </div>
     );
   return (
-    <button type="button" onClick={onClick} className={`${cls} pressable`}>
+    <button type="button" onClick={onClick} className={`${cls} pressable active:bg-bg-fill`}>
       {body}
     </button>
   );
