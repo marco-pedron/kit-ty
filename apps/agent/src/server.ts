@@ -1,4 +1,4 @@
-import { ERROR_ACTIONS, apiError, type ApiErrorBody } from '@kitty/shared';
+import { ERROR_ACTIONS, apiError, routes, type ApiErrorBody } from '@kitty/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AiService } from './ai/types.js';
 import type { Config } from './config.js';
@@ -10,6 +10,9 @@ import { registerRoutes } from './routes/index.js';
 // The agent's HTTP server (SPEC §14.3). It does not build agents or wallets: index.ts builds
 // the server, then the runtime (startAgents, A5, which logs with app.log), then listens; the
 // routes read the runtime through a getter.
+
+/** A phone photo is 3-10 MB, more as base64: only the extract route accepts it. */
+export const EXTRACT_BODY_LIMIT = 16 * 1024 * 1024;
 
 export interface AgentServerDeps {
   /** The runtime of startAgents (A5). Default: none, the agent routes answer 503. */
@@ -44,6 +47,15 @@ export function buildAgentServer(config: Config, deps: AgentServerDeps = {}): Fa
   });
 
   app.get('/health', async () => ({ ok: true, service: 'agent', fakes: config.KITTY_FAKES }));
+
+  // The routes are stream C's (routes/index.ts): the larger limit is set here, on that route
+  // alone; every other route keeps Fastify's default of 1 MiB.
+  const extract = routes.extractReceipt;
+  app.addHook('onRoute', (opts) => {
+    const methods = [opts.method].flat();
+    if (opts.url === extract.path && methods.includes(extract.method))
+      opts.bodyLimit = EXTRACT_BODY_LIMIT;
+  });
 
   const esplora = config.ESPLORA_URL.replace(/\/+$/, '');
   registerRoutes(app, {
