@@ -86,7 +86,10 @@ export class SwapWatcher {
   }
 
   /** One htlc-tool command (docker, on the stack's network); returns its last JSON line. */
-  private async tool(cmd: string, args: Record<string, string | number>): Promise<any> {
+  private async tool(
+    cmd: string,
+    args: Record<string, string | number>,
+  ): Promise<{ tx_hex: string; txid: string; operation_id: string }> {
     const argv = Object.entries(args).flatMap(([k, v]) => [`--${k}`, String(v)]);
     const wallets = join(this.o.runDir, 'wallets');
     const image = this.o.htlcImage ?? 'kitty/htlc-tool:dev';
@@ -233,5 +236,10 @@ export function travelerSwapInfo(runDir: string, member: string): TravelerSwapIn
   // shown as a proof: only if the preimage really opens the hash
   if (createHash('sha256').update(Buffer.from(s.preimage, 'hex')).digest('hex') !== s.hash)
     return null;
-  return { lockTxid: s.lock.txid, preimage: s.preimage, paymentHash: s.hash, cents: BigInt(s.amount) };
+  return {
+    lockTxid: s.lock.txid,
+    preimage: s.preimage,
+    paymentHash: s.hash,
+    cents: BigInt(s.amount),
+  };
 }

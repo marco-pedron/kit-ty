@@ -59,7 +59,8 @@ export function loadMemberWalletOptions(
       password,
       unlockBody: unlockBody(actor, password),
       hostDir:
-        p.backupDir ?? `${process.env.KITTY_BACKUP_DIR ?? `${repoRoot}infra/data/backups`}/${actor}`,
+        p.backupDir ??
+        `${process.env.KITTY_BACKUP_DIR ?? `${repoRoot}infra/data/backups`}/${actor}`,
     };
   // Only dave closes channels (SPEC §6.7): only his wallet gets the miner and esplora.
   if (actor === 'dave') {

@@ -484,7 +484,9 @@ export class RlnWallet implements Wallet {
         problems.push(`payment is not outbound (payment_type ${String(p.payment_type)})`);
     } else if (p.inbound !== false) {
       problems.push(
-        p.inbound === true ? 'payment is inbound' : 'payment has no inbound flag (wrong RLN flavor?)',
+        p.inbound === true
+          ? 'payment is inbound'
+          : 'payment has no inbound flag (wrong RLN flavor?)',
       );
     }
     if (p.payment_hash !== inv.paymentHash) problems.push('payment hash differs from the invoice');

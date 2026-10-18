@@ -92,7 +92,10 @@ function SwapInNote({
 }) {
   const short = (h: string) => `${h.slice(0, 10)}…${h.slice(-6)}`;
   return (
-    <section aria-label="How your funds entered the channel" className="rounded-card bg-bg-cell p-4">
+    <section
+      aria-label="How your funds entered the channel"
+      className="rounded-card bg-bg-cell p-4"
+    >
       <p className="text-subhead font-semibold">
         {formatCents(swap.cents)} in your channel, entered with an atomic swap
       </p>

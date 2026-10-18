@@ -91,7 +91,11 @@ log('issued DUSD', { assetId, units: ISSUED });
 // 5. dave: one allocation of D + L per channel, each its own transfer (separate UTXOs)
 const onrampTxids: { to: Member; amount: number; txid: string }[] = [];
 for (let i = 0; i < TRAVELLERS.length; i++)
-  onrampTxids.push({ to: 'dave', amount: D + L, txid: await onramp(treasury.account, assetId, 'dave', D + L) });
+  onrampTxids.push({
+    to: 'dave',
+    amount: D + L,
+    txid: await onramp(treasury.account, assetId, 'dave', D + L),
+  });
 
 // 6. one channel dave → each traveller, D + L on dave's side, before any other DUSD move
 interface Channel {
@@ -131,7 +135,9 @@ async function openOne(peer: Member): Promise<void> {
           const ch = (await listChannels('dave')).find(
             (c) => !before.has(c.channel_id) && c.peer_pubkey === pubkey[peer],
           );
-          return ch?.funding_txid && (await esploraHasTx(ch.funding_txid)) ? ch.funding_txid : false;
+          return ch?.funding_txid && (await esploraHasTx(ch.funding_txid))
+            ? ch.funding_txid
+            : false;
         },
         { timeoutMs: 60_000, everyMs: 1000 },
       );
@@ -155,7 +161,9 @@ await waitFor(
       TRAVELLERS.map(async (m) => (await listChannels(m)).some((c) => c.is_usable)),
     );
     const graphs = await Promise.all(
-      TRAVELLERS.map(async (m) => (await rln<{ network_channels: number }>(m, '/nodeinfo')).network_channels),
+      TRAVELLERS.map(
+        async (m) => (await rln<{ network_channels: number }>(m, '/nodeinfo')).network_channels,
+      ),
     );
     if (daves.length === 3 && sides.every(Boolean) && graphs.every((n) => n >= 3)) return true;
     log('waiting for channels', { daveUsable: daves.length, graphs });
@@ -167,7 +175,11 @@ await waitFor(
 
 // 7. on-ramp of the travellers and dave's reserve, now that the opens are confirmed
 for (const m of TRAVELLERS)
-  onrampTxids.push({ to: m, amount: ONRAMP, txid: await onramp(treasury.account, assetId, m, ONRAMP) });
+  onrampTxids.push({
+    to: m,
+    amount: ONRAMP,
+    txid: await onramp(treasury.account, assetId, m, ONRAMP),
+  });
 onrampTxids.push({
   to: 'dave',
   amount: DAVE_RESERVE,
@@ -190,7 +202,8 @@ for (const m of TRAVELLERS) {
     outpoint: s.lock!.outpoint,
     blinding: s.lock!.blinding,
   });
-  if (!verdict.pay) throw new Error(`dave refuses the swap of ${m}: ${verdict.failures.join('; ')}`);
+  if (!verdict.pay)
+    throw new Error(`dave refuses the swap of ${m}: ${verdict.failures.join('; ')}`);
   await davePay(d, invoice);
   await waitFor(
     `${m} sees the HODL payment Claimable`,
@@ -232,7 +245,11 @@ for (const m of MEMBERS) {
   const peerOf = (pk: string) => MEMBERS.find((x) => pubkey[x] === pk) ?? pk;
   const channels =
     m === 'dave'
-      ? chans.map((c) => ({ kind: 'liquidity', peer: peerOf(c.peer_pubkey), channelId: c.channel_id }))
+      ? chans.map((c) => ({
+          kind: 'liquidity',
+          peer: peerOf(c.peer_pubkey),
+          channelId: c.channel_id,
+        }))
       : chans.flatMap((c) => [
           { kind: 'travel', peer: peerOf(c.peer_pubkey), channelId: c.channel_id },
           { kind: 'liquidity', peer: peerOf(c.peer_pubkey), channelId: c.channel_id },
@@ -242,7 +259,8 @@ for (const m of MEMBERS) {
     `  ${m.padEnd(8)} on-chain ${dusd(bal.settled)}, off-chain out ${dusd(bal.offchain_outbound)} in ${dusd(bal.offchain_inbound)}, ${chans.length} channel(s)`,
   );
   if (m === 'dave') {
-    if (bal.settled !== DAVE_RESERVE) problems.push(`dave on-chain ${bal.settled} != ${DAVE_RESERVE}`);
+    if (bal.settled !== DAVE_RESERVE)
+      problems.push(`dave on-chain ${bal.settled} != ${DAVE_RESERVE}`);
     continue;
   }
   if (chans.length !== 1) problems.push(`${m} has ${chans.length} channels, want 1`);

@@ -217,51 +217,55 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
     expect(line.state).toBe('due');
   });
 
-  it('step 6: charlie does not pay; dave covers 3.50 and excludes him', async () => {
-    const t0 = Date.now();
-    const def = await waitFor(
-      "charlie's line overdue on dave",
-      async () =>
-        (await state('dave')).coordinator?.defaults.find(
-          (x) => x.expenseId === expenseId && x.debtor === 'charlie',
-        ),
-      90_000,
-    );
-    note('overdue', { afterMs: Date.now() - t0, def });
-    expect(def.coverable).toBe(true);
-    // charlie's agent never paid it (payUpheldDisputes is false by default)
-    expect(debt(await state('charlie'))?.state).toBe('overdue');
-
-    const h0 = await tipHeight();
-    const t1 = Date.now();
-    const r = await api.dave.coverAndExclude({ expenseId, member: 'charlie' });
-    const blocksMined = (await tipHeight()) - h0;
-    note('cover and exclude', { ...r, ms: Date.now() - t1, blocksMined });
-
-    expect(r.covered?.rail).toBe('ln');
-    expect(r.closingTxids).toHaveLength(ONE_CH ? 1 : 2);
-    expect(blocksMined).toBeLessThanOrEqual(CLOSE_MAX_BLOCKS);
-    for (const txid of r.closingTxids) {
-      const res = await fetch(`${ESPLORA}/tx/${txid}`);
-      expect(res.status).toBe(200);
-      expect(((await res.json()) as { status: { confirmed: boolean } }).status.confirmed).toBe(
-        true,
+  it(
+    'step 6: charlie does not pay; dave covers 3.50 and excludes him',
+    async () => {
+      const t0 = Date.now();
+      const def = await waitFor(
+        "charlie's line overdue on dave",
+        async () =>
+          (await state('dave')).coordinator?.defaults.find(
+            (x) => x.expenseId === expenseId && x.debtor === 'charlie',
+          ),
+        90_000,
       );
-    }
-    const proof = await api.alice.getProof({
-      paymentHash: r.covered?.rail === 'ln' ? r.covered.paymentHash : '',
-    });
-    expect(proof.verified).toBe(true);
-    expect(proof.rail === 'ln' && proof.paidBy).toBe('guarantee');
+      note('overdue', { afterMs: Date.now() - t0, def });
+      expect(def.coverable).toBe(true);
+      // charlie's agent never paid it (payUpheldDisputes is false by default)
+      expect(debt(await state('charlie'))?.state).toBe('overdue');
 
-    const dave = await state('dave');
-    const charlie = dave.members.find((m) => m.memberId === 'charlie');
-    expect(charlie?.status).toBe('excluded');
-    expect(charlie?.closingTxids).toEqual(r.closingTxids);
-    const op = dave.coordinator?.members.find((m) => m.memberId === 'charlie');
-    expect(op?.guaranteeUsedCents).toBe(350n);
-    expect(op?.operatorCreditCents).toBe(350n);
-  }, ONE_CH ? 420_000 : undefined);
+      const h0 = await tipHeight();
+      const t1 = Date.now();
+      const r = await api.dave.coverAndExclude({ expenseId, member: 'charlie' });
+      const blocksMined = (await tipHeight()) - h0;
+      note('cover and exclude', { ...r, ms: Date.now() - t1, blocksMined });
+
+      expect(r.covered?.rail).toBe('ln');
+      expect(r.closingTxids).toHaveLength(ONE_CH ? 1 : 2);
+      expect(blocksMined).toBeLessThanOrEqual(CLOSE_MAX_BLOCKS);
+      for (const txid of r.closingTxids) {
+        const res = await fetch(`${ESPLORA}/tx/${txid}`);
+        expect(res.status).toBe(200);
+        expect(((await res.json()) as { status: { confirmed: boolean } }).status.confirmed).toBe(
+          true,
+        );
+      }
+      const proof = await api.alice.getProof({
+        paymentHash: r.covered?.rail === 'ln' ? r.covered.paymentHash : '',
+      });
+      expect(proof.verified).toBe(true);
+      expect(proof.rail === 'ln' && proof.paidBy).toBe('guarantee');
+
+      const dave = await state('dave');
+      const charlie = dave.members.find((m) => m.memberId === 'charlie');
+      expect(charlie?.status).toBe('excluded');
+      expect(charlie?.closingTxids).toEqual(r.closingTxids);
+      const op = dave.coordinator?.members.find((m) => m.memberId === 'charlie');
+      expect(op?.guaranteeUsedCents).toBe(350n);
+      expect(op?.operatorCreditCents).toBe(350n);
+    },
+    ONE_CH ? 420_000 : undefined,
+  );
 
   it("step 6: charlie's 50.00 come back to him on-chain", async () => {
     const was = before.charlie?.me?.balance;
@@ -295,9 +299,9 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
   });
 
   it('B6: every traveler backed their node up to the relay, encrypted', async () => {
-    const seed = JSON.parse(
-      readFileSync(SEED_STATE, 'utf8'),
-    ) as { pubkeys: Record<ActorId, string> };
+    const seed = JSON.parse(readFileSync(SEED_STATE, 'utf8')) as {
+      pubkeys: Record<ActorId, string>;
+    };
     const sizes = await waitFor(
       "a backup of every traveler's node on the relay",
       async () => {

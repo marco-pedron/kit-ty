@@ -6,7 +6,7 @@
 //      claim with P confirms; the DUSD go on to dave's RLN node
 //   b. alice locks again; her rgb-lib wallet accepts the lock; the refund is rejected before the
 //      timeout and confirmed after it; the DUSD go back to alice's RLN node
-import { htlcInfo, lockFromRln, rlnRgbInvoice, rlnSend, tool, ToolError, voutOf, type HtlcTerms } from './htlc.ts';
+import { htlcInfo, lockFromRln, rlnRgbInvoice, rlnSend, tool, voutOf, type HtlcTerms } from './htlc.ts';
 import { assetBalance, height, log, mine, mempool, post, preimageAndHash, refresh, sendBtc, waitFor } from './lib.ts';
 
 function assert(cond: unknown, msg: string): asserts cond {
