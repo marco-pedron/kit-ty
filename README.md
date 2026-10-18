@@ -18,9 +18,7 @@ Each traveler has an agent that checks the expense and pays the payer back over 
 
 If someone never pays, the coordinator settles the same invoice with the operator's liquidity, up to a guarantee cap, and excludes the member by closing their channels. Their funds go back to them on-chain: exclusion is a sanction, and the guarantee is what makes the creditor whole.
 
-Underneath, every event is signed by its author and hash-chained on a relay that cannot forge anything, and every payment carries a preimage proof that anyone can check. Or, as we put it in the pitch:
-
-> _"The coordinator can be annoying, but he can't steal."_
+Underneath, every event is signed by its author and hash-chained on a relay that cannot forge anything, and every payment carries a preimage proof that anyone can check.
 
 ## Documentation
 
@@ -76,18 +74,3 @@ On 16 October we also ran two spikes. The Lightning RGB spike ([`docs/spike-ligh
 The WDK spike ([`docs/spike-wdk.md`](docs/spike-wdk.md)) tried `@utexo/wdk-rgb-lightning` `0.1.0-beta.15` as every member's node. It ran four nodes in one process and routed RGB payments, but its signer state did not survive a restart, cooperative closes did not sweep the `DUSD` back on-chain, and VSS restore hung. We kept the RLN REST engine for the nodes and used `@utexo/wdk-wallet-rgb` for the operator's treasury.
 
 Finally, the design and planning documents (spec, work plan, pitch and session prompts) predate the hackathon too. There were no UI designs or mobile app at that point.
-
-## Internal documents
-
-The working documents of the team are in Italian.
-
-| Document                                                       | What it is                                   |
-| -------------------------------------------------------------- | -------------------------------------------- |
-| [`docs/SPEC.md`](docs/SPEC.md)                                 | How kit+ty works: the source of truth        |
-| [`docs/PLAN.md`](docs/PLAN.md)                                 | Who does what, when, and with which priority |
-| [`docs/PITCH.md`](docs/PITCH.md)                               | The pitch and our answers to hard questions  |
-| [`docs/spike-lightning.md`](docs/spike-lightning.md)           | Lightning RGB spike results                  |
-| [`docs/spike-wdk.md`](docs/spike-wdk.md)                       | WDK engine spike results                     |
-| [`docs/SETUP.md`](docs/SETUP.md)                               | Repository setup and session start           |
-| [`docs/prompts/`](docs/prompts), [`docs/status/`](docs/status) | Session prompts and progress per stream      |
-| [`CLAUDE.md`](CLAUDE.md)                                       | Rules for Claude Code                        |
