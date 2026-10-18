@@ -23,10 +23,11 @@ export function autoPaidLast24h(trip: TripState, debtorPubkey: string, now: Date
 }
 
 /**
- * Whether the debtor's agent pays this line now, and why. Pays only a `due` line of an open
- * trip whose expense adds up, between members still in the trip, with an invoice (decoded by
- * the debtor's own node) payable to the creditor's registered node, for the trip asset and the
- * line amount, not expired. An upheld dispute is paid on its own only with payUpheldDisputes.
+ * Whether the debtor's agent pays this line now, and why. Pays only a `due` line (or an
+ * `overdue` one the debtor approved explicitly: a late payment, SPEC §7) of an open trip whose
+ * expense adds up, between members still in the trip, with an invoice (decoded by the debtor's
+ * own node) payable to the creditor's registered node, for the trip asset and the line amount,
+ * not expired. An upheld dispute is paid on its own only with payUpheldDisputes.
  * Automatic payments (no explicit approval) also stay within autoPayLimitCents, checked again in
  * case the policy changed after silent assent, and within dailyCapCents over a rolling 24 h; an
  * explicit approval pays regardless of both (SPEC §8). Every other state gets its sentence too,
@@ -68,6 +69,12 @@ export function decideAutoPay(
     case 'submitted':
       return no(`Not seen by your agent yet.`);
     case 'overdue':
+      // Paying late is allowed (SPEC §7, overdue → paid), only once the debtor approved it.
+      if (!automatic) break;
+      if (upheld)
+        return no(
+          `Overdue: the payment deadline has passed. Approve ${amount} to pay ${to} now, or the operator will cover it.`,
+        );
       return no(
         `Overdue: the payment deadline has passed. Pay ${amount} to ${to} yourself, or the operator will cover it.`,
       );
@@ -85,6 +92,7 @@ export function decideAutoPay(
     case 'due':
       break;
   }
+  // From here: a due line, or an overdue line the debtor approved explicitly.
 
   if (trip.closed) return no(`The trip is closed: your agent pays nothing any more.`);
   if (debtor?.excluded) return no(`You were excluded: your channels are closed.`);

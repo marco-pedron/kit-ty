@@ -25,6 +25,12 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### Fix nodo bloccato dopo un riavvio (branch `fix/receipt-split-and-dispute-payments`), dom 18/10
+- **Problema visto in demo:** il nodo RLN di alice è andato in panic incassando un pagamento (`rust-lightning/lightning/src/rgb_utils/mod.rs:537`, `valid rgb info file: EOF while parsing a value`, 13 s dopo un suo lock → backup → unlock) e Docker l'ha riavviato **bloccato**: ogni pagamento verso alice falliva. Al riavvio LDK ha chiuso il canale `c0dc…` con `OutdatedChannelManager`; il canale di viaggio di bob era stato chiuso forzatamente da dave per `Invalid commitment tx signature from peer`, durante un pagamento verso alice bloccata.
+- **Cura nel wallet:** una chiamata che riceve `LockedNode` fa un solo `/unlock` (con l'`unlockBody` del backup), un warn nel log, 3 s di quiete e un solo nuovo tentativo; chiamate concorrenti condividono lo sblocco; un unlock fallito è l'errore della chiamata. Usa lo stesso cancello del backup: mai durante un lock → backup → unlock, e un backup aspetta lo sblocco.
+- Come si prova: `pnpm test` (`rln-wallet.test.ts`, "automatic unlock of a restarted node").
+- Problemi noti: il panic di RLN non è corretto (race a monte: `fs::write` non atomico); dopo un panic i canali possono chiudersi da soli e servono blocchi minati per risolvere gli HTLC: dopo un caso così, `pnpm demo:reset`.
+
 ### R4, dom 18/10
 - **Cosa funziona:** `seedTrip(rt, seed, params, log)` scrive in `TRIP_CREATED` i `params` ricevuti. `index.ts` passa `DEMO_TRIP_PARAMS` con `SILENT_ASSENT_SECONDS`, `PAYMENT_DEADLINE_SECONDS` e `INVOICE_EXPIRY_SECONDS` della config, i cui default ora sono **45 / 120** / 3600 (nessuna variabile nuova). `DEMO_TRIP_PARAMS` di `packages/shared` resta 20/30, quindi i test non cambiano. `e2e/harness.ts` fissa `SILENT_ASSENT_SECONDS=20` e `PAYMENT_DEADLINE_SECONDS=30` dopo l'env della shell e `p.env` (non si possono sovrascrivere); `check-real.ts` passa `DEMO_TRIP_PARAMS`.
 - **Relay con altri tempi:** se il viaggio sul relay ha `silentAssentSeconds` o `paymentDeadlineSeconds` diversi da quelli chiesti, `seedTrip` lancia `StaleRelayError` ("… run `pnpm demo:reset`") e l'agente esce con codice 1. Il controllo vale solo per i due tempi, non per `invoiceExpirySeconds`.

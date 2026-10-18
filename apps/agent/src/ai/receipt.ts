@@ -61,6 +61,28 @@ const QTY_X_UNIT = /(\d{1,3})\s*[xX×]\s*(\d[\d.,']*)/u;
 const MEASURE = /\d+(?:[.,]\d+)?\s*(?:l|cl|ml|g|gr|kg|pz|pc|pcs)(?!\p{L})/giu;
 const COUNT = /(?<!\p{L})[x×]\s*\d{1,3}(?![\d.,'])/giu;
 
+/** The words of a label or row that name something: letters only, 3 or more, lowercase. */
+const wordsOf = (s: string) => new Set(s.toLowerCase().match(/\p{L}{3,}/gu) ?? []);
+
+/**
+ * The row of an item, checked against its label. The model sometimes gives an item the row
+ * next to its own (on a photographed receipt: "Rice crackers" on the noodles' row); its label
+ * says which row it meant. If the label's words are not on the given row but on exactly one
+ * other row, that row; otherwise the model's row. Structure only: the amount is still read
+ * from the row by code.
+ */
+export function anchorRow(label: string, row: number, rows: readonly string[]): number {
+  const words = [...wordsOf(label)];
+  if (words.length === 0) return row;
+  const carries = (i: number) => {
+    const w = wordsOf(rows[i] ?? '');
+    return words.every((x) => w.has(x));
+  };
+  if (carries(row)) return row;
+  const others = rows.map((_, i) => i).filter((i) => i !== row && carries(i));
+  return others.length === 1 ? (others[0] ?? row) : row;
+}
+
 /** The last amount printed on a row: the line total, the subtotal, the total… */
 export function rowAmount(row: string, currency: CurrencyCode): bigint | null {
   // OCR often reads "4,50" as "4, 50", "4 ,50" or "4 , 50"
@@ -163,6 +185,7 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
   claim('the tip', tipRow);
   const seen = new Set<number>();
   const llmItems = r.items
+    .map((it) => ({ ...it, row: anchorRow(it.label, it.row, rows) }))
     .filter((it) => {
       const what = special.get(it.row);
       if (what !== undefined && it.row !== tipRow && it.row !== taxRow)
@@ -234,17 +257,23 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
 
   const checked = z.safeEncode(ReceiptSchema, receipt);
   if (!checked.success) errors.push(z.prettifyError(checked.error));
-  if (errors.length > 0) {
-    const withoutDate: Partial<Receipt> = { ...receipt };
-    delete withoutDate.date;
-    return {
-      ok: false,
-      error: errors.join('\n'),
-      partial: errors.some((e) => e.startsWith('date')) ? withoutDate : receipt,
-    };
-  }
+  if (errors.length > 0) return { ok: false, error: errors.join('\n'), partial: readable(receipt) };
   receipt.warnings = [...dropped, ...receiptWarnings(receipt)];
   return { ok: true, receipt };
+}
+
+/**
+ * The fields of a failed receipt that are valid on their own, for the pre-filled manual form:
+ * an amount that could not be read (0, or a total that is not positive) or a bad date is left
+ * out, never sent as a value (the API response refuses it).
+ */
+function readable(receipt: Receipt): Partial<Receipt> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(receipt)) {
+    const field = ReceiptSchema.shape[key as keyof typeof ReceiptSchema.shape];
+    if (value !== undefined && z.safeEncode(field, value as never).success) out[key] = value;
+  }
+  return out as Partial<Receipt>;
 }
 
 /** Deterministic checks after zod (SPEC §11): items + tax + tip = total, and per line. */

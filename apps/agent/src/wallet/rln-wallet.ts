@@ -38,6 +38,8 @@ export interface RlnWalletOptions {
   proxyEndpoint?: string;
   /** B6: what lock → backup → unlock needs; without it backupNow is NOT_ALLOWED. */
   backup?: BackupSettings;
+  /** Where the automatic unlock of a restarted node is reported (default console). */
+  log?: { warn: (msg: string) => void };
 }
 
 export interface BackupSettings {
@@ -193,6 +195,8 @@ export class RlnWallet implements Wallet {
   private gate: Promise<void> | null = null;
   private releaseGate: () => void = () => undefined;
   private inFlight = 0;
+  /** The automatic unlock in progress, shared by every request that found the node locked. */
+  private unlocking: Promise<void> | null = null;
 
   constructor(private readonly opts: RlnWalletOptions) {
     if (!HEX32.test(opts.appSecretHex)) throw new Error('appSecretHex must be 32 bytes of hex');
@@ -205,18 +209,63 @@ export class RlnWallet implements Wallet {
     this.refreshEveryMs = opts.refreshEveryMs ?? 15_000;
   }
 
-  /** One REST call: network failure → RlnError 'Unreachable', non-2xx → RlnError from body. */
+  /**
+   * One REST call: network failure → RlnError 'Unreachable', non-2xx → RlnError from body.
+   * A node that answers LockedNode was restarted (RLN comes back locked, e.g. after a panic):
+   * it is unlocked once and the call is retried once; a failed unlock is the call's error.
+   */
   private async call<T>(
     endpoint: string,
     send: () => Promise<{ data?: T; error?: unknown; response: Response }>,
   ): Promise<T> {
-    while (this.gate !== null) await this.gate;
-    this.inFlight += 1;
-    try {
-      return await this.rawCall(endpoint, send);
-    } finally {
-      this.inFlight -= 1;
+    for (let attempt = 1; ; attempt++) {
+      while (this.gate !== null) await this.gate;
+      this.inFlight += 1;
+      let error: unknown;
+      try {
+        return await this.rawCall(endpoint, send);
+      } catch (e) {
+        error = e;
+      } finally {
+        this.inFlight -= 1;
+      }
+      const locked = error instanceof RlnError && error.rlnName === 'LockedNode';
+      if (!locked || attempt > 1 || this.opts.backup === undefined) throw error;
+      await this.unlockRestartedNode(this.opts.backup, endpoint);
     }
+  }
+
+  /**
+   * The unlock of a node found locked outside a backup. Serialised with backups through the
+   * gate: during a lock → backup → unlock cycle the node is locked on purpose and the cycle
+   * unlocks it itself, so this only waits for it. Concurrent callers share one unlock.
+   */
+  private unlockRestartedNode(b: BackupSettings, endpoint: string): Promise<void> {
+    if (this.unlocking !== null) return this.unlocking;
+    if (this.gate !== null) return this.gate;
+    this.gate = new Promise((r) => (this.releaseGate = r));
+    this.unlocking = (async () => {
+      try {
+        while (this.inFlight > 0) await sleep(this.pollIntervalMs);
+        (this.opts.log ?? console).warn(
+          `RLN node ${this.opts.nodeUrl} answered ${endpoint} with LockedNode (restarted?): unlocking it automatically`,
+        );
+        try {
+          await this.rawCall('/unlock', () =>
+            this.rln.POST('/unlock', { body: b.unlockBody as never }),
+          );
+        } catch (e) {
+          if (!(e instanceof RlnError && e.rlnName === 'AlreadyUnlocked')) throw e;
+        }
+        this.nodeInfo = null;
+        // let LDK finish starting before any request reaches the node again (B6)
+        await sleep(b.settleMs ?? BACKUP_SETTLE_MS);
+      } finally {
+        this.unlocking = null;
+        this.openGate();
+      }
+    })();
+    return this.unlocking;
   }
 
   /** A request that ignores the backup gate: only the backup's own. */
@@ -877,6 +926,8 @@ export class RlnWallet implements Wallet {
     if (!b) throw new WalletError('NOT_ALLOWED', 'this wallet has no backup settings');
     const version = new Date(this.now()).toISOString();
     const file = `backup-${version.replace(/[^0-9]/gu, '')}.bin`;
+    // never during an automatic unlock (unlockRestartedNode holds the gate meanwhile)
+    while (this.gate !== null) await this.gate;
     this.gate = new Promise((r) => (this.releaseGate = r));
     try {
       // nothing else in flight to the node when it locks

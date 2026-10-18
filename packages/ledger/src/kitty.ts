@@ -52,7 +52,7 @@ export interface LineRecord {
   deadlineAt: Date | null;
   /**
    * When an unpaid awaiting_explicit/due line becomes overdue: seenAt + paymentDeadlineSeconds,
-   * or resolvedAt + paymentDeadlineSeconds after an upheld dispute. null before LINE_SEEN.
+   * or resolvedAt + upheldDeadlineSeconds after an upheld dispute. null before LINE_SEEN.
    */
   paymentDeadlineAt: Date | null;
   /** When the line became overdue (the deadline, or the exclusion); kept after it is settled. */
@@ -108,6 +108,10 @@ export function lineKey(expenseEventHash: string, debtorPubkey: string): string 
 
 const isFinal = (l: LineRecord) => FINAL_LINE_STATES.includes(l.state);
 const addSeconds = (d: Date, s: number) => new Date(d.getTime() + s * 1000);
+
+/** The time to pay a line dave upheld (TripParams.upheldDeadlineSeconds). */
+export const upheldDeadlineSeconds = (p: TripParams): number =>
+  p.upheldDeadlineSeconds ?? p.paymentDeadlineSeconds;
 
 /**
  * Folds the log into the trip state at `now` (task A1). SPEC §7: line states are derived,
@@ -312,7 +316,7 @@ export function deriveTrip(events: readonly StoredEvent[], now: Date): TripState
         if (b.outcome === 'upheld') {
           line.state = 'due';
           line.approvedExplicitly = false;
-          line.paymentDeadlineAt = addSeconds(at, params.paymentDeadlineSeconds);
+          line.paymentDeadlineAt = addSeconds(at, upheldDeadlineSeconds(params));
         } else if (b.outcome === 'line_voided') {
           line.state = 'voided';
         } else {

@@ -294,12 +294,17 @@ export class MemberAgent {
     }
   }
 
-  /** One payment at a time per member (SPEC §10.1: value in flight is limited). */
+  /**
+   * One payment at a time per member (SPEC §10.1: value in flight is limited). Overdue lines
+   * too: decideAutoPay pays one late once the debtor approved it (e.g. upheld, then approved
+   * after the deadline).
+   */
   private maybePay(trip: TripState, author: string): void {
     if (this.paying !== null) return;
     const now = this.now();
     for (const line of trip.lines.values()) {
-      if (line.debtorPubkey !== author || line.state !== 'due') continue;
+      if (line.debtorPubkey !== author) continue;
+      if (line.state !== 'due' && line.state !== 'overdue') continue;
       const key = lineKey(line.expenseEventHash, author);
       if (this.proofs.has(key) || (this.retryAt.get(key) ?? 0) > now.getTime()) continue;
       const decision = this.decisionFor(line, trip);

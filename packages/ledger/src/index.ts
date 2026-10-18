@@ -43,6 +43,7 @@ export {
   deriveTrip,
   lineKey,
   liquidityPlan,
+  upheldDeadlineSeconds,
   validateEvent,
   type ExpenseRecord,
   type LineRecord,

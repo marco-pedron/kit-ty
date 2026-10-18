@@ -63,7 +63,9 @@ export function DisputeScreen({
       .catch((err: unknown) => setError(toClientError(err)))
       .finally(() => setBusy(false));
   };
-  const deadline = s.trip?.params.paymentDeadlineSeconds ?? 0;
+  // the time to pay once dave confirms (TripParams.upheldDeadlineSeconds, default the deadline)
+  const params = s.trip?.params;
+  const deadline = params?.upheldDeadlineSeconds ?? params?.paymentDeadlineSeconds ?? 0;
   const split = splitOf(e);
 
   return (

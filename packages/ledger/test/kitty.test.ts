@@ -274,6 +274,22 @@ describe('A1 deriveTrip (SPEC §7)', () => {
     expect(charlie.paymentDeadlineAt).toEqual(at(50));
   });
 
+  it('upheldDeadlineSeconds: a short time to pay an upheld line, the other deadlines unchanged', () => {
+    // the live demo: 10 s after dave upholds, against 30 s from LINE_SEEN for the others
+    const log = tripLog({ ...DEMO_TRIP_PARAMS, upheldDeadlineSeconds: 10 });
+    const expense = submit(log, dinnerSpec, 10);
+    seen(log, expense, KEY.bob, 12);
+    seen(log, expense, KEY.charlie, 12);
+    decide(log, expense, KEY.charlie, 'contest', 350n, 15);
+    resolve(log, expense, KEY.charlie, 'upheld', 20);
+    expect(line(derive(log, 21), expense, KEY.charlie).deadlineAt).toEqual(at(30));
+    expect(line(derive(log, 29), expense, KEY.charlie).state).toBe('due');
+    expect(line(derive(log, 30), expense, KEY.charlie).state).toBe('overdue');
+    // bob's line keeps seenAt + paymentDeadlineSeconds: due at 32 (silent assent), overdue at 42
+    expect(line(derive(log, 41), expense, KEY.bob).state).toBe('due');
+    expect(line(derive(log, 42), expense, KEY.bob).state).toBe('overdue');
+  });
+
   it('DISPUTE_RESOLVED upheld → due with a new deadline; line_voided → voided; expense_voided → every line voided', () => {
     const contested = () => {
       const { log, expense } = setup();
@@ -1499,6 +1515,46 @@ describe('A3 decideAutoPay (SPEC §8)', () => {
     });
     log.push('LINE_DECIDED', KEY.bob, { ...ref, decision: 'approve', cents: 309n }, 22);
     expect(decide(log, expense, 23).pay).toBe(true);
+  });
+
+  it('upheld, then overdue: pays late once the debtor approves it (SPEC §7, overdue → paid)', () => {
+    const { log, expense } = dinnerForBob();
+    const ref = { expenseEventHash: expense.hash };
+    log.push(
+      'LINE_DECIDED',
+      KEY.bob,
+      { ...ref, decision: 'contest', cents: 309n, reason: 'x' },
+      12,
+    );
+    log.push(
+      'DISPUTE_RESOLVED',
+      KEY.dave,
+      { ...ref, debtorPubkey: KEY.bob, outcome: 'upheld', note: 'photo checked' },
+      20,
+    );
+    // past the new deadline (20 + 30 s) without an approval: overdue, waiting for bob
+    expect(bobLine(log, expense, 51).line.state).toBe('overdue');
+    expect(decide(log, expense, 51)).toEqual({
+      pay: false,
+      reason:
+        'Overdue: the payment deadline has passed. Approve 3.09 to pay alice now, or the operator will cover it.',
+    });
+    log.push('LINE_DECIDED', KEY.bob, { ...ref, decision: 'approve', cents: 309n }, 55);
+    expect(bobLine(log, expense, 56).line).toMatchObject({
+      state: 'overdue',
+      approvedExplicitly: true,
+    });
+    expect(decide(log, expense, 56)).toEqual({
+      pay: true,
+      reason: 'Paying 3.09 to alice: you approved it.',
+    });
+  });
+
+  it('an overdue line never approved is not paid by the agent', () => {
+    const { log, expense } = dinnerForBob();
+    // no approval: silent assent made it due, then the deadline passed (e.g. a failed payment)
+    expect(bobLine(log, expense, 50).line.state).toBe('overdue');
+    expect(decide(log, expense, 50).pay).toBe(false);
   });
 
   it('never pays when the invoice payee is not the creditor node, or amount/asset differ', () => {

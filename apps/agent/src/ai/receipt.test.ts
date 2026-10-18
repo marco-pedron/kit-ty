@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ReceiptResultSchema } from '@kitty/shared';
 import { printedDate, rowAmount, toReceipt } from './receipt.js';
 
 // toReceipt over OCR rows like a fast-food receipt: menu components and freebies printed
@@ -48,6 +49,8 @@ describe('rowAmount', () => {
     expect(rowAmount('Bananas 0.73 kg  1.83', 'EUR')).toBe(183n);
     expect(rowAmount('Coca cola 33cl x2  5,00', 'EUR')).toBe(500n);
     expect(rowAmount('Pho bo  2 X 65.000  130.000', 'VND')).toBe(130_000n);
+    // a tilted photo: the OCR split "75.000" in two blocks
+    expect(rowAmount('Bia Saigon  3 X  25.000  75 .  000', 'VND')).toBe(75_000n);
     expect(rowAmount('3 X 0.90  2.70', 'USD')).toBe(270n);
   });
 
@@ -145,5 +148,97 @@ describe('toReceipt', () => {
     if (r.ok) return;
     expect(r.error).toContain('item 0: row 3 "+ Patatine grandi" has no amount');
     expect(r.error).toContain('item 2: row 7 "Ketchup x2  OMAGGIO" has no amount');
+  });
+});
+
+describe('toReceipt, failed', () => {
+  // A tilted photo once put "TOTAL VND" on a row of its own, without the amount: the error
+  // went back to the model, and after 2 attempts the partial receipt carried total 0, which the
+  // API response refused (VALIDATION_ERROR) instead of opening the pre-filled manual form.
+  it('the partial keeps only the fields it could read: no total of 0', () => {
+    const rows = ['PHO RESTAURANT HANOI', 'Pho bo  2 X 65.000  130.000', 'TOTAL VND'];
+    const r = toReceipt(
+      {
+        ...base,
+        currency: 'VND',
+        items: [{ row: 1, label: 'Pho bo', quantity: 2 }],
+        totalRow: 2,
+      },
+      rows,
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/the total: row 2 "TOTAL VND" has no amount/);
+    expect(r.partial.total).toBeUndefined();
+    expect(r.partial.items).toEqual([
+      { label: 'Pho bo', quantity: 2, unitPrice: 65_000n, total: 130_000n },
+    ]);
+    expect(
+      ReceiptResultSchema.safeEncode({
+        ok: false,
+        partial: r.partial,
+        error: r.error,
+        attempts: 2,
+        latencyMs: 1,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('toReceipt, item rows', () => {
+  // The real model on the supermarket receipt photographed (rows straightened by blocksToLines):
+  // it gave "Rice crackers" the row of the noodles, then the noodles the same row, so the
+  // crackers got 2.70 and the noodles disappeared. Its own labels say which rows it meant.
+  const rows = [
+    'FRESH MARKET',
+    '10/16/2026 18:05',
+    'Bananas  0.73  kg  1.10/kg  0.80',
+    'Water  1.5L  2 x 1.25  2.50',
+    'Rice crackers  3.40',
+    'Instant  noodles  3 X 0.90  2.70',
+    'Subtotal  9,40',
+    'Sales  tax  0.75',
+    'TOTAL USD  10.15',
+  ];
+  const answer = {
+    merchant: 'FRESH MARKET',
+    date: '2026-10-16',
+    currency: 'USD',
+    items: [
+      { row: 2, label: 'Bananas (0.73 kg)', quantity: 1 },
+      { row: 3, label: 'Water (1.5L)', quantity: 2 },
+      { row: 5, label: 'Rice crackers', quantity: 1 },
+      { row: 5, label: 'Instant noodles', quantity: 3 },
+      { row: 8, label: 'TOTAL USD', quantity: 1 },
+    ],
+    subtotalRow: 6,
+    taxRow: 7,
+    tipRow: null,
+    totalRow: 8,
+  };
+
+  it('an item on a row that does not carry its label goes to the one row that does', () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.receipt.items.map((it) => [it.label, it.total])).toEqual([
+      ['Bananas (0.73 kg)', 80n],
+      ['Water (1.5L)', 250n],
+      ['Rice crackers', 340n],
+      ['Instant noodles', 270n],
+    ]);
+    expect(r.receipt.warnings).toEqual(['Row "TOTAL USD  10.15" is the total, not an item.']);
+  });
+
+  it('keeps the row the model gave when the label is on no row, or on several', () => {
+    const vague = {
+      ...answer,
+      items: [
+        { row: 4, label: 'Crackers di riso', quantity: 1 },
+        { row: 5, label: 'Instant noodles', quantity: 3 },
+      ],
+    };
+    const r = toReceipt(vague, rows);
+    expect(r.ok && r.receipt.items.map((it) => it.total)).toEqual([340n, 270n]);
   });
 });

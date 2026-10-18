@@ -10,11 +10,16 @@ export const canDispute = (l: LineView): boolean => UNDECIDED.includes(l.state);
 
 /**
  * Approve: an undecided part, or a part dave upheld that the agent will not pay on its own
- * (payUpheldDisputes off) and that is not approved yet.
+ * (payUpheldDisputes off) and that is not approved yet, also once past its deadline (overdue:
+ * the agent then pays it late, SPEC §7).
  */
 export function canApprove(l: LineView): boolean {
   if (UNDECIDED.includes(l.state)) return true;
-  return l.state === 'due' && l.resolution?.outcome === 'upheld' && l.agent?.pay === false;
+  return (
+    (l.state === 'due' || l.state === 'overdue') &&
+    l.resolution?.outcome === 'upheld' &&
+    l.agent?.pay === false
+  );
 }
 
 /** A part waiting for me: shown as the inline card with the agent's sentence and the buttons. */

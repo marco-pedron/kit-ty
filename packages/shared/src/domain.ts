@@ -136,6 +136,11 @@ export const TripParamsSchema = z.object({
   channelCapacitySat: positiveMinorString,
   silentAssentSeconds: z.number().int().positive(),
   paymentDeadlineSeconds: z.number().int().positive(),
+  /**
+   * To pay a line dave upheld, from DISPUTE_RESOLVED (SPEC §6.6). Absent: paymentDeadlineSeconds
+   * (trips created before it). Short in the live demo, so the default follows quickly.
+   */
+  upheldDeadlineSeconds: z.number().int().positive().optional(),
   invoiceExpirySeconds: z.number().int().positive(),
   /** Warn when the trip channel falls below this percent of D (SPEC §6.9). */
   topupWarnPercent: z.number().int().min(0).max(100),
