@@ -8,12 +8,12 @@ here live in pure functions of `packages/ledger` (`deriveTrip`, `validateEvent`,
 
 ## Actors
 
-| Actor | Who | Can | Cannot |
-| --- | --- | --- | --- |
-| Traveler | `alice`, `bob`, `charlie` | Submit expenses they paid; approve or contest **their own** lines; set their agent's limits | Approve someone else's line; spend someone else's funds |
-| Traveler's agent | one per traveler, holding only that traveler's wallet | Verify every event; mark lines as seen; pay due lines within the policy; publish checkpoints and backups | Pay above the limits; pay contested or unverified lines |
-| Coordinator | `dave`, employee of the tour operator | Create the trip; publish the rate of the day; admit members; resolve disputes; cover a default with the operator's liquidity; exclude a member | Move a traveler's funds; sign for them; approve lines for them |
-| Relay | a server that stores the log | Validate, order, chain and deliver signed events; keep backup blobs | Create or modify events (they are signed); it can only refuse to deliver, which is detectable |
+| Actor            | Who                                                   | Can                                                                                                                                            | Cannot                                                                                        |
+| ---------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Traveler         | `alice`, `bob`, `charlie`                             | Submit expenses they paid; approve or contest **their own** lines; set their agent's limits                                                    | Approve someone else's line; spend someone else's funds                                       |
+| Traveler's agent | one per traveler, holding only that traveler's wallet | Verify every event; mark lines as seen; pay due lines within the policy; publish checkpoints and backups                                       | Pay above the limits; pay contested or unverified lines                                       |
+| Coordinator      | `dave`, employee of the tour operator                 | Create the trip; publish the rate of the day; admit members; resolve disputes; cover a default with the operator's liquidity; exclude a member | Move a traveler's funds; sign for them; approve lines for them                                |
+| Relay            | a server that stores the log                          | Validate, order, chain and deliver signed events; keep backup blobs                                                                            | Create or modify events (they are signed); it can only refuse to deliver, which is detectable |
 
 Each traveler has two channels with dave (`ln-2ch` mode):
 
@@ -38,7 +38,7 @@ sequenceDiagram
     A->>AA: photo of the receipt
     AA->>AA: QVAC OCR + LLM on the device → Receipt (zod)
     A->>AA: "Bob and I had the pho, Charlie only beers, water for all three"
-    AA->>AA: LLM → SplitProposal; ledger computes shares in bigint cents
+    AA->>AA: LLM → SplitProposal, ledger computes shares in bigint cents
     AA->>AA: one Lightning invoice per debtor (DUSD amount, kitty:trip:expense:debtor)
     AA->>R: EXPENSE_SUBMITTED (signed: receipt, photo hash, rate, lines, invoices)
     R->>R: validateEvent, then chain (seq, prevHash, hash)
@@ -114,26 +114,26 @@ Timing rules, all counted from `LINE_SEEN`:
 - `MEMBER_EXCLUDED` makes every open line of that member overdue at once;
 - `EXPENSE_VOIDED` (by the payer, only if no line is paid or guaranteed) voids every open line.
 
-| Parameter (`TripParams`) | Tests and `e2e:demo` (`DEMO_TRIP_PARAMS`) | Live demo (`pnpm dev` defaults) | Production (indicative) |
-| --- | --- | --- | --- |
-| `silentAssentSeconds` | 20 | 45 | hours |
-| `paymentDeadlineSeconds` | 30 | 120 | about a day |
-| `invoiceExpirySeconds` | 3600 | 3600 | days |
-| `tripChannelCents` (D) | 5000 (50.00) | 5000 | chosen by the traveler |
-| `liquidityCents` (L) | 3000 (30.00) | 3000 | from history, then just in time |
-| `guaranteeCapCents` (G) | 5000 (50.00) | 5000 | chosen by the operator |
-| `channelCapacitySat` | 1,000,000 | 1,000,000 | sized by the operator |
+| Parameter (`TripParams`) | Tests and `e2e:demo` (`DEMO_TRIP_PARAMS`) | Live demo (`pnpm dev` defaults) | Production (indicative)         |
+| ------------------------ | ----------------------------------------- | ------------------------------- | ------------------------------- |
+| `silentAssentSeconds`    | 20                                        | 45                              | hours                           |
+| `paymentDeadlineSeconds` | 30                                        | 120                             | about a day                     |
+| `invoiceExpirySeconds`   | 3600                                      | 3600                            | days                            |
+| `tripChannelCents` (D)   | 5000 (50.00)                              | 5000                            | chosen by the traveler          |
+| `liquidityCents` (L)     | 3000 (30.00)                              | 3000                            | from history, then just in time |
+| `guaranteeCapCents` (G)  | 5000 (50.00)                              | 5000                            | chosen by the operator          |
+| `channelCapacitySat`     | 1,000,000                                 | 1,000,000                       | sized by the operator           |
 
 ## The agent's policy
 
 Each traveler sets their agent's limits (`PUT /api/:as/policy`, published as `POLICY_UPDATED`).
 Defaults (`DEFAULT_POLICY` in `packages/shared/src/domain.ts`):
 
-| Field | Default | Meaning |
-| --- | --- | --- |
-| `autoPayLimitCents` | 2000 (20.00) | Above this per line, no silent assent |
-| `dailyCapCents` | 6000 (60.00) | Most the agent pays automatically in a rolling 24 h |
-| `payUpheldDisputes` | `false` | Whether the agent pays on its own a line it contested and dave upheld |
+| Field               | Default      | Meaning                                                               |
+| ------------------- | ------------ | --------------------------------------------------------------------- |
+| `autoPayLimitCents` | 2000 (20.00) | Above this per line, no silent assent                                 |
+| `dailyCapCents`     | 6000 (60.00) | Most the agent pays automatically in a rolling 24 h                   |
+| `payUpheldDisputes` | `false`      | Whether the agent pays on its own a line it contested and dave upheld |
 
 In the UI the limit is one slider from 0 ("Always ask me") to D ("Automatic payment"); the daily
 cap is shown read-only.

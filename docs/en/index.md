@@ -47,27 +47,27 @@ members of a group_ (it does not pay the restaurant).
 
 ## What is real and what is not
 
-| Real | Simulated or limited |
-| --- | --- |
-| Every payment, channel open and close shown in the UI is a real RGB operation on Bitcoin **regtest** | Regtest only: no mainnet, no real funds |
-| Signatures, hash chain, invoice and preimage checks | Four nodes and four agents run on one laptop; agents share one process (to load the AI once), each with only its own wallet |
-| On-device AI (OCR + Qwen3 1.7B), works offline | `DUSD` stands in for USD₮; the on-ramp is done by the seed script |
-| Encrypted node backup on the relay and restore on a new node | The relay is local; the receipt photo shown in a dispute is shown in person |
-| | `KITTY_FAKES=1` development mode: fake wallet, fake AI, no RGB at all, with a visible banner. The demo scripts refuse it |
+| Real                                                                                                 | Simulated or limited                                                                                                        |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Every payment, channel open and close shown in the UI is a real RGB operation on Bitcoin **regtest** | Regtest only: no mainnet, no real funds                                                                                     |
+| Signatures, hash chain, invoice and preimage checks                                                  | Four nodes and four agents run on one laptop; agents share one process (to load the AI once), each with only its own wallet |
+| On-device AI (OCR + Qwen3 1.7B), works offline                                                       | `DUSD` stands in for USD₮; the on-ramp is done by the seed script                                                           |
+| Encrypted node backup on the relay and restore on a new node                                         | The relay is local; the receipt photo shown in a dispute is shown in person                                                 |
+|                                                                                                      | `KITTY_FAKES=1` development mode: fake wallet, fake AI, no RGB at all, with a visible banner. The demo scripts refuse it    |
 
 Details: [limitations-and-roadmap.md](limitations-and-roadmap.md).
 
 ## Pages
 
-| Page | What it covers |
-| --- | --- |
-| [Getting started](getting-started.md) | Prerequisites, the 2-minute quickstart with fakes, the real regtest stack |
-| [How it works](how-it-works.md) | Roles, the expense lifecycle, line states, auto-pay policy, guarantee and exclusion |
-| [Architecture](architecture.md) | Monorepo map, components, data flow, stack and versions |
-| [Security model](security-model.md) | Self-custody, the signed log, what the relay can and cannot do, threat model |
-| [API reference](api-reference.md) | Relay HTTP and SSE, agent HTTP API, event types, ledger functions, interfaces |
-| [AI pipeline](ai-pipeline.md) | QVAC OCR + LLM, prompts, zod validation and fallback, `pnpm ai:eval` |
-| [Development](development.md) | Conventions, every script, tests, CI |
-| [Demo walkthrough](demo-walkthrough.md) | The demo stories step by step, with the commands to reproduce them |
-| [Troubleshooting](troubleshooting.md) | Known failure modes and how to get out of them |
-| [Limitations and roadmap](limitations-and-roadmap.md) | Honest limits and what comes next |
+| Page                                                  | What it covers                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [Getting started](getting-started.md)                 | Prerequisites, the 2-minute quickstart with fakes, the real regtest stack           |
+| [How it works](how-it-works.md)                       | Roles, the expense lifecycle, line states, auto-pay policy, guarantee and exclusion |
+| [Architecture](architecture.md)                       | Monorepo map, components, data flow, stack and versions                             |
+| [Security model](security-model.md)                   | Self-custody, the signed log, what the relay can and cannot do, threat model        |
+| [API reference](api-reference.md)                     | Relay HTTP and SSE, agent HTTP API, event types, ledger functions, interfaces       |
+| [AI pipeline](ai-pipeline.md)                         | QVAC OCR + LLM, prompts, zod validation and fallback, `pnpm ai:eval`                |
+| [Development](development.md)                         | Conventions, every script, tests, CI                                                |
+| [Demo walkthrough](demo-walkthrough.md)               | The demo stories step by step, with the commands to reproduce them                  |
+| [Troubleshooting](troubleshooting.md)                 | Known failure modes and how to get out of them                                      |
+| [Limitations and roadmap](limitations-and-roadmap.md) | Honest limits and what comes next                                                   |

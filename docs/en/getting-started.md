@@ -7,14 +7,14 @@ Docker and a few one-time steps. Everything runs locally and on regtest only.
 
 ## Prerequisites
 
-| Tool | Version | Needed for |
-| --- | --- | --- |
-| Node.js | `22.x`, `>=22.17 <23` (`package.json` `engines`); the repo pins `22.23.3` in `.node-version` | everything |
-| pnpm | `12.11.2` (`packageManager` in `package.json`; `corepack enable` picks it up) | everything |
-| Docker (with Compose) | any recent Docker Desktop; the stack uses about 0.5 GB of RAM after the seed | real stack only |
-| [fnm](https://github.com/Schniz/fnm) with Node `22.23.3` installed | the seed runs `@utexo/wdk-wallet-rgb` through `fnm exec` (`infra/scripts/node22.sh`) | real stack only |
-| macOS on Apple silicon | the treasury project pins the `@utexo/rgb-lib-darwin-arm64` binary, and `ai:eval:offline` uses `sandbox-exec` | real stack and the offline AI eval |
-| QVAC model files in the local cache | `QVAC_CACHE_DIR`, default `~/.qvac/models` | real AI only (see [AI pipeline](ai-pipeline.md#models)) |
+| Tool                                                               | Version                                                                                                       | Needed for                                              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Node.js                                                            | `22.x`, `>=22.17 <23` (`package.json` `engines`); the repo pins `22.23.3` in `.node-version`                  | everything                                              |
+| pnpm                                                               | `12.11.2` (`packageManager` in `package.json`; `corepack enable` picks it up)                                 | everything                                              |
+| Docker (with Compose)                                              | any recent Docker Desktop; the stack uses about 0.5 GB of RAM after the seed                                  | real stack only                                         |
+| [fnm](https://github.com/Schniz/fnm) with Node `22.23.3` installed | the seed runs `@utexo/wdk-wallet-rgb` through `fnm exec` (`infra/scripts/node22.sh`)                          | real stack only                                         |
+| macOS on Apple silicon                                             | the treasury project pins the `@utexo/rgb-lib-darwin-arm64` binary, and `ai:eval:offline` uses `sandbox-exec` | real stack and the offline AI eval                      |
+| QVAC model files in the local cache                                | `QVAC_CACHE_DIR`, default `~/.qvac/models`                                                                    | real AI only (see [AI pipeline](ai-pipeline.md#models)) |
 
 ## Quickstart: simulated mode (`pnpm dev:fakes`)
 
@@ -117,18 +117,18 @@ Any run of `pnpm e2e:demo`, `e2e:liquidity`, `e2e:onchain`, `e2e:lose-phone`, `e
 The agent reads its configuration from the environment once, validated by zod
 (`apps/agent/src/config.ts`). Every variable has a default, so nothing is required for local use.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `KITTY_FAKES` | `0` | `1` = fake wallet and AI (development only) |
-| `KITTY_RAIL_MODE` | `ln-2ch` | `ln-2ch`, `ln-lsp` or `onchain` (only `ln-2ch` is used in the demo) |
-| `KITTY_WALLET_ENGINE` | `rln-rest` | `rln-rest` (used) or `wdk` (kept in the type, not used) |
-| `AGENT_HOST`, `AGENT_PORT` | `127.0.0.1`, `4100` | agent HTTP server |
-| `RELAY_URL` | `http://127.0.0.1:4000` | relay |
-| `RLN_ALICE_URL` … `RLN_DAVE_URL` | `http://127.0.0.1:3001` … `:3004` | each member's node; each agent gets only its own |
-| `ESPLORA_URL` | `http://127.0.0.1:3010` | Esplora REST, for on-chain proofs (`/tx/<txid>`) |
-| `SILENT_ASSENT_SECONDS` | `45` | contest window before silent assent (production: hours) |
-| `PAYMENT_DEADLINE_SECONDS` | `120` | from `LINE_SEEN` to overdue |
-| `INVOICE_EXPIRY_SECONDS` | `3600` | Lightning invoice expiry |
+| Variable                         | Default                           | Meaning                                                             |
+| -------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| `KITTY_FAKES`                    | `0`                               | `1` = fake wallet and AI (development only)                         |
+| `KITTY_RAIL_MODE`                | `ln-2ch`                          | `ln-2ch`, `ln-lsp` or `onchain` (only `ln-2ch` is used in the demo) |
+| `KITTY_WALLET_ENGINE`            | `rln-rest`                        | `rln-rest` (used) or `wdk` (kept in the type, not used)             |
+| `AGENT_HOST`, `AGENT_PORT`       | `127.0.0.1`, `4100`               | agent HTTP server                                                   |
+| `RELAY_URL`                      | `http://127.0.0.1:4000`           | relay                                                               |
+| `RLN_ALICE_URL` … `RLN_DAVE_URL` | `http://127.0.0.1:3001` … `:3004` | each member's node; each agent gets only its own                    |
+| `ESPLORA_URL`                    | `http://127.0.0.1:3010`           | Esplora REST, for on-chain proofs (`/tx/<txid>`)                    |
+| `SILENT_ASSENT_SECONDS`          | `45`                              | contest window before silent assent (production: hours)             |
+| `PAYMENT_DEADLINE_SECONDS`       | `120`                             | from `LINE_SEEN` to overdue                                         |
+| `INVOICE_EXPIRY_SECONDS`         | `3600`                            | Lightning invoice expiry                                            |
 
 The relay reads `RELAY_HOST` (`127.0.0.1`), `RELAY_PORT` (`4000`), `RELAY_DB`
 (`data/relay.sqlite`, relative to `apps/relay`) and `KITTY_FAKES` (`apps/relay/src/index.ts`).

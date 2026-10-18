@@ -8,12 +8,12 @@ nothing has been audited, and nothing should be pointed at mainnet or real funds
 
 ## Trust assumptions in one table
 
-| Party | Trusted for | Not trusted for |
-| --- | --- | --- |
-| Traveler's own device (agent + node) | holding their keys and funds; deciding to pay | nothing else: it verifies everything it receives |
-| dave (operator) | routing payments; publishing the rate of the day; resolving disputes; honouring the guarantee | moving travelers' funds (it cannot), signing for them (it cannot), inventing events (they are signed) |
-| Relay | delivering events (availability only) | content: every event is signed by its author and re-validated by every agent and by the browser |
-| The on-device AI | proposing receipt rows and item assignments | money: the ledger computes every amount, and the debtor approves amounts, not the sentence |
+| Party                                | Trusted for                                                                                   | Not trusted for                                                                                       |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Traveler's own device (agent + node) | holding their keys and funds; deciding to pay                                                 | nothing else: it verifies everything it receives                                                      |
+| dave (operator)                      | routing payments; publishing the rate of the day; resolving disputes; honouring the guarantee | moving travelers' funds (it cannot), signing for them (it cannot), inventing events (they are signed) |
+| Relay                                | delivering events (availability only)                                                         | content: every event is signed by its author and re-validated by every agent and by the browser       |
+| The on-device AI                     | proposing receipt rows and item assignments                                                   | money: the ledger computes every amount, and the debtor approves amounts, not the sentence            |
 
 > "dave can be annoying, but he can't steal."
 
@@ -92,11 +92,11 @@ write any pubkey in the `n` field. Agents decode invoices with their own node
 
 ### What the relay can and cannot do
 
-| The relay can | The relay cannot |
-| --- | --- |
-| refuse an event or not deliver it (censorship, downtime) | create or modify an event (it has no member key) |
-| delay delivery | reorder or drop an event without breaking the chain every agent and browser recomputes |
-| serve different histories to different members (equivocation): mitigated, see below | read a node backup (encrypted by the node) |
+| The relay can                                                                            | The relay cannot                                                                             |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| refuse an event or not deliver it (censorship, downtime)                                 | create or modify an event (it has no member key)                                             |
+| delay delivery                                                                           | reorder or drop an event without breaking the chain every agent and browser recomputes       |
+| serve different histories to different members (equivocation): mitigated, see below      | read a node backup (encrypted by the node)                                                   |
 | overwrite the latest backup blob for a pubkey (uploads are not authenticated, see below) | rewrite stored rows: SQLite triggers abort any `UPDATE` or `DELETE` (`apps/relay/src/db.ts`) |
 
 Equivocation: every agent publishes a `CHECKPOINT { seq, headHash }` every 10 events. The UI shows
@@ -174,28 +174,28 @@ cache against the checksum pinned by `@qvac/sdk` 0.21.0 and refuses a mismatch
 
 ## Threat model
 
-| # | Threat | Defence | Status |
-| --- | --- | --- | --- |
-| 1 | Network or server swaps the creditor's invoice | pay only if the invoice's signed payee is the creditor's registered node | implemented |
-| 2 | Relay invents or edits events | author signatures, re-validated everywhere | implemented |
-| 3 | Signature replayed in another context | nonce, trip id, expense hash and amount inside the signature | implemented |
-| 4 | Silent assent abused (expense posted at night) | windows start at `LINE_SEEN`; per-line limit; daily cap | implemented |
-| 5 | Duplicate receipt | fingerprint over merchant, date, currency, total and photo hash | implemented |
-| 6 | Prompt injection in the sentence or receipt | constrained output; the model never writes amounts; debtor approves amounts | implemented, with hostile-sentence tests |
-| 7 | Debtor never pays | deadline → operator guarantee → exclusion | implemented |
-| 8 | Contesting everything to avoid paying | dave decides; abusers get excluded | implemented |
-| 9 | Fake or inflated receipt | photo hash committed; dave can ask to see the photo; exclusion | manual process |
-| 10 | dave manipulates the rate | `RATE_SET` signed with source and date; rate locked at submission; contestable | implemented |
-| 11 | dave voids legitimate expenses | every void is a signed, visible event | implemented |
-| 12 | Relay shows different histories (equivocation) | `CHECKPOINT` events | events published; cross-phone comparison not in the UI |
-| 13 | Node API exposed | ports on `127.0.0.1` | implemented (production: Biscuit tokens) |
-| 14 | Lost phone | automatic encrypted backup on the relay + restore | implemented for travelers, not for dave |
-| 15 | Stolen phone | policy limits bound the damage; close channels on request | limits implemented; unlock for large amounts on the roadmap |
-| 16 | dave broadcasts an old channel state | watchtower independent of the operator | roadmap |
-| 17 | dave refuses to route | traveler closes the channel; direct on-chain rail | on-chain rail exists, not wired into the flows |
-| 18 | dave sees every payment (surveillance) | acknowledged; multiple hubs and blinded paths | roadmap |
-| 19 | Tampered AI model | sha256 of the model files checked before loading | implemented |
-| 20 | Node signature reused to impersonate a member | `/signmessage` never used; app ed25519 keys bound by an invoice | implemented |
+| #   | Threat                                         | Defence                                                                        | Status                                                      |
+| --- | ---------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| 1   | Network or server swaps the creditor's invoice | pay only if the invoice's signed payee is the creditor's registered node       | implemented                                                 |
+| 2   | Relay invents or edits events                  | author signatures, re-validated everywhere                                     | implemented                                                 |
+| 3   | Signature replayed in another context          | nonce, trip id, expense hash and amount inside the signature                   | implemented                                                 |
+| 4   | Silent assent abused (expense posted at night) | windows start at `LINE_SEEN`; per-line limit; daily cap                        | implemented                                                 |
+| 5   | Duplicate receipt                              | fingerprint over merchant, date, currency, total and photo hash                | implemented                                                 |
+| 6   | Prompt injection in the sentence or receipt    | constrained output; the model never writes amounts; debtor approves amounts    | implemented, with hostile-sentence tests                    |
+| 7   | Debtor never pays                              | deadline → operator guarantee → exclusion                                      | implemented                                                 |
+| 8   | Contesting everything to avoid paying          | dave decides; abusers get excluded                                             | implemented                                                 |
+| 9   | Fake or inflated receipt                       | photo hash committed; dave can ask to see the photo; exclusion                 | manual process                                              |
+| 10  | dave manipulates the rate                      | `RATE_SET` signed with source and date; rate locked at submission; contestable | implemented                                                 |
+| 11  | dave voids legitimate expenses                 | every void is a signed, visible event                                          | implemented                                                 |
+| 12  | Relay shows different histories (equivocation) | `CHECKPOINT` events                                                            | events published; cross-phone comparison not in the UI      |
+| 13  | Node API exposed                               | ports on `127.0.0.1`                                                           | implemented (production: Biscuit tokens)                    |
+| 14  | Lost phone                                     | automatic encrypted backup on the relay + restore                              | implemented for travelers, not for dave                     |
+| 15  | Stolen phone                                   | policy limits bound the damage; close channels on request                      | limits implemented; unlock for large amounts on the roadmap |
+| 16  | dave broadcasts an old channel state           | watchtower independent of the operator                                         | roadmap                                                     |
+| 17  | dave refuses to route                          | traveler closes the channel; direct on-chain rail                              | on-chain rail exists, not wired into the flows              |
+| 18  | dave sees every payment (surveillance)         | acknowledged; multiple hubs and blinded paths                                  | roadmap                                                     |
+| 19  | Tampered AI model                              | sha256 of the model files checked before loading                               | implemented                                                 |
+| 20  | Node signature reused to impersonate a member  | `/signmessage` never used; app ed25519 keys bound by an invoice                | implemented                                                 |
 
 ## Out of scope
 

@@ -25,23 +25,23 @@ this page is about the rest.
 
 ## Not implemented, or partially
 
-| Area | State |
-| --- | --- |
-| `TRIP_CLOSED` | the event type and its validation exist; no flow or route publishes it, so there is no end-of-trip step |
-| Cross-phone checkpoint comparison | agents publish `CHECKPOINT` every 10 events and `e2e:demo` checks that the heads match, but the UI does not show "same on N/N phones" (`ledger.checkpoints` is `null`) |
-| Paying an excluded member | the on-chain RGB rail (`OnchainRail`) works and is tested (`e2e:onchain`), but no event carries an on-chain invoice yet, so the flows cannot pay a member who has no channels |
-| Paying an overdue line by hand | the agent's sentence suggests it, but there is no API route; an overdue line is covered by the guarantee or stays open |
-| Manual expense form after an AI failure | the AI returns the partial result, but the UI asks to retake the photo instead of opening a pre-filled form; rows of a successful extraction are editable |
-| Receipt date within the trip | not checked; the deterministic checks are on totals, subtotal and line arithmetic |
-| Top-up | the low-balance warning exists (`topupWarning`), not the top-up itself; RLN has no splicing, so it would be a second trip channel |
-| Backups of dave's node | not automatic (RLN `d4762ac` sometimes hung after a lock/unlock cycle, and dave is the hub); travelers are backed up |
-| Backup upload authentication | the relay accepts any upload for a pubkey; in production the upload should be signed with the app key |
-| Agent API authentication | none: it listens on `127.0.0.1` and the actor is a path segment |
-| Encrypted photo sharing in a dispute | the payer shows the photo in person; only its hash is in the log |
-| `ln-lsp` and `onchain` rail modes | exist in the configuration type; the demo and tests use `ln-2ch` |
-| Liquidity after an agent restart | the extra liquidity dave opened is remembered in memory; after a restart the agent may open once more (capital locked, never funds at risk) |
-| Guarantee above G | a line above the guarantee left is not covered; the creditor keeps an off-chain claim on the debtor |
-| Stale-backup window | a node is backed up about 10 s after it goes quiet after a change; a loss inside that window would restore an older state (the safe alternative is a cooperative close with dave) |
+| Area                                    | State                                                                                                                                                                             |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRIP_CLOSED`                           | the event type and its validation exist; no flow or route publishes it, so there is no end-of-trip step                                                                           |
+| Cross-phone checkpoint comparison       | agents publish `CHECKPOINT` every 10 events and `e2e:demo` checks that the heads match, but the UI does not show "same on N/N phones" (`ledger.checkpoints` is `null`)            |
+| Paying an excluded member               | the on-chain RGB rail (`OnchainRail`) works and is tested (`e2e:onchain`), but no event carries an on-chain invoice yet, so the flows cannot pay a member who has no channels     |
+| Paying an overdue line by hand          | the agent's sentence suggests it, but there is no API route; an overdue line is covered by the guarantee or stays open                                                            |
+| Manual expense form after an AI failure | the AI returns the partial result, but the UI asks to retake the photo instead of opening a pre-filled form; rows of a successful extraction are editable                         |
+| Receipt date within the trip            | not checked; the deterministic checks are on totals, subtotal and line arithmetic                                                                                                 |
+| Top-up                                  | the low-balance warning exists (`topupWarning`), not the top-up itself; RLN has no splicing, so it would be a second trip channel                                                 |
+| Backups of dave's node                  | not automatic (RLN `d4762ac` sometimes hung after a lock/unlock cycle, and dave is the hub); travelers are backed up                                                              |
+| Backup upload authentication            | the relay accepts any upload for a pubkey; in production the upload should be signed with the app key                                                                             |
+| Agent API authentication                | none: it listens on `127.0.0.1` and the actor is a path segment                                                                                                                   |
+| Encrypted photo sharing in a dispute    | the payer shows the photo in person; only its hash is in the log                                                                                                                  |
+| `ln-lsp` and `onchain` rail modes       | exist in the configuration type; the demo and tests use `ln-2ch`                                                                                                                  |
+| Liquidity after an agent restart        | the extra liquidity dave opened is remembered in memory; after a restart the agent may open once more (capital locked, never funds at risk)                                       |
+| Guarantee above G                       | a line above the guarantee left is not covered; the creditor keeps an off-chain claim on the debtor                                                                               |
+| Stale-backup window                     | a node is backed up about 10 s after it goes quiet after a change; a loss inside that window would restore an older state (the safe alternative is a cooperative close with dave) |
 
 ## Why not WDK for the Lightning nodes (yet)
 
