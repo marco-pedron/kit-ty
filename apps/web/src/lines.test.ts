@@ -74,4 +74,18 @@ describe('what a debtor can do on a part', () => {
     expect(canApprove(approved)).toBe(false);
     expect(canApprove(line({ state: 'due' }))).toBe(false);
   });
+
+  it('still approves an upheld part after its deadline: the agent pays it late', () => {
+    const upheld = { outcome: 'upheld' as const, note: '' };
+    const late = line({
+      state: 'overdue',
+      resolution: upheld,
+      agent: { pay: false, reason: 'Overdue: …' },
+    });
+    expect(canApprove(late)).toBe(true);
+    expect(needsMe(late)).toBe(true);
+    expect(canApprove({ ...late, agent: { pay: true, reason: '' } })).toBe(false);
+    // an overdue part never disputed has nothing to approve: the operator covers it
+    expect(canApprove(line({ state: 'overdue', agent: { pay: false, reason: '' } }))).toBe(false);
+  });
 });
