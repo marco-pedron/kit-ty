@@ -24,6 +24,10 @@ On organised group trips, shared costs end up either in the coordinator's cash e
 
 > *"The coordinator can be annoying, but he can't steal."*
 
+## Documentation
+
+**Start here: [`docs/en/index.md`](docs/en/index.md)**, the English documentation: a 2-minute overview, [getting started](docs/en/getting-started.md), [how it works](docs/en/how-it-works.md), [architecture](docs/en/architecture.md), [security model](docs/en/security-model.md), [API reference](docs/en/api-reference.md), [AI pipeline](docs/en/ai-pipeline.md), [demo walkthrough](docs/en/demo-walkthrough.md), and an honest page on [limitations and roadmap](docs/en/limitations-and-roadmap.md), including what is real and what is simulated.
+
 Full product and technical spec (roles, event log, payments, security, architecture, demo script): **[`docs/SPEC.md`](docs/SPEC.md)** (in Italian).
 
 ## Stack
@@ -82,4 +86,4 @@ open "http://127.0.0.1:5173/?as=alice"   # also ?as=bob, ?as=charlie
 | [`docs/prompts/`](docs/prompts) · [`docs/status/`](docs/status) | Session prompts · progress per stream |
 | [`docs/spike-wdk.md`](docs/spike-wdk.md) | WDK engine spike results |
 
-*How to run it, and what is real vs simulated: to be completed on Sunday (task T2).*
+How to run it on the real regtest stack, and what is real vs simulated: [`docs/en/getting-started.md`](docs/en/getting-started.md) and [`docs/en/limitations-and-roadmap.md`](docs/en/limitations-and-roadmap.md).
