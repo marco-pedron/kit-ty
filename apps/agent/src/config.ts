@@ -22,9 +22,10 @@ export const ConfigSchema = z.object({
   RLN_CHARLIE_URL: url('http://127.0.0.1:3003'),
   RLN_DAVE_URL: url('http://127.0.0.1:3004'),
   ESPLORA_URL: url('http://127.0.0.1:3010'),
-  // Timers of SPEC §15 (demo values; production is hours).
-  SILENT_ASSENT_SECONDS: seconds(20),
-  PAYMENT_DEADLINE_SECONDS: seconds(30),
+  // Timers of SPEC §15, written into TRIP_CREATED by index.ts: live demo 45/120 s (production
+  // is hours). Tests and e2e:demo pin 20/30 s (DEMO_TRIP_PARAMS, e2e/harness.ts).
+  SILENT_ASSENT_SECONDS: seconds(45),
+  PAYMENT_DEADLINE_SECONDS: seconds(120),
   INVOICE_EXPIRY_SECONDS: seconds(3600),
 });
 

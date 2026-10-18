@@ -5,6 +5,7 @@ import {
   signatureVerifier,
   type ActorId,
   type EventBody,
+  type TripParams,
 } from '@kitty/shared';
 import type { RelayClient } from '../relay/types.js';
 import type { Wallet } from '../wallet/types.js';
@@ -82,11 +83,15 @@ export class StaleRelayError extends Error {}
  * MEMBER_JOINED, MEMBER_ADMITTED and CHANNELS_READY. Every step is skipped if already on the
  * relay, so a restart (or a crash halfway) resumes where it stopped. With the real wallet the
  * asset and channels come from the seed (B2); with KITTY_FAKES=1 from the fake network.
- * Retries until the relay answers; throws StaleRelayError if the relay holds another seed's trip.
+ * `params` go into TRIP_CREATED and stay fixed for the whole trip (index.ts: timers from the
+ * config, 45/120 s for the live demo; tests and check-real: DEMO_TRIP_PARAMS, 20/30 s).
+ * Retries until the relay answers; throws StaleRelayError if the relay holds another seed's trip,
+ * or a trip with other timers.
  */
 export async function seedTrip(
   rt: AgentRuntime,
   seed: { assetId: string; channels: TripChannels; rate: EventBody<'RATE_SET'> },
+  params: TripParams,
   log: Log,
 ): Promise<void> {
   for (;;) {
@@ -97,11 +102,19 @@ export async function seedTrip(
         throw new StaleRelayError(
           `the relay holds the trip of a previous seed (asset ${trip.assetId}, this seed ${seed.assetId}): wipe the relay database (RELAY_DB) and restart`,
         );
+      if (
+        trip !== null &&
+        (trip.params.silentAssentSeconds !== params.silentAssentSeconds ||
+          trip.params.paymentDeadlineSeconds !== params.paymentDeadlineSeconds)
+      )
+        throw new StaleRelayError(
+          `the relay holds a trip with other timers (silent assent ${trip.params.silentAssentSeconds} s, payment deadline ${trip.params.paymentDeadlineSeconds} s; requested ${params.silentAssentSeconds} s, ${params.paymentDeadlineSeconds} s): run \`pnpm demo:reset\``,
+        );
       if (trip === null)
         trip = await rt.dave.createTrip({
           name: 'Vietnam 2026',
           assetId: seed.assetId,
-          params: DEMO_TRIP_PARAMS,
+          params,
         });
       if (trip.rate === null) await rt.dave.setRate(seed.rate);
       for (const id of MEMBER_IDS) {
@@ -133,5 +146,10 @@ export function fakeTripChannels(): TripChannels {
  * the fakes and the real seed. Kept so existing callers compile.
  */
 export function seedFakeTrip(rt: AgentRuntime, assetId: string, log: Log): Promise<void> {
-  return seedTrip(rt, { assetId, channels: fakeTripChannels(), rate: loadRates() }, log);
+  return seedTrip(
+    rt,
+    { assetId, channels: fakeTripChannels(), rate: loadRates() },
+    DEMO_TRIP_PARAMS,
+    log,
+  );
 }

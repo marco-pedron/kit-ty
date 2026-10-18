@@ -13,6 +13,7 @@
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [x] B5 (P1) Rail on-chain (sab 17/10 19:45, branch `b/B5-onchain-rail`; livello wallet/rail, non ancora nei flussi)
 - [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, #29; correzione 19:05: solo viaggiatori); `demo:lose-phone` P1 fatto (sab 17/10 19:05, branch `b/B6b-lose-phone`)
+- [x] R4 Tempi della demo dal vivo 45/120 s, test fissati a 20/30 (dom 18/10, branch `a/R4-trip-windows`, PR in bozza; da verificare sul PC di Marco)
 - [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
 ## Bloccato da
@@ -24,6 +25,12 @@
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### R4, dom 18/10
+- **Cosa funziona:** `seedTrip(rt, seed, params, log)` scrive in `TRIP_CREATED` i `params` ricevuti. `index.ts` passa `DEMO_TRIP_PARAMS` con `SILENT_ASSENT_SECONDS`, `PAYMENT_DEADLINE_SECONDS` e `INVOICE_EXPIRY_SECONDS` della config, i cui default ora sono **45 / 120** / 3600 (nessuna variabile nuova). `DEMO_TRIP_PARAMS` di `packages/shared` resta 20/30, quindi i test non cambiano. `e2e/harness.ts` fissa `SILENT_ASSENT_SECONDS=20` e `PAYMENT_DEADLINE_SECONDS=30` dopo l'env della shell e `p.env` (non si possono sovrascrivere); `check-real.ts` passa `DEMO_TRIP_PARAMS`.
+- **Relay con altri tempi:** se il viaggio sul relay ha `silentAssentSeconds` o `paymentDeadlineSeconds` diversi da quelli chiesti, `seedTrip` lancia `StaleRelayError` ("… run `pnpm demo:reset`") e l'agente esce con codice 1. Il controllo vale solo per i due tempi, non per `invoiceExpirySeconds`.
+- **Come si prova:** `pnpm vitest run apps/agent/src/flows/seed-state.test.ts apps/agent/src/config.test.ts`. Sullo stack reale (non provato in questa sessione): `pnpm demo:reset && pnpm e2e:demo`; poi `pnpm demo:reset`, `pnpm dev`, `GET http://127.0.0.1:4100/api/alice/state` → `trip.params` 45/120; riavviare `pnpm dev` con `SILENT_ASSENT_SECONDS=20` sullo stesso relay → esce con il messaggio di `demo:reset`.
+- **Problemi noti:** dopo una contestazione confermata la scadenza è risoluzione + 120 s (FLOWS.md §E12): la storia 2 dal vivo si allunga.
+
 ### B5, sab 17/10 19:45
 - **Cosa funziona:** `OnchainRail` (`apps/agent/src/rail/onchain-rail.ts`, adattato da `_legacy/apps/server/src/rgb/onchain-rail.ts`) implementa `Rail`: il creditore crea un invoice RGB a UTXO cieco per l'importo esatto del DUSD del viaggio (`RlnWallet.createRgbInvoice`, `/rgbinvoice`, proxy `rpc://proxy:3000/json-rpc`); il debitore invia (`RlnWallet.sendRgb`, `/sendrgb` con `donation: true`), un blocco conferma, la prova è il `txid` (link esplora). Se il trasferimento risulta `Failed` → `PAYMENT_FAILED`. `PaymentRequest` on-chain ora porta anche `cents` (file di B, non shared). Campi verificati su `docs/vendor/rln-openapi.yaml`.
 - **Misurato (`pnpm e2e:onchain`, log `infra/.out/logs/20261017-194138-e2e-onchain.log`):** bob paga 1.00 ad alice on-chain in 7,9 s con 1 blocco; txid confermato; alice 51.00 e bob 49.00 on-chain, canali intatti. `e2e:demo` resta 12/12.
