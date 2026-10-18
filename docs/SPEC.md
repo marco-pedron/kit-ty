@@ -438,8 +438,8 @@ Ogni richiesta porta il ruolo nel percorso (`/api/:as/...`). Importi come string
 | L, liquidità iniziale di Dave per viaggiatore | 30.00 DUSD | percentile 90 storico, poi regola di §10.5 |
 | On-ramp nel seed | 100.00 DUSD a viaggiatore | acquisto alla prenotazione |
 | Emissione DUSD | 10,000.00 sul nodo di Dave | USDT di Tether |
-| `SILENT_ASSENT_SECONDS` | 20 | 12 ore |
-| `PAYMENT_DEADLINE_SECONDS` | 30 | 24 ore |
+| `SILENT_ASSENT_SECONDS` | 20 nei test e in `e2e:demo`; **45 nella demo dal vivo** (default di `apps/agent/src/config.ts`, R4) | 12 ore |
+| `PAYMENT_DEADLINE_SECONDS` | 30 nei test e in `e2e:demo`; **120 nella demo dal vivo** (R4) | 24 ore |
 | `INVOICE_EXPIRY_SECONDS` | 3600 | 48 ore |
 | G, garanzia per membro | 50.00 | scelta dall'operatore |
 | Capacità BTC dei canali | 1,000,000 sat (≈330 pagamenti in uscita, 33 in volo) | dimensionata dall'operatore |

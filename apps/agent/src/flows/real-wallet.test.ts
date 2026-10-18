@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   ActorIdSchema,
+  DEMO_TRIP_PARAMS,
   MEMBER_IDS,
   sha256Hex,
   signatureVerifier,
@@ -93,7 +94,7 @@ async function realStack() {
 describe('A5 on the real RlnWallet (simulated nodes)', () => {
   it('sets up the trip from the seed files, and bob pays alice over Lightning', async () => {
     const s = await realStack();
-    await seedTrip(s.rt, s.seed, s.log);
+    await seedTrip(s.rt, s.seed, DEMO_TRIP_PARAMS, s.log);
     const { alice, bob, charlie } = Object.fromEntries(s.rt.agents) as Record<
       ActorId,
       NonNullable<ReturnType<typeof s.rt.agents.get>>
@@ -142,12 +143,14 @@ describe('A5 on the real RlnWallet (simulated nodes)', () => {
 
   it('a restart with the same seed adds nothing; another seed stops with a clear error', async () => {
     const s = await realStack();
-    await seedTrip(s.rt, s.seed, s.log);
+    await seedTrip(s.rt, s.seed, DEMO_TRIP_PARAMS, s.log);
     const before = s.rt.dave.log.events.length;
-    await seedTrip(s.rt, s.seed, s.log);
+    await seedTrip(s.rt, s.seed, DEMO_TRIP_PARAMS, s.log);
     await s.rt.dave.sync();
     expect(s.rt.dave.log.events.length).toBe(before);
-    await expect(seedTrip(s.rt, { ...s.seed, assetId: 'rgb:new-seed' }, s.log)).rejects.toThrow(
+    await expect(
+      seedTrip(s.rt, { ...s.seed, assetId: 'rgb:new-seed' }, DEMO_TRIP_PARAMS, s.log),
+    ).rejects.toThrow(
       new StaleRelayError(
         'the relay holds the trip of a previous seed (asset rgb:sim-dusd, this seed rgb:new-seed): wipe the relay database (RELAY_DB) and restart',
       ),

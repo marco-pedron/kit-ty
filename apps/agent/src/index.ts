@@ -1,5 +1,6 @@
 import { createAiService } from './ai/ai-service.js';
 import { createQvacEngine } from './ai/qvac-engine.js';
+import { DEMO_TRIP_PARAMS } from '@kitty/shared';
 import { loadConfig } from './config.js';
 import { FakeLightningNetwork } from './dev-fakes/fake-wallet.js';
 import { realSetup, walletsOf } from './flows/real-setup.js';
@@ -44,7 +45,15 @@ const { wallets, seed } = config.KITTY_FAKES ? fakeSetup() : realSetup(config);
 const rt = startAgents({ fakes: config.KITTY_FAKES, relay, wallets, log: app.log });
 runtime = rt;
 app.addHook('onClose', async () => rt.stop());
-seedTrip(rt, seed, app.log).catch((err: unknown) => {
+// The timers of the trip come from the config (45/120 s for the live demo, SPEC §15); the rest
+// of the parameters are the demo ones.
+const params = {
+  ...DEMO_TRIP_PARAMS,
+  silentAssentSeconds: config.SILENT_ASSENT_SECONDS,
+  paymentDeadlineSeconds: config.PAYMENT_DEADLINE_SECONDS,
+  invoiceExpirySeconds: config.INVOICE_EXPIRY_SECONDS,
+};
+seedTrip(rt, seed, params, app.log).catch((err: unknown) => {
   app.log.error(err instanceof StaleRelayError ? err.message : `trip setup failed: ${String(err)}`);
   process.exit(1);
 });

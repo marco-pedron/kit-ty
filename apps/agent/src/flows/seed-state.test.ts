@@ -1,4 +1,4 @@
-import { MEMBER_IDS, type ActorId } from '@kitty/shared';
+import { DEMO_TRIP_PARAMS, MEMBER_IDS, type ActorId } from '@kitty/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeLightningNetwork } from '../dev-fakes/fake-wallet.js';
 import type { Wallet } from '../wallet/types.js';
@@ -58,23 +58,41 @@ describe('seedTrip', () => {
 
   it('sets up the trip once and is a no-op on restart', async () => {
     const { rt, relay, seed } = runtime();
-    await seedTrip(rt, seed, silent);
+    await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
     const n = relay.events.length;
     expect(n).toBe(2 + 3 * 3);
     const trip = rt.dave.trip();
     expect(trip?.rate?.body.source).toBe(seed.rate.source);
     expect([...trip!.members.values()].every((m) => m.admitted && m.channelsReady)).toBe(true);
-    await seedTrip(rt, seed, silent);
+    await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
     expect(relay.events.length).toBe(n);
     rt.stop();
   });
 
   it('stops when the relay holds the trip of another seed', async () => {
     const { rt, seed } = runtime();
-    await seedTrip(rt, seed, silent);
-    await expect(seedTrip(rt, { ...seed, assetId: 'rgb:other' }, silent)).rejects.toThrow(
-      StaleRelayError,
-    );
+    await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
+    await expect(
+      seedTrip(rt, { ...seed, assetId: 'rgb:other' }, DEMO_TRIP_PARAMS, silent),
+    ).rejects.toThrow(StaleRelayError);
+    rt.stop();
+  });
+
+  it('writes the requested params into TRIP_CREATED', async () => {
+    const { rt, seed } = runtime();
+    const params = { ...DEMO_TRIP_PARAMS, silentAssentSeconds: 45, paymentDeadlineSeconds: 120 };
+    await seedTrip(rt, seed, params, silent);
+    expect(rt.dave.trip()?.params).toEqual(params);
+    rt.stop();
+  });
+
+  it('stops with a demo:reset hint when the relay trip has other timers', async () => {
+    const { rt, seed } = runtime();
+    await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
+    const live = { ...DEMO_TRIP_PARAMS, silentAssentSeconds: 45, paymentDeadlineSeconds: 120 };
+    const run = seedTrip(rt, seed, live, silent);
+    await expect(run).rejects.toThrow(StaleRelayError);
+    await expect(run).rejects.toThrow(/pnpm demo:reset/);
     rt.stop();
   });
 });

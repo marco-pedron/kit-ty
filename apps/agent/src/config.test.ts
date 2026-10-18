@@ -10,8 +10,8 @@ describe('loadConfig', () => {
       KITTY_WALLET_ENGINE: 'rln-rest',
       AGENT_HOST: '127.0.0.1',
       AGENT_PORT: 4100,
-      SILENT_ASSENT_SECONDS: 20,
-      PAYMENT_DEADLINE_SECONDS: 30,
+      SILENT_ASSENT_SECONDS: 45,
+      PAYMENT_DEADLINE_SECONDS: 120,
       INVOICE_EXPIRY_SECONDS: 3600,
     });
     expect(nodeUrls(c).dave).toBe('http://127.0.0.1:3004');
