@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rowAmount, toReceipt } from './receipt.js';
+import { printedDate, rowAmount, toReceipt } from './receipt.js';
 
 // toReceipt over OCR rows like a fast-food receipt: menu components and freebies printed
 // under an item, without a price of their own.
@@ -50,6 +50,25 @@ describe('rowAmount', () => {
     expect(rowAmount('Pho bo  2 X 65.000  130.000', 'VND')).toBe(130_000n);
     expect(rowAmount('3 X 0.90  2.70', 'USD')).toBe(270n);
   });
+
+  it('reads amounts with OCR spaces around the decimal mark or a lost thousands dot', () => {
+    expect(rowAmount('Birra  media  6 ,00', 'EUR')).toBe(600n);
+    expect(rowAmount('Subtotal  47 ,  00', 'EUR')).toBe(4700n);
+    expect(rowAmount('Cappuccino  3 X  1,50  4, 50', 'EUR')).toBe(450n);
+    expect(rowAmount('Tra  xanh  10  000', 'VND')).toBe(10_000n);
+    expect(rowAmount('Com  tam  3 X 40.000  120.000', 'VND')).toBe(120_000n);
+  });
+});
+
+describe('printedDate', () => {
+  it('reads day/month/year, and month/day/year on USD receipts', () => {
+    expect(printedDate(['PIZZERIA', '08/10/2026  07:35'], 'EUR')).toBe('2026-10-08');
+    expect(printedDate(['DINER', '10/06/2026  15:29'], 'USD')).toBe('2026-10-06');
+    expect(printedDate(['DINER', '13/10/2026'], 'USD')).toBe('2026-10-13');
+    expect(printedDate(['17-10-2026 13:27'], 'EUR')).toBe('2026-10-17');
+    expect(printedDate(['2026-10-17'], 'VND')).toBe('2026-10-17');
+    expect(printedDate(['TOTAL EUR 45,00'], 'EUR')).toBeNull();
+  });
 });
 
 describe('toReceipt', () => {
@@ -79,6 +98,44 @@ describe('toReceipt', () => {
     expect(r.ok && r.receipt.warnings).toContain(
       'Items + tax + tip = 21.60 EUR, but the total is 26.80 EUR. Check the lines.',
     );
+  });
+
+  it('takes the date from the rows, not from the model', () => {
+    const r = toReceipt({ ...base, date: '2026-10-01', items: allLines }, ROWS);
+    expect(r.ok && r.receipt.date).toBe('2026-10-17');
+  });
+
+  it('keeps a quantity only when the row prints it, and never takes the date row as an item', () => {
+    const rows = [
+      'BAR',
+      '22/10/2026  15:49',
+      'Birra media  5,50',
+      'Coca cola  2 x 3,00  6,00',
+      'TOTAL EUR  11,50',
+    ];
+    const items = [
+      { row: 1, label: 'Date', quantity: 1 },
+      { row: 2, label: 'Birra media', quantity: 5 },
+      { row: 3, label: 'Coca cola', quantity: 2 },
+    ];
+    const r = toReceipt({ ...base, totalRow: 4, items }, rows);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.receipt.items).toEqual([
+      { label: 'Birra media', quantity: 1, unitPrice: 550n, total: 550n },
+      { label: 'Coca cola', quantity: 2, unitPrice: 300n, total: 600n },
+    ]);
+    expect(r.receipt.warnings).toEqual(['Row "22/10/2026  15:49" is the date, not an item.']);
+  });
+
+  it('does not read a row without an amount as the tax', () => {
+    const rows = ['SHOP', 'Pasta  1,00', 'TOTALE EUR  1,00', 'IVA  inclusa'];
+    const items = [{ row: 1, label: 'Pasta', quantity: 1 }];
+    const r = toReceipt({ ...base, taxRow: 3, totalRow: 2, items }, rows);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.receipt.tax).toBeUndefined();
+    expect(r.receipt.warnings).toEqual(['Row "IVA  inclusa" has no amount: not read as the tax.']);
   });
 
   it('is an error when no item row has a price', () => {
