@@ -74,7 +74,7 @@ Workspace-level scripts: `pnpm --filter @kitty/web build` (Vite build) and
 | End to end          | `apps/agent/src/e2e/{demo,liquidity,onchain,lose-phone}.e2e.ts`                                                                                                                    | `pnpm e2e:<name>` | the stack after `demo:reset`, plus the models for `demo` |
 | AI evaluation       | `apps/agent/src/ai/eval.ts`                                                                                                                                                        | `pnpm ai:eval*`   | the models in the local cache                            |
 
-`pnpm test` currently runs 583 tests in 56 files. The `demo`, `liquidity` and `lose-phone` e2e
+`pnpm test` currently runs 589 tests in 57 files. The `demo`, `liquidity` and `lose-phone` e2e
 suites start their own relay and agent as child processes on ports 4400 and 4500 with a temporary
 relay database, so they never touch the relay of `pnpm dev`, and pin the timers to 20/30 s
 whatever the environment says; `onchain` drives two wallets directly, without agents. Their output goes to the terminal and to

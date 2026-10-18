@@ -131,7 +131,9 @@ Defined once in `packages/shared/src/api.ts` (`routes`) and used both by the ser
 (`apps/agent/src/routes/index.ts`) and by the typed client `createAgentClient(baseUrl, as)` in
 `packages/shared/src/client.ts`. The actor is in the path (`:as` is `alice`, `bob`, `charlie` or
 `dave`); a traveler calling a coordinator route, or the reverse, gets `403 NOT_ALLOWED`. The API
-has no authentication: it listens on `127.0.0.1` for the demo laptop only.
+has no authentication: it listens on `127.0.0.1` for the demo laptop only. Request bodies are
+limited to Fastify's default of 1 MiB, except `POST /api/:as/expenses/extract`, which accepts up to
+16 MiB for a base64 phone photo (`EXTRACT_BODY_LIMIT` in `apps/agent/src/server.ts`).
 
 | Method and path                                                | Roles                 | Body                                                                         | Response                                                                                                               |
 | -------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
