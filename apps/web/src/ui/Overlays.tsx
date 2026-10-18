@@ -1,5 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import icon from '../assets/kitty-icon.svg?raw';
+import { CatHead } from './CatHead.js';
 import { Mascot } from './Mascot.js';
 import { Button } from './Button.js';
 
@@ -51,26 +53,50 @@ export function Sheet({
 
 export interface ToastItem {
   id: string;
-  kind: 'plus' | 'minus';
+  kind: 'plus' | 'minus' | 'error';
   prefix: string;
   text: string;
 }
 
-/** +ty on positive-soft, -ty on accent-soft, the kitten at 22px, the prefix in Zilla Slab. */
+const TOAST_HEAD = { plus: 'happy', minus: 'charlie', error: 'worried' } as const;
+const appIcon = icon.replace('<svg ', '<svg aria-hidden="true" width="100%" height="100%" ');
+
+/**
+ * iPhone notifications: the kit+ty app icon on the left, then a small head in the body (happy
+ * for +ty!, the wink for -ty!, worried for an error) and the prefix in Zilla Slab.
+ */
 export function Toasts({ toasts }: { toasts: readonly ToastItem[] }) {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 top-[calc(8px+env(safe-area-inset-top))] z-50 mx-auto flex max-w-[430px] flex-col items-center gap-2 px-4"
+      className="pointer-events-none fixed inset-x-0 top-[calc(8px+env(safe-area-inset-top))] z-50 mx-auto flex max-w-[430px] flex-col gap-2 px-2"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`animate-toast flex min-h-11 items-center gap-2 rounded-full py-1.5 pr-4 pl-2.5 text-subhead text-label ${t.kind === 'plus' ? 'bg-positive-soft' : 'bg-accent-soft'}`}
+          role={t.kind === 'error' ? 'alert' : undefined}
+          className="hairline animate-toast flex items-center gap-2.5 rounded-sheet bg-bg-cell/90 p-3 text-label backdrop-blur-xl"
         >
-          <Mascot size={22} waving={false} />
-          <span className="font-brand text-headline font-bold">{t.prefix}</span>
-          <span>{t.text}</span>
+          <span
+            aria-hidden
+            className="size-[38px] shrink-0 overflow-hidden rounded-[9px]"
+            dangerouslySetInnerHTML={{ __html: appIcon }}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="flex justify-between text-footnote text-label-2">
+              <span className="font-semibold text-label">kit+ty</span>
+              <span>now</span>
+            </p>
+            <p className="flex items-center gap-1.5 text-subhead">
+              <CatHead variant={TOAST_HEAD[t.kind]} size={20} />
+              <span
+                className={`font-brand text-headline font-bold ${t.kind === 'plus' ? 'rounded-full bg-positive-soft px-1.5' : t.kind === 'minus' ? 'rounded-full bg-accent-soft px-1.5' : ''}`}
+              >
+                {t.prefix}
+              </span>
+              <span className="min-w-0 truncate">{t.text}</span>
+            </p>
+          </div>
         </div>
       ))}
     </div>

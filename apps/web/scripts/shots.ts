@@ -221,6 +221,13 @@ async function shootDave(browser: Browser, scheme: 'light' | 'dark', cover: bool
       await shot(dave, 'dave-cover-progress', scheme);
       await dave.getByText('excluded. Group covered.').waitFor({ timeout: 120_000 });
       await shot(dave, 'dave-cover-done', scheme);
+      if (wanted('charlie-out'))
+        for (const sc of ['light', 'dark'] as const) {
+          const page = await open(browser, sc, 'charlie');
+          await page.getByText("You're out of").waitFor({ timeout: 15_000 });
+          await shot(page, 'charlie-out', sc);
+          await page.context().close();
+        }
     } else {
       await dave.keyboard.press('Escape');
     }

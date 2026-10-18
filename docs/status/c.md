@@ -19,6 +19,7 @@
 - [x] C5 UI Dave (branch `c/C5-dave`)
 - [x] C6 Prova e Registro verificato (branch `c/C6-proof-log`)
 - [x] C7 Attese ed errori (branch `c/C7-states`)
+- [x] C-design-3 Mascotte e marchio (branch `c/C-design-3`)
 
 ## Bloccato da
 - niente
@@ -74,6 +75,12 @@
 - Rotta "paga a mano una riga scaduta" (segnalata da A in A5a: `decideAutoPay` suggerisce "Pay it yourself", ma manca la rotta in `api.ts`): **fuori da C3, rimandata a P1** (sab 17/10). In demo non serve: Charlie non paga e va in insolvenza.
 
 ## Registro
+
+### C-design-3, dom 18/10
+- Funziona: favicon `kitty-icon.svg` + `apple-touch-icon.png` 180px (`apps/web/public/`); wordmark SVG in alto a destra; notifiche stile iPhone con icona dell'app e testa (`happy` +ty!, `charlie` −ty!, `worried` errori, anche in `ErrorNote`); avatar con la testa di ciascun membro (`out` per gli esclusi); foto grande in Profile e Group settings; header DISPUTES `angry` e INSOLVENT `worried` per Dave; chip `+ty`/`−ty` sotto il saldo (`netPosition` in `lines.ts`, bigint, con test); schermata "You're out" per l'escluso; loader `PlusMinus` (il + gira e diventa −) per le attese brevi; DESIGN.md §7-8 aggiornato.
+- **Asset:** nel pacchetto brand mancavano `kitty-mascot.svg` e le 8 teste SVG. Su indicazione del PM: teste vettorializzate dal foglio `kitty-heads-pixel.png` (pixel art, rettangoli, `crispEdges`) e gattino dai due fotogrammi di `kitty-wave-preview.gif` (la zampa alterna i fotogrammi). Il loader è scritto in codice.
+- Come si prova: `rm -f apps/relay/data/relay.sqlite* && pnpm dev:fakes`, poi `pnpm --filter @kitty/web shots` (nuovo scatto `charlie-out`); `?as=styleguide` mostra le teste a 32 e 96px.
+- Problemi noti: più gattini nella stessa pagina ripetono l'id `#paw` (già così prima, innocuo).
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
 ### C7, dom 18/10 00:15
 - Funziona: **errori** da un solo file (`apps/web/src/errors.ts`): ogni codice di `ErrorCodeSchema` ha una frase umana, un'azione e se ha senso "Try again"; HTTP 0 diventa "Can't reach your agent. Check your connection."; con un nodo in causa la frase lo nomina ("Alice's node is not answering."). `ErrorNote` e gli stati d'errore usano solo questa mappa, mai codici grezzi. **Attese**: le operazioni lunghe dell'agente ("Paying 3.09 to alice through the operator's node…", "Closing both channels…") in una pillola fissa sopra la tab bar con gattino e tempo trascorso (viaggiatori e Dave); la spesa del pagatore dice "Waiting for Bob and Charlie… 12 s" col gattino finché i loro agenti non decidono; "Reading the receipt on your phone…" con il tempo in decimi. **Connessione**: banner discreto "Reconnecting to your agent…" dopo due polling falliti, sparisce da solo. **Vuoti**: gattino in tutte le liste (Home, Dave Disputes/Insolvent, Members, Log). Errore di avvio centrato.

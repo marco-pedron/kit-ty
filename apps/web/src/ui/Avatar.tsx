@@ -1,26 +1,27 @@
-// Round avatar with the initial (DESIGN.md §7). Me in the accent tint, others on the gray fill.
+import { CatHead, headOf, type HeadVariant } from './CatHead.js';
 
-const SIZE = {
-  32: 'size-8 text-subhead',
-  40: 'size-10 text-headline',
-  80: 'size-20 text-large-title',
-};
+// Round avatar with the member's cat head (DESIGN.md §7). Me in the accent tint, others on the
+// gray fill. `variant` overrides the head, e.g. "out" for an excluded member.
+
+const SIZE = { 32: 'size-8', 40: 'size-10', 80: 'size-20', 96: 'size-24' };
 
 export function Avatar({
   name,
   me = false,
   size = 40,
+  variant,
 }: {
   name: string;
   me?: boolean;
   size?: keyof typeof SIZE;
+  variant?: HeadVariant;
 }) {
   return (
     <span
       aria-hidden
-      className={`grid shrink-0 place-items-center rounded-full font-semibold uppercase ${SIZE[size]} ${me ? 'bg-accent-soft text-label' : 'bg-bg-fill text-label'}`}
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full ${SIZE[size]} ${me ? 'bg-accent-soft' : 'bg-bg-fill'}`}
     >
-      {name.slice(0, 1)}
+      <CatHead variant={variant ?? headOf(name)} size={Math.round(size * 0.92)} />
     </span>
   );
 }

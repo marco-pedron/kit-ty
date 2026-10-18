@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { humanError } from '../errors.js';
 import { useNow } from '../state.js';
 import { Button } from './Button.js';
+import { CatHead } from './CatHead.js';
 import { Mascot } from './Mascot.js';
 
 // Errors, banners and waits (DESIGN.md §2, §7; task C7). An error is a human sentence and one next
@@ -24,7 +25,10 @@ export function ErrorNote({
   const h = humanError(error, who);
   return (
     <div role="alert" className={`rounded-control bg-danger-soft px-3 py-2.5 ${className}`}>
-      <p className="text-subhead font-semibold text-label">{h.title}</p>
+      <p className="flex items-center gap-1.5 text-subhead font-semibold text-label">
+        <CatHead variant="worried" size={20} />
+        {h.title}
+      </p>
       <p className="text-subhead text-label">{h.action}</p>
       {error.message !== h.title && (
         <p className="mt-1 text-footnote [overflow-wrap:anywhere] text-label-2">{error.message}</p>

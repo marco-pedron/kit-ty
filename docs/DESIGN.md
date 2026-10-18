@@ -160,20 +160,31 @@ Scala HIG (dimensione / interlinea):
 ## 7. Componenti (primitivi in `apps/web/src/ui/`)
 
 - **Lista inset grouped**: header di sezione in Footnote maiuscolo; righe con avatar o icona in quadratino colorato (raggio 7), titolo Headline, sottotitolo Subheadline `--label-2`, valore a destra, chevron dove si naviga; separatori 0.5px rientrati.
-- **Riga transazione**: avatar tondo con iniziale, titolo, descrizione, importo a destra (tabular), data sotto in Footnote.
+- **Riga transazione**: avatar tondo con la testa del membro, titolo, descrizione, importo a destra (tabular), data sotto in Footnote.
 - **Card di approvazione**: blocco `--accent-soft` raggio 14, titolo Headline, frase dell'agente in Subheadline, conto alla rovescia a destra, due pulsanti affiancati (gray `Dispute`, filled `Approve`).
 - **Badge** (pillola Caption1 semibold): `Auto mode` fondo `--positive` testo `--on-positive`; `Limit 10.00` e `Always ask` fondo `--bg-fill`; `active` `--positive-soft`; `insolvent` `--accent-soft`; `excluded` `--bg-fill` barrato; `operator` `--bg-fill`.
 - **Barra in basso**: pillola flottante opaca `--bg-cell` con bordo 0.5px `--separator`, **tre pulsanti identici** (Groups · Expense · QR), icona + Caption; l'attivo in `--accent`. Il contenuto scorre dietro (padding inferiore 104px).
 - **Navigation bar** (schermate secondarie): back in `--accent` con chevron, titolo inline; Large Title che si comprime allo scroll in Groups e Profile.
 - **Segmented control** `Scan | Show` (QR). **Slider** iOS del limite: binario `--bg-fill`, parte piena `--positive`, pomello bianco tondo 28px con bordo 0.5px.
 - **Sheet** dal basso con grabber (Dispute); fondo dello schermo scurito al 30%.
-- **Toast +ty / -ty**: pillola in alto, gattino 22px, prefisso in Zilla Slab; `+ty` su `--positive-soft`, `-ty` su `--accent-soft`. 3 secondi.
-- **Stati**: caricamento con il gattino che saluta + testo; vuoto con gattino + titolo + testo + azione; errore con frase umana + `Try again`.
-- **Mascot**: l'SVG di `docs/design/kitty-mascot.svg` incorporato **inline** (non `<img>`, altrimenti variabili e animazione non funzionano), prop `size` e `waving`.
+- **Notifica +ty / -ty** (stile iPhone): card in alto, icona dell'app `kitty-icon.svg` a sinistra (38px, raggio 9), "kit+ty" e "now" in Footnote, poi nel corpo una testa da 20px e il prefisso in Zilla Slab: testa `happy` per `+ty!` (prefisso su `--positive-soft`), `charlie` (occhiolino) per `-ty!` (su `--accent-soft`), `worried` per gli errori. 3 secondi.
+- **Chip della posizione netta** sotto il saldo del viaggiatore: `+ty 6.59 DUSD` su `--positive-soft` se gli altri ti devono, `−ty 3.09 DUSD` su `--accent-soft` se devi tu, nascosto se sei in pari o se il saldo è nascosto. Calcolato in `bigint` da `owedToMeCents − oweCents` di `/state` (`netPosition` in `lines.ts`).
+- **Stati**: caricamento lungo con il gattino che saluta + testo; vuoto con gattino + titolo + testo + azione; errore con testa `worried` + frase umana + `Try again`.
+- **Mascot**: `docs/design/kitty-mascot.svg`, pixel art 32×31 vettorializzata dalla GIF del brand, incorporata **inline** (non `<img>`, altrimenti variabili e animazione non funzionano); `#paw` alterna due fotogrammi ogni 0.4 s. Prop `size` e `waving`.
+- **CatHead** (`ui/CatHead.tsx`, prop `variant`): teste pixel art inline da `apps/web/src/assets/heads/`, `shape-rendering: crispEdges`, nitide a ogni misura (provate a 20, 32 e 96px). Regole d'uso:
+  - **membri** (`alice`, `bob`, `charlie`, `dave`): solo come avatar di quella persona, dentro il cerchio di `Avatar`, mai per indicare uno stato;
+  - **umori**: `happy` = soldi arrivati, tutto a posto; `angry` = contestazioni (header DISPUTES di Dave); `worried` = qualcosa da sistemare (header INSOLVENT, errori); `out` = membro escluso (avatar in Members, Group settings, Cover, e la schermata "You're out");
+  - una testa non sostituisce mai il testo: è sempre accanto a una frase o a un nome; mai due umori diversi nella stessa riga.
+- **Avatar**: cerchio `--bg-fill` (`--accent-soft` per me) con la testa al 92%; nelle righe il nome sta a fianco, in Profile e in Group settings la foto è grande (96px) con il nome subito sotto.
+- **Caricamenti**: attese brevi (< 3 s previsti: invio, approve, conferme di Dave, salvataggio dello slider) con `PlusMinus`/`Working`: il `+` del marchio gira sull'incrocio delle sue barre (2¼ giri, slow in e slow out) e si ferma come `−`; attese lunghe (lettura AI, pagamenti, Cover and exclude, avvio dell'app) con il gattino che saluta. Con `prefers-reduced-motion` entrambi fermi.
+- **Marchio**: favicon `kitty-icon.svg` (`apps/web/public/favicon.svg`) + `apple-touch-icon.png` 180px generato dall'SVG; logo in alto a destra = `kitty-wordmark.svg` inline (lettere in `currentColor`, `+` rosa).
 
 ## 8. Layout delle schermate
 
-Posizioni dai wireframe, **non spostare gli elementi**. In sintesi, Home viaggiatore dall'alto: pillola del saldo con l'occhio (sinistra) e sotto `Only you can spend it`; logo `kit+ty` (destra, apre Profile); titolo del gruppo + badge del limite (tocco → slider); card del gruppo con le approvazioni in cima e lo storico; Group 2 tratteggiato e non attivo; barra in basso.
+Posizioni dai wireframe, **non spostare gli elementi**. In sintesi, Home viaggiatore dall'alto: pillola del saldo con l'occhio (sinistra) e sotto `Only you can spend it`; logo `kitty-wordmark.svg` (destra, apre Profile); sotto il saldo il chip `+ty` / `−ty`; titolo del gruppo + badge del limite (tocco → slider); card del gruppo con le approvazioni in cima e lo storico; Group 2 tratteggiato e non attivo; barra in basso.
+
+- **Home di Dave**: header DISPUTES con la testa `angry`, INSOLVENT con `worried`; gli esclusi con `out`.
+- **Viaggiatore escluso** (dopo Cover and exclude): al posto di Home, testa `out` grande (128px), "You're out of <gruppo>. Dave covered your part.", i fondi tornati on-chain, link al Log verificato.
 
 ## 9. Cosa capisce un giudice in 3 secondi
 
