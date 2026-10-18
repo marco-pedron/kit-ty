@@ -13,6 +13,7 @@ import {
   type Receipt,
   type SignatureVerifier,
   type StoredEvent,
+  type TripParams,
 } from '@kitty/shared';
 import {
   deriveTrip,
@@ -189,7 +190,7 @@ export function joinBody(log: Log, id: MemberId): EventBody<'MEMBER_JOINED'> {
 }
 
 /** TRIP_CREATED, RATE_SET, the three travelers joined, admitted and with channels, all at T0. */
-export function tripLog(): Log {
+export function tripLog(params: TripParams = DEMO_TRIP_PARAMS): Log {
   const log = new Log();
   log.push(
     'TRIP_CREATED',
@@ -197,7 +198,7 @@ export function tripLog(): Log {
     {
       name: 'Vietnam 2026',
       assetId: ASSET_ID,
-      params: DEMO_TRIP_PARAMS,
+      params,
       coordinatorPubkey: KEY.dave,
     },
     0,

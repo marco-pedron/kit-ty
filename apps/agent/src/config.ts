@@ -23,9 +23,11 @@ export const ConfigSchema = z.object({
   RLN_DAVE_URL: url('http://127.0.0.1:3004'),
   ESPLORA_URL: url('http://127.0.0.1:3010'),
   // Timers of SPEC §15, written into TRIP_CREATED by index.ts: live demo 45/120 s (production
-  // is hours). Tests and e2e:demo pin 20/30 s (DEMO_TRIP_PARAMS, e2e/harness.ts).
+  // is hours), and 10 s to pay a line dave upheld, so the default follows on stage. Tests and
+  // e2e:demo pin 20/30/30 s (DEMO_TRIP_PARAMS, e2e/harness.ts).
   SILENT_ASSENT_SECONDS: seconds(45),
   PAYMENT_DEADLINE_SECONDS: seconds(120),
+  UPHELD_DEADLINE_SECONDS: seconds(10),
   INVOICE_EXPIRY_SECONDS: seconds(3600),
 });
 

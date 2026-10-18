@@ -138,7 +138,9 @@ function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView;
       .catch((e: unknown) => setError(toClientError(e)))
       .finally(() => setBusy(false));
   };
-  const deadline = state.trip?.params.paymentDeadlineSeconds ?? 0;
+  // the time to pay once dave confirms (TripParams.upheldDeadlineSeconds, default the deadline)
+  const params = state.trip?.params;
+  const deadline = params?.upheldDeadlineSeconds ?? params?.paymentDeadlineSeconds ?? 0;
   return (
     <div className={`px-4 py-3 ${last ? '' : 'hairline-b'}`}>
       <button

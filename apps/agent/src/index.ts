@@ -45,12 +45,13 @@ const { wallets, seed } = config.KITTY_FAKES ? fakeSetup() : realSetup(config);
 const rt = startAgents({ fakes: config.KITTY_FAKES, relay, wallets, log: app.log });
 runtime = rt;
 app.addHook('onClose', async () => rt.stop());
-// The timers of the trip come from the config (45/120 s for the live demo, SPEC §15); the rest
-// of the parameters are the demo ones.
+// The timers of the trip come from the config (45/120/10 s for the live demo, SPEC §15); the
+// rest of the parameters are the demo ones.
 const params = {
   ...DEMO_TRIP_PARAMS,
   silentAssentSeconds: config.SILENT_ASSENT_SECONDS,
   paymentDeadlineSeconds: config.PAYMENT_DEADLINE_SECONDS,
+  upheldDeadlineSeconds: config.UPHELD_DEADLINE_SECONDS,
   invoiceExpirySeconds: config.INVOICE_EXPIRY_SECONDS,
 };
 seedTrip(rt, seed, params, app.log).catch((err: unknown) => {

@@ -117,6 +117,7 @@ export async function startStack(p: {
       // pinned after the shell env and p.env, so neither can override them.
       SILENT_ASSENT_SECONDS: '20',
       PAYMENT_DEADLINE_SECONDS: '30',
+      UPHELD_DEADLINE_SECONDS: '30',
     },
     out,
   );

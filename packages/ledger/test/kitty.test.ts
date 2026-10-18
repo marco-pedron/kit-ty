@@ -274,6 +274,22 @@ describe('A1 deriveTrip (SPEC §7)', () => {
     expect(charlie.paymentDeadlineAt).toEqual(at(50));
   });
 
+  it('upheldDeadlineSeconds: a short time to pay an upheld line, the other deadlines unchanged', () => {
+    // the live demo: 10 s after dave upholds, against 30 s from LINE_SEEN for the others
+    const log = tripLog({ ...DEMO_TRIP_PARAMS, upheldDeadlineSeconds: 10 });
+    const expense = submit(log, dinnerSpec, 10);
+    seen(log, expense, KEY.bob, 12);
+    seen(log, expense, KEY.charlie, 12);
+    decide(log, expense, KEY.charlie, 'contest', 350n, 15);
+    resolve(log, expense, KEY.charlie, 'upheld', 20);
+    expect(line(derive(log, 21), expense, KEY.charlie).deadlineAt).toEqual(at(30));
+    expect(line(derive(log, 29), expense, KEY.charlie).state).toBe('due');
+    expect(line(derive(log, 30), expense, KEY.charlie).state).toBe('overdue');
+    // bob's line keeps seenAt + paymentDeadlineSeconds: due at 32 (silent assent), overdue at 42
+    expect(line(derive(log, 41), expense, KEY.bob).state).toBe('due');
+    expect(line(derive(log, 42), expense, KEY.bob).state).toBe('overdue');
+  });
+
   it('DISPUTE_RESOLVED upheld → due with a new deadline; line_voided → voided; expense_voided → every line voided', () => {
     const contested = () => {
       const { log, expense } = setup();

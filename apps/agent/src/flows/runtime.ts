@@ -7,6 +7,7 @@ import {
   type EventBody,
   type TripParams,
 } from '@kitty/shared';
+import { upheldDeadlineSeconds } from '@kitty/ledger';
 import type { RelayClient } from '../relay/types.js';
 import type { Wallet } from '../wallet/types.js';
 import { CoordinatorAgent } from './dave.js';
@@ -105,10 +106,11 @@ export async function seedTrip(
       if (
         trip !== null &&
         (trip.params.silentAssentSeconds !== params.silentAssentSeconds ||
-          trip.params.paymentDeadlineSeconds !== params.paymentDeadlineSeconds)
+          trip.params.paymentDeadlineSeconds !== params.paymentDeadlineSeconds ||
+          upheldDeadlineSeconds(trip.params) !== upheldDeadlineSeconds(params))
       )
         throw new StaleRelayError(
-          `the relay holds a trip with other timers (silent assent ${trip.params.silentAssentSeconds} s, payment deadline ${trip.params.paymentDeadlineSeconds} s; requested ${params.silentAssentSeconds} s, ${params.paymentDeadlineSeconds} s): run \`pnpm demo:reset\``,
+          `the relay holds a trip with other timers (silent assent ${trip.params.silentAssentSeconds} s, payment deadline ${trip.params.paymentDeadlineSeconds} s, after an upheld dispute ${upheldDeadlineSeconds(trip.params)} s; requested ${params.silentAssentSeconds} s, ${params.paymentDeadlineSeconds} s, ${upheldDeadlineSeconds(params)} s): run \`pnpm demo:reset\``,
         );
       if (trip === null)
         trip = await rt.dave.createTrip({
