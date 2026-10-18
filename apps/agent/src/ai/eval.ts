@@ -2,14 +2,16 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ReceiptSchema, type MemberId, type Receipt } from '@kitty/shared';
 import { createAiService } from './ai-service.js';
+import type { AiEngine } from './engine.js';
+import { blocksToLines } from './ocr-lines.js';
 import { createQvacEngine } from './qvac-engine.js';
 
 // pnpm ai:eval (task A4): the real on-device models on the receipt fixtures. A receipt passes
 // with at most 1 manual correction (date, currency, total, tax, tip, or one item's numbers;
 // labels and merchant are free text and not counted); the demo sentences must give the demo
 // split exactly. Run it with the network off: pnpm ai:eval:offline.
-// AI_EVAL_SET=hard (pnpm ai:eval:hard) runs the cluttered receipts of infra/fixtures/receipts/hard/
-// instead: a stress test, not a gate (failures there are findings, not regressions).
+// AI_EVAL_SET=simple (pnpm ai:eval:simple) runs the 30 generated receipts of
+// infra/fixtures/receipts/simple/ instead (make-images-simple.py writes images and expected.json).
 
 const set = process.env.AI_EVAL_SET ?? '';
 if (!/^[a-z0-9-]*$/.test(set)) throw new Error(`AI_EVAL_SET must be a folder name, got "${set}"`);
@@ -67,34 +69,55 @@ function corrections(got: Receipt, want: Expected): string[] {
   return c;
 }
 
+// The OCR rows of the last image, printed for a failing receipt: they tell an OCR misread from
+// a wrong row chosen by the model or an amount parsed wrong.
+const qvac = createQvacEngine();
+let lastRows: string[] = [];
+const engine: AiEngine = {
+  load: () => qvac.load(),
+  ocr: async (image) => {
+    const blocks = await qvac.ocr(image);
+    lastRows = blocksToLines(blocks);
+    return blocks;
+  },
+  complete: (messages, schema) => qvac.complete(messages, schema),
+};
+const printRows = () => lastRows.forEach((row, i) => console.log(`   ${i}: ${row}`));
+
 const ai = createAiService({
-  engine: createQvacEngine(),
+  engine,
   log: { info: (m) => console.log(`▸ ${m}`), error: (m) => console.error(`✖ ${m}`) },
 });
 await ai.loaded;
 if (ai.status() !== 'ready') process.exit(1);
 
 let failed = 0;
+let receiptsPassed = 0;
+const latencies: number[] = [];
 const extracted = new Map<string, Receipt>();
 for (const [name, want] of Object.entries(spec.receipts)) {
   const r = await ai.extractReceipt(new Uint8Array(readFileSync(`${dir}${name}.png`)));
+  latencies.push(r.latencyMs);
   if (!r.ok) {
     failed++;
     console.log(
       `✖ ${name}: no valid Receipt after ${r.attempts} attempts (${r.latencyMs} ms): ${r.error}`,
     );
+    printRows();
     continue;
   }
   extracted.set(name, r.data);
   const c = corrections(r.data, want);
   const pass = c.length <= 1;
-  if (!pass) failed++;
+  if (pass) receiptsPassed++;
+  else failed++;
   console.log(
     `${pass ? '✓' : '✖'} ${name}: ${r.attempts} attempt(s), ${r.latencyMs} ms, ${c.length} correction(s)` +
       (c.length ? `: ${c.join('; ')}` : '') +
       (r.data.warnings.length ? ` | warnings: ${r.data.warnings.join(' ')}` : ''),
   );
   console.log(`   ${r.data.items.map((it) => it.label).join(' | ')}`);
+  if (!pass) printRows();
 }
 
 const s = spec.split;
@@ -159,5 +182,9 @@ for (const sentence of h.sentences) {
   );
 }
 
-console.log(failed === 0 ? '\nai:eval passed' : `\nai:eval: ${failed} check(s) failed`);
+const meanMs = Math.round(latencies.reduce((a, b) => a + b, 0) / Math.max(latencies.length, 1));
+console.log(
+  `\nreceipts: ${receiptsPassed}/${latencies.length} passed, mean extraction latency ${meanMs} ms, max ${Math.max(0, ...latencies)} ms`,
+);
+console.log(failed === 0 ? 'ai:eval passed' : `ai:eval: ${failed} check(s) failed`);
 process.exit(failed === 0 ? 0 : 1);

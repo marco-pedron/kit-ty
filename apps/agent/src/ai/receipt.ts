@@ -85,14 +85,50 @@ export function anchorRow(label: string, row: number, rows: readonly string[]): 
 
 /** The last amount printed on a row: the line total, the subtotal, the total… */
 export function rowAmount(row: string, currency: CurrencyCode): bigint | null {
-  // OCR often reads "4,50" as "4, 50", and "75.000" as "75 .  000"
-  const last = row
-    .replace(/(\d)\s*([.,])\s+(\d)/gu, '$1$2$3')
-    .replace(MEASURE, ' ')
-    .replace(COUNT, ' ')
-    .match(AMOUNT)
-    ?.at(-1);
+  // OCR often reads "4,50" as "4, 50", "4 ,50" or "4 , 50"
+  let text = row.replace(/(\d)\s*([.,])\s*(\d)/gu, '$1$2$3');
+  // without decimals, a lost thousands dot leaves "10  000" at the end of the row
+  if (CURRENCY_EXPONENTS[currency] === 0)
+    text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{3})\s*$/u, '$1$2');
+  const last = text.replace(MEASURE, ' ').replace(COUNT, ' ').match(AMOUNT)?.at(-1);
   return last === undefined ? null : parsePrintedAmount(last, currency);
+}
+
+// A printed date: "17/10/2026", "10/16/2026", "17.10.2026", "2026-10-17".
+const DMY = /(?<!\d)(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?!\d)/u;
+const YMD = /(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/u;
+
+/**
+ * The date printed on the receipt as YYYY-MM-DD, read by code like the amounts: day/month/year,
+ * except month/day/year on a USD receipt; the other order only if the first is not a date.
+ */
+export function printedDate(rows: readonly string[], currency: CurrencyCode): string | null {
+  const iso = (y: string, m: string, d: string) => {
+    const s = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    return z.iso.date().safeParse(s).success ? s : null;
+  };
+  for (const row of rows) {
+    const ymd = YMD.exec(row);
+    if (ymd?.[1] && ymd[2] && ymd[3]) {
+      const s = iso(ymd[1], ymd[2], ymd[3]);
+      if (s) return s;
+    }
+    const m = DMY.exec(row);
+    if (!m?.[1] || !m[2] || !m[3]) continue;
+    const [a, b, y] = [m[1], m[2], m[3]];
+    const s = currency === 'USD' ? (iso(y, a, b) ?? iso(y, b, a)) : (iso(y, b, a) ?? iso(y, a, b));
+    if (s) return s;
+  }
+  return null;
+}
+
+/** A count printed on the row: "2 x 65.000", "x2", or a leading "2 Pho bo". */
+function hasPrintedCount(row: string, quantity: number): boolean {
+  const q = String(quantity);
+  return new RegExp(
+    `(?<![\\d.,])${q}\\s*[xX×]|[xX×]\\s*${q}(?![\\d.,])|^\\s*${q}\\s+\\p{L}`,
+    'u',
+  ).test(row);
 }
 
 type Conversion =
@@ -134,8 +170,17 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     dropped.push(`Row "${rows[tipRow]}" read as the tip.`);
   if (taxRow === null && (taxRow = byLabel(TAX_LABEL)) !== null)
     dropped.push(`Row "${rows[taxRow]}" read as the tax.`);
+  // Optional rows with no amount ("IVA inclusa" given as the tax) are not read as that row.
+  const withAmount = (what: string, i: number | null) => {
+    if (i === null || rowAmount(rows[i] ?? '', r.currency) !== null) return i;
+    dropped.push(`Row "${rows[i]}" has no amount: not read as ${what}.`);
+    return null;
+  };
+  const subtotalRow = withAmount('the subtotal', r.subtotalRow);
+  taxRow = withAmount('the tax', taxRow);
+  tipRow = withAmount('the tip', tipRow);
   claim('the total', r.totalRow);
-  claim('the subtotal', r.subtotalRow);
+  claim('the subtotal', subtotalRow);
   claim('the tax', taxRow);
   claim('the tip', tipRow);
   const seen = new Set<number>();
@@ -146,6 +191,11 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
       if (what !== undefined && it.row !== tipRow && it.row !== taxRow)
         dropped.push(`Row "${rows[it.row]}" is ${what}, not an item.`);
       if (what !== undefined || seen.has(it.row)) return false;
+      // the date row ("17/10/2026 20:41") is never an item: its time would read as a price
+      if (printedDate([rows[it.row] ?? ''], r.currency) !== null) {
+        dropped.push(`Row "${rows[it.row]}" is the date, not an item.`);
+        return false;
+      }
       seen.add(it.row);
       return true;
     })
@@ -177,8 +227,10 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
         unitPrice: printedUnit,
         total,
       };
+    // The model's quantity only when the row prints it: "Birra media 5,50" is 1, not 5 × 1,10.
+    const printed = it.quantity > 1 && hasPrintedCount(rows[it.row] ?? '', it.quantity);
     const q = BigInt(it.quantity);
-    const unitPrice = it.quantity > 1 && total % q === 0n ? total / q : total;
+    const unitPrice = printed && total % q === 0n ? total / q : total;
     return {
       label: it.label.replace(/\s+/gu, ' ').trim(),
       quantity: unitPrice === total ? 1 : it.quantity,
@@ -189,18 +241,18 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
 
   const receipt: Receipt = {
     merchant: r.merchant.trim(),
-    date: r.date,
+    date: printedDate(rows, r.currency) ?? r.date,
     currency: r.currency,
     items,
     total: amountOf('the total', r.totalRow),
     warnings: [],
   };
-  if (r.subtotalRow !== null) receipt.subtotal = amountOf('the subtotal', r.subtotalRow);
+  if (subtotalRow !== null) receipt.subtotal = amountOf('the subtotal', subtotalRow);
   const tax = taxRow === null ? 0n : amountOf('the tax', taxRow);
   const tip = tipRow === null ? 0n : amountOf('the tip', tipRow);
   if (tax > 0n) receipt.tax = tax;
   if (tip > 0n) receipt.tip = tip;
-  if (!z.iso.date().safeParse(r.date).success)
+  if (!z.iso.date().safeParse(receipt.date).success)
     errors.push(`date: "${r.date}" is not a date in the format YYYY-MM-DD`);
 
   const checked = z.safeEncode(ReceiptSchema, receipt);
