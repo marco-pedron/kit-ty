@@ -54,3 +54,35 @@ describe('agent skeleton', () => {
     expect(res.json().error).toMatchObject({ code: 'NOT_FOUND' });
   });
 });
+
+describe('body limit', () => {
+  // ~4 MB of base64, a phone photo
+  const image = {
+    mimeType: 'image/jpeg',
+    dataBase64: Buffer.alloc(3_000_000, 7).toString('base64'),
+  };
+
+  it('the extract route accepts a ~4 MB photo', async () => {
+    vi.stubEnv('KITTY_FAKES', '1');
+    const app = buildAgentServer(loadConfig({ KITTY_FAKES: '1' }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/alice/expenses/extract',
+      payload: { image },
+    });
+    await app.close();
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('every other route keeps the 1 MiB default', async () => {
+    vi.stubEnv('KITTY_FAKES', '1');
+    const app = buildAgentServer(loadConfig({ KITTY_FAKES: '1' }));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/alice/expenses',
+      payload: { image },
+    });
+    await app.close();
+    expect(res.json().error.message).toBe('Request body is too large');
+  });
+});
