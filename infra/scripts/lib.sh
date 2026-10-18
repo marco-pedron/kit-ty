@@ -1,6 +1,6 @@
 # Shared helpers for infra scripts. Source it, don't run it.
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="docker compose -f $INFRA_DIR/docker-compose.yml"
+COMPOSE="docker compose -f ${KITTY_COMPOSE_FILE:-$INFRA_DIR/docker-compose.yml}"
 BITCOIN_CLI="$COMPOSE exec -T -u blits bitcoind bitcoin-cli -regtest"
 ESPLORA_URL="${ESPLORA_URL:-http://127.0.0.1:3010}"
 RLN_PORTS=(3001 3002 3003 3004)

@@ -794,3 +794,69 @@ describe('OnchainRail (B5, SPEC §10.3)', () => {
     expect(await codeOf(rail.pay(old))).toBe('INVOICE_EXPIRED');
   });
 });
+
+describe('RlnWallet flavors (d4762ac default, kaleido fork for ln-1ch-swap)', () => {
+  /** The fork's Payment: payment_type instead of inbound (rln-kaleido-openapi.yaml). */
+  const forkPayment = (status: string, paymentType = 'Outbound') => {
+    const { inbound: _drop, ...rest } = payment('Succeeded').payment;
+    void _drop;
+    return { payment: { ...rest, status, payment_type: paymentType } };
+  };
+
+  it('d4762ac: /getpayment body has no payment_type (unchanged)', async () => {
+    const rln = new FakeRln();
+    await setup(rln).wallet.pay('lnbcrt30u1fake');
+    expect(rln.calls.find((c) => c.endpoint === '/getpayment')?.body).toEqual({
+      payment_hash: PAYMENT_HASH,
+    });
+  });
+
+  it('d4762ac: an answer with no inbound flag is refused, never taken as outbound', async () => {
+    const rln = new FakeRln().on('/getpayment', () => ({ json: forkPayment('Succeeded') }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('INTERNAL');
+  });
+
+  it('d4762ac: an inbound payment is refused', async () => {
+    const rln = new FakeRln().on('/getpayment', () => ({
+      json: payment('Succeeded', { inbound: true }),
+    }));
+    expect(await codeOf(setup(rln).wallet.pay('lnbcrt30u1fake'))).toBe('INTERNAL');
+  });
+
+  it('kaleido: asks /getpayment for the Outbound record and returns the proof', async () => {
+    const rln = new FakeRln();
+    let polls = 0;
+    rln.on('/getpayment', () => ({
+      json: forkPayment(++polls === 1 ? 'Pending' : 'Succeeded'),
+    }));
+    const proof = await setup(rln, { flavor: 'kaleido' }).wallet.pay('lnbcrt30u1fake');
+    expect(proof).toMatchObject({ rail: 'ln', paymentHash: PAYMENT_HASH, preimage: PREIMAGE });
+    expect(rln.calls.find((c) => c.endpoint === '/getpayment')?.body).toEqual({
+      payment_hash: PAYMENT_HASH,
+      payment_type: 'Outbound',
+    });
+  });
+
+  it('kaleido: Claimable and Claiming keep polling, Cancelled is a failure', async () => {
+    const rln = new FakeRln();
+    const seq = ['Claimable', 'Claiming', 'Succeeded'];
+    rln.on('/getpayment', () => ({ json: forkPayment(seq.shift() ?? 'Succeeded') }));
+    await setup(rln, { flavor: 'kaleido' }).wallet.pay('lnbcrt30u1fake');
+    expect(rln.count('/getpayment')).toBe(3);
+
+    const cancelled = new FakeRln().on('/getpayment', () => ({ json: forkPayment('Cancelled') }));
+    expect(await codeOf(setup(cancelled, { flavor: 'kaleido' }).wallet.pay('x'))).toBe(
+      'PAYMENT_FAILED',
+    );
+  });
+
+  it('kaleido: a succeeded record that is not Outbound is refused (no silent inbound check)', async () => {
+    for (const t of ['InboundAutoClaim', 'InboundHodl']) {
+      const rln = new FakeRln().on('/getpayment', () => ({ json: forkPayment('Succeeded', t) }));
+      expect(await codeOf(setup(rln, { flavor: 'kaleido' }).wallet.pay('x'))).toBe('INTERNAL');
+    }
+    // the d4762ac shape (inbound: false, no payment_type) is not enough for the fork either
+    const old = new FakeRln();
+    expect(await codeOf(setup(old, { flavor: 'kaleido' }).wallet.pay('x'))).toBe('INTERNAL');
+  });
+});

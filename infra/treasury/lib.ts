@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 export const INFRA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const SECRETS_FILE =
   process.env.KITTY_SECRETS_FILE || join(INFRA_DIR, '.secrets', 'nodes.json');
-export const OUT_DIR = join(INFRA_DIR, '.out');
+export const OUT_DIR = process.env.KITTY_OUT_DIR || join(INFRA_DIR, '.out');
 export const TREASURY_DATA_DIR =
   process.env.TREASURY_DATA_DIR || join(INFRA_DIR, 'data', 'treasury');
 
@@ -92,7 +92,7 @@ function bcli(...args: string[]): string {
     [
       'compose',
       '-f',
-      join(INFRA_DIR, 'docker-compose.yml'),
+      process.env.KITTY_COMPOSE_FILE || join(INFRA_DIR, 'docker-compose.yml'),
       'exec',
       '-T',
       '-u',

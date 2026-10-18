@@ -1,5 +1,6 @@
 import {
   DEMO_TRIP_PARAMS,
+  type RailMode,
   MEMBER_IDS,
   fakeVerifier,
   signatureVerifier,
@@ -86,7 +87,13 @@ export class StaleRelayError extends Error {}
  */
 export async function seedTrip(
   rt: AgentRuntime,
-  seed: { assetId: string; channels: TripChannels; rate: EventBody<'RATE_SET'> },
+  seed: {
+    assetId: string;
+    channels: TripChannels;
+    rate: EventBody<'RATE_SET'>;
+    /** Default DEMO_TRIP_PARAMS.railMode (ln-2ch); ln-1ch-swap is the experiment. */
+    railMode?: RailMode;
+  },
   log: Log,
 ): Promise<void> {
   for (;;) {
@@ -101,7 +108,7 @@ export async function seedTrip(
         trip = await rt.dave.createTrip({
           name: 'Vietnam 2026',
           assetId: seed.assetId,
-          params: DEMO_TRIP_PARAMS,
+          params: { ...DEMO_TRIP_PARAMS, railMode: seed.railMode ?? DEMO_TRIP_PARAMS.railMode },
         });
       if (trip.rate === null) await rt.dave.setRate(seed.rate);
       for (const id of MEMBER_IDS) {

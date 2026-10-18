@@ -14,6 +14,8 @@ export const ConfigSchema = z.object({
     .transform((v) => v === '1'),
   KITTY_RAIL_MODE: RailModeSchema.default('ln-2ch'),
   KITTY_WALLET_ENGINE: z.enum(['rln-rest', 'wdk']).default('rln-rest'),
+  // EXPERIMENT: `kaleido` = the RLN fork of ln-1ch-swap (see RlnWalletOptions.flavor).
+  KITTY_RLN_FLAVOR: z.enum(['d4762ac', 'kaleido']).default('d4762ac'),
   AGENT_HOST: z.string().default('127.0.0.1'),
   AGENT_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   RELAY_URL: url('http://127.0.0.1:4000'),

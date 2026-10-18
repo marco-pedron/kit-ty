@@ -1,0 +1,126 @@
+# EXPERIMENT (branch experiment/rgb-lightning-node): the stack of KITTY_RAIL_MODE=ln-1ch-swap,
+# one channel per traveler funded by an atomic on-chain <-> LN swap (experiments/kaleidoswap/).
+# Same services as docker-compose.yml, but its own project (kitty-1ch), volumes, the fork image
+# kitty/rln:kaleido-next and other host ports for everything, so it runs next to the demo stack
+# `kitty` without touching it. All ports on 127.0.0.1. Regtest only.
+#   bitcoind 38443, electrs 33501, esplora 33010, proxy 33000, RLN 33001-33004 (peers 39735-39738)
+name: kitty-1ch
+
+x-rln: &rln
+  image: kitty/rln:kaleido-next
+  depends_on:
+    - bitcoind
+    - electrs
+    - proxy
+  restart: unless-stopped
+
+services:
+  bitcoind:
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.2
+    platform: linux/amd64
+    command: "-fallbackfee=0.0002"
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      # rpc user "user", password "password" (same as upstream, regtest only)
+      RPCAUTH: "user:84c66d54d736d8b02aaa5b02e07e759b$$cc56c229b2a49ae2bfd5932cc8a6135d435bb9a7ac037ddd351d65936082c03d"
+    ports:
+      - 127.0.0.1:38443:18443
+    volumes:
+      - bitcoind:/srv/app/.bitcoin
+
+  electrs:
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    platform: linux/amd64
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      BTCPASS: "password"
+    volumes:
+      - electrs:/srv/app/db
+    depends_on:
+      - bitcoind
+    ports:
+      - 127.0.0.1:33501:50001
+
+  # Esplora REST API only (no web UI). Its electrum RPC stays inside the container;
+  # the 0.0.0.0 below is the in-container listen address, not a published port.
+  esplora:
+    image: blockstream/esplora@sha256:ef092138f7fcd5f3988441adf056632d64a7b95908896c471355c750a18f4541  # latest as of 2026-10-14
+    entrypoint: []
+    command: >
+      /srv/explorer/electrs_bitcoin/bin/electrs
+      --timestamp
+      --network regtest
+      --jsonrpc-import
+      --cookie user:password
+      --daemon-rpc-addr bitcoind:18443
+      --http-addr 0.0.0.0:3002
+      --electrum-rpc-addr 0.0.0.0:60401
+      --db-dir /data/db
+      --cors '*'
+    volumes:
+      - esplora:/data
+    depends_on:
+      - bitcoind
+    ports:
+      - 127.0.0.1:33010:3002
+
+  proxy:
+    image: ghcr.io/rgb-tools/rgb-proxy-server:0.3.0
+    platform: linux/amd64
+    ports:
+      - 127.0.0.1:33000:3000
+
+  rln-alice:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:33001:3001
+      - 127.0.0.1:39735:9735
+    volumes:
+      - rln-alice:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/1ch/backups/alice:/backups
+
+  rln-bob:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3002", "--ldk-peer-listening-port", "9736", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:33002:3002
+      - 127.0.0.1:39736:9736
+    volumes:
+      - rln-bob:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/1ch/backups/bob:/backups
+
+  rln-charlie:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3003", "--ldk-peer-listening-port", "9737", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:33003:3003
+      - 127.0.0.1:39737:9737
+    volumes:
+      - rln-charlie:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/1ch/backups/charlie:/backups
+
+  rln-dave:
+    <<: *rln
+    command: ["/RLNdata", "--daemon-listening-port", "3004", "--ldk-peer-listening-port", "9738", "--network", "regtest", "--disable-authentication"]
+    ports:
+      - 127.0.0.1:33004:3004
+      - 127.0.0.1:39738:9738
+    volumes:
+      - rln-dave:/RLNdata
+      # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
+      - ./data/1ch/backups/dave:/backups
+
+volumes:
+  bitcoind:
+  electrs:
+  esplora:
+  rln-alice:
+  rln-bob:
+  rln-charlie:
+  rln-dave:

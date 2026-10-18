@@ -10,7 +10,8 @@ import { deriveAppSecretHex, type RlnWalletOptions } from './rln-wallet.js';
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
 export const DEFAULT_SECRETS_FILE = `${repoRoot}infra/.secrets/nodes.json`;
-export const DEFAULT_SEED_STATE_FILE = `${repoRoot}infra/.out/seed-state.json`;
+export const DEFAULT_SEED_STATE_FILE =
+  process.env.KITTY_SEED_STATE_FILE ?? `${repoRoot}infra/.out/seed-state.json`;
 
 function readJson(path: string, what: string): unknown {
   try {
@@ -57,12 +58,16 @@ export function loadMemberWalletOptions(
     opts.backup = {
       password,
       unlockBody: unlockBody(actor, password),
-      hostDir: p.backupDir ?? `${repoRoot}infra/data/backups/${actor}`,
+      hostDir:
+        p.backupDir ?? `${process.env.KITTY_BACKUP_DIR ?? `${repoRoot}infra/data/backups`}/${actor}`,
     };
   // Only dave closes channels (SPEC §6.7): only his wallet gets the miner and esplora.
   if (actor === 'dave') {
     const esploraUrl = p.esploraUrl ?? process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010';
     opts.coordinator = { esplora: createEsplora(esploraUrl), miner: dockerMiner };
+    // EXPERIMENT ln-1ch-swap: the fork's LDK sweeps a closed channel on a timer (~130 s after
+    // the close, experiments/kaleidoswap/RESULTS.md case 7), not after blocks: wait for it.
+    if (process.env.KITTY_RLN_FLAVOR === 'kaleido') opts.coordinator.sweepWaitMs = 180_000;
   }
   return opts;
 }

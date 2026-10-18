@@ -9,7 +9,8 @@ import { z } from 'zod';
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 
-export const DEFAULT_SEED_STATE_FILE = `${repoRoot}infra/.out/seed-state.json`;
+export const DEFAULT_SEED_STATE_FILE =
+  process.env.KITTY_SEED_STATE_FILE ?? `${repoRoot}infra/.out/seed-state.json`;
 export const DEFAULT_RATES_FILE = `${repoRoot}infra/fixtures/rates.json`;
 
 const ChannelSchema = z.object({

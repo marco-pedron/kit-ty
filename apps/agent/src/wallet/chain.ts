@@ -11,7 +11,9 @@ export interface Miner {
 }
 
 const execFileP = promisify(execFile);
-const composeFile = fileURLToPath(new URL('../../../../infra/docker-compose.yml', import.meta.url));
+const composeFile =
+  process.env.KITTY_COMPOSE_FILE ??
+  fileURLToPath(new URL('../../../../infra/docker-compose.yml', import.meta.url));
 
 /**
  * The same command as infra/scripts/mine.sh and infra/treasury/lib.ts: bitcoin-cli inside the

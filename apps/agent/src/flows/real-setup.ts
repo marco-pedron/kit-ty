@@ -20,7 +20,21 @@ export function walletsOf(make: (a: ActorId) => Wallet): Record<ActorId, Wallet>
  */
 export function realSetup(config: Config): { wallets: Record<ActorId, Wallet>; seed: TripSeed } {
   const urls = nodeUrls(config);
-  const wallets = walletsOf((a) => new RlnWallet(loadMemberWalletOptions(a, { nodeUrl: urls[a] })));
+  const wallets = walletsOf(
+    (a) =>
+      new RlnWallet({
+        ...loadMemberWalletOptions(a, { nodeUrl: urls[a] }),
+        flavor: config.KITTY_RLN_FLAVOR,
+      }),
+  );
   const state = loadSeedState();
-  return { wallets, seed: { assetId: state.assetId, channels: state.channels, rate: loadRates() } };
+  return {
+    wallets,
+    seed: {
+      assetId: state.assetId,
+      channels: state.channels,
+      rate: loadRates(),
+      railMode: config.KITTY_RAIL_MODE,
+    },
+  };
 }

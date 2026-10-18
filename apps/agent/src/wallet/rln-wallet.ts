@@ -38,7 +38,16 @@ export interface RlnWalletOptions {
   proxyEndpoint?: string;
   /** B6: what lock → backup → unlock needs; without it backupNow is NOT_ALLOWED. */
   backup?: BackupSettings;
+  /**
+   * Which RLN API the node speaks (default `d4762ac`, the demo's). `kaleido` is the EXPERIMENT
+   * fork kaleidoswap/rgb-lightning-node@1e4b1c3 (KITTY_RAIL_MODE=ln-1ch-swap): /getpayment needs
+   * `payment_type`, Payment has `payment_type` instead of `inbound`, and the statuses add
+   * Claimable, Claiming and Cancelled (experiments/kaleidoswap/vendor/rln-kaleido-openapi.yaml).
+   */
+  flavor?: RlnFlavor;
 }
+
+export type RlnFlavor = 'd4762ac' | 'kaleido';
 
 export interface BackupSettings {
   /** The node password: encrypts the backup and unlocks the node again. */
@@ -163,8 +172,12 @@ const NOT_FORCING = 'Not forcing a close: ask the member to come online and retr
 
 type RlnPayment = {
   payment_hash: string;
-  inbound: boolean;
-  status: 'Pending' | 'Succeeded' | 'Failed';
+  /** d4762ac only. */
+  inbound?: boolean;
+  /** kaleido fork only. */
+  payment_type?: 'Outbound' | 'InboundAutoClaim' | 'InboundHodl';
+  /** Claimable, Claiming, Cancelled: kaleido fork only (HODL invoices). */
+  status: 'Pending' | 'Claimable' | 'Claiming' | 'Succeeded' | 'Failed' | 'Cancelled';
   payee_pubkey: string;
   preimage?: string | null;
   asset_id?: string | null;
@@ -184,6 +197,7 @@ export class RlnWallet implements Wallet {
   private payQueue: Promise<unknown> = Promise.resolve();
   private openQueue: Promise<unknown> = Promise.resolve();
   private readonly refreshEveryMs: number;
+  private readonly flavor: RlnFlavor;
   private lastRefreshAt = -Infinity;
   /**
    * B6: while set, every request to the node but the backup's own waits. RLN d4762ac can hang
@@ -203,6 +217,7 @@ export class RlnWallet implements Wallet {
     this.payTimeoutMs = opts.payTimeoutMs ?? 30_000;
     this.now = opts.now ?? Date.now;
     this.refreshEveryMs = opts.refreshEveryMs ?? 15_000;
+    this.flavor = opts.flavor ?? 'd4762ac';
   }
 
   /** One REST call: network failure → RlnError 'Unreachable', non-2xx → RlnError from body. */
@@ -424,11 +439,16 @@ export class RlnWallet implements Wallet {
     for (;;) {
       let lastError = '';
       try {
-        const { payment } = await this.call('/getpayment', () =>
-          this.rln.POST('/getpayment', { body: { payment_hash: paymentHash } }),
-        );
+        // the fork keeps inbound and outbound records apart: ask for ours, the payer's
+        const body =
+          this.flavor === 'kaleido'
+            ? { payment_hash: paymentHash, payment_type: 'Outbound' as const }
+            : { payment_hash: paymentHash };
+        const { payment } = (await this.call('/getpayment', () =>
+          this.rln.POST('/getpayment', { body: body as { payment_hash: string } }),
+        )) as { payment: RlnPayment };
         if (payment.status === 'Succeeded') return payment;
-        if (payment.status === 'Failed')
+        if (payment.status === 'Failed' || payment.status === 'Cancelled')
           throw new WalletError('PAYMENT_FAILED', 'the payment failed on the route');
       } catch (e) {
         if (e instanceof WalletError) throw e;
@@ -452,7 +472,16 @@ export class RlnWallet implements Wallet {
   private proofOf(inv: DecodedInvoice, p: RlnPayment): LnProof {
     const preimage = p.preimage ?? '';
     const problems: string[] = [];
-    if (p.inbound) problems.push('payment is inbound');
+    // Never `if (p.inbound)` alone: on the kaleido fork `inbound` is absent and that check
+    // would pass in silence. Each flavor must positively say "outbound".
+    if (this.flavor === 'kaleido') {
+      if (p.payment_type !== 'Outbound')
+        problems.push(`payment is not outbound (payment_type ${String(p.payment_type)})`);
+    } else if (p.inbound !== false) {
+      problems.push(
+        p.inbound === true ? 'payment is inbound' : 'payment has no inbound flag (wrong RLN flavor?)',
+      );
+    }
     if (p.payment_hash !== inv.paymentHash) problems.push('payment hash differs from the invoice');
     if (!HEX32.test(preimage)) problems.push('missing preimage');
     else if (

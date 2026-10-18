@@ -121,7 +121,9 @@ export type AutoPayDecision = z.infer<typeof AutoPayDecisionSchema>;
 
 // ---------- trip parameters (SPEC §10.4, §15) ----------
 
-export const RailModeSchema = z.enum(['ln-2ch', 'ln-lsp', 'onchain']);
+// ln-1ch-swap: EXPERIMENT (branch experiment/rgb-lightning-node), one channel per traveler funded
+// by an atomic on-chain <-> LN swap (experiments/kaleidoswap/RESULTS.md). Not in SPEC §10.4 yet.
+export const RailModeSchema = z.enum(['ln-2ch', 'ln-lsp', 'onchain', 'ln-1ch-swap']);
 export type RailMode = z.infer<typeof RailModeSchema>;
 
 export const TripParamsSchema = z.object({
