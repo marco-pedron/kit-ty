@@ -97,7 +97,7 @@ function SwapInNote({
       className="rounded-card bg-bg-cell p-4"
     >
       <p className="text-subhead font-semibold">
-        {formatCents(swap.cents)} in your channel, entered with an atomic swap
+        {formatCents(swap.cents)} entered your channel with an atomic swap
       </p>
       <p className="mt-1 text-footnote text-label-2">
         Your on-chain DUSD were locked in an HTLC; the operator paid you in the channel; your
