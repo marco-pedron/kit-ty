@@ -1,4 +1,4 @@
-import { sha256Hex } from '@kitty/shared';
+import { DEMO_TRIP_PARAMS, sha256Hex } from '@kitty/shared';
 import { loadConfig } from '../config.js';
 // Only the demo dinner and its split (plain data): no fake is built here.
 import { DEMO_RECEIPT, DEMO_SPLIT } from '../dev-fakes/fake-ai.js';
@@ -37,7 +37,7 @@ const agent = (id: 'alice' | 'bob' | 'charlie') => rt.agents.get(id)!;
 
 try {
   step(`relay ${config.RELAY_URL}, asset ${seed.assetId}`);
-  await seedTrip(rt, seed, log);
+  await seedTrip(rt, seed, DEMO_TRIP_PARAMS, log);
   for (const a of rt.agents.values()) await a.sync();
 
   const before = { alice: await wallets.alice.balances(), bob: await wallets.bob.balances() };

@@ -109,7 +109,15 @@ export async function startStack(p: {
   );
   const agent = start(
     'agent',
-    { AGENT_PORT: String(p.agentPort), RELAY_URL: relayUrl, ...p.env },
+    {
+      AGENT_PORT: String(p.agentPort),
+      RELAY_URL: relayUrl,
+      ...p.env,
+      // The e2e assertions assume the test timers (DEMO_TRIP_PARAMS), not the live demo's 45/120 s:
+      // pinned after the shell env and p.env, so neither can override them.
+      SILENT_ASSENT_SECONDS: '20',
+      PAYMENT_DEADLINE_SECONDS: '30',
+    },
     out,
   );
   const stop = async () => {
