@@ -50,6 +50,45 @@ const SPLIT_EXAMPLES: ChatMessage[] = [
   },
 ];
 
+// One worked receipt (invented shop and items, never the demo's or the fixtures'): a menu with
+// its components, a freebie, VAT included, cash given and change.
+const EXTRACT_EXAMPLE_ROWS = [
+  'PANINOTECA ZEFIRO',
+  'Via del Molo 8 - Genova',
+  '03-09-2026 12:48',
+  '1 x MENU PANINO   9,50',
+  '+ Patatine piccole',
+  '+ Acqua 0,5L',
+  '2 x CAFFE 1,20   2,40',
+  'Bustina zucchero x2 OMAGGIO',
+  'TOTALE   11,90',
+  'di cui IVA 10%   1,08',
+  'Pagamento contante   20,00',
+  'Resto   8,10',
+];
+const EXTRACT_EXAMPLE: ChatMessage[] = [
+  {
+    role: 'user',
+    content: `RECEIPT ROWS (OCR):\n<<<\n${EXTRACT_EXAMPLE_ROWS.map((l, i) => `${i}| ${l}`).join('\n')}\n>>>\n${NO_THINK}`,
+  },
+  {
+    role: 'assistant',
+    content: JSON.stringify({
+      merchant: 'Paninoteca Zefiro',
+      date: '2026-09-03',
+      currency: 'EUR',
+      items: [
+        { row: 3, label: 'Menu panino', quantity: 1 },
+        { row: 6, label: 'Caffe', quantity: 2 },
+      ],
+      subtotalRow: null,
+      taxRow: null,
+      tipRow: null,
+      totalRow: 8,
+    }),
+  },
+];
+
 const prompt = (name: string) =>
   readFileSync(new URL(`./prompts/${name}.md`, import.meta.url), 'utf8').trim();
 
@@ -160,6 +199,7 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
           };
         const messages: ChatMessage[] = [
           { role: 'system', content: prompt('extract-receipt') },
+          ...EXTRACT_EXAMPLE,
           {
             role: 'user',
             content: `RECEIPT ROWS (OCR):\n<<<\n${lines.map((l, i) => `${i}| ${l}`).join('\n')}\n>>>\n${NO_THINK}`,
