@@ -77,6 +77,9 @@
 
 ## Registro
 
+### Fix bottone Approva dopo la scadenza (branch `fix/receipt-split-and-dispute-payments`), dom 18/10
+- `canApprove` offre Approva anche su una parte confermata da Dave e già `overdue`, non ancora approvata: l'agente la paga in ritardo. Test in `apps/web/src/lines.test.ts`.
+
 ### C-design-3, dom 18/10
 - Funziona: favicon `kitty-icon.svg` + `apple-touch-icon.png` 180px (`apps/web/public/`); wordmark SVG in alto a destra; notifiche stile iPhone con icona dell'app e testa (`happy` +ty!, `charlie` −ty!, `worried` errori, anche in `ErrorNote`); avatar con la testa di ciascun membro (`out` per gli esclusi); foto grande in Profile e Group settings; header DISPUTES `angry` e INSOLVENT `worried` per Dave; chip `+ty`/`−ty` sotto il saldo (`netPosition` in `lines.ts`, bigint, con test); schermata "You're out" per l'escluso; loader `PlusMinus` (il + gira e diventa −) per le attese brevi; DESIGN.md §7-8 aggiornato.
 - **Asset:** nel pacchetto brand mancavano `kitty-mascot.svg` e le 8 teste SVG. Su indicazione del PM: teste vettorializzate dal foglio `kitty-heads-pixel.png` (pixel art, rettangoli, `crispEdges`) e gattino dai due fotogrammi di `kitty-wave-preview.gif` (la zampa alterna i fotogrammi). Il loader è scritto in codice.

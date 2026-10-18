@@ -70,6 +70,11 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### Fix split + contestazioni (branch `fix/receipt-split-and-dispute-payments`), dom 18/10
+- **Divisione (bug: "Bob got pho" non metteva il pho a Bob):** il modello 1.7B, a cui si chiedevano le persone di ogni item, abbinava male parti della frase e item e riempiva quelli non citati. Ora risponde con le parti della frase (`parts: [{ said, members, items }]`, item e membri sempre come enum); gli item in nessuna parte restano `unassigned`. `pnpm ai:eval` ha 7 casi nuovi su scontrini scritti (item condivisi, nomi parziali, plurali): 4 falliti prima, 17/17 verdi dopo. Divisione più lenta (3-7 s invece di ~1,7 s): la risposta è più lunga.
+- **Contestazioni:** una riga confermata da Dave e approvata dopo la nuova scadenza (`overdue`) non veniva mai pagata; ora `decideAutoPay` e l'agente pagano in ritardo una riga `overdue` approvata esplicitamente (SPEC §7). Test d'integrazione in `apps/agent/src/flows/disputes.test.ts`.
+- Come si prova: `pnpm test`; `pnpm ai:eval` con i modelli in cache.
+
 ### Robustezza dell'estrazione, dom 18/10 10:30
 - **Corpo da 16 MiB solo su `POST /api/:as/expenses/extract`:** hook `onRoute` in `server.ts` (le rotte sono di C, il loro file non è toccato); le altre rotte restano a 1 MiB. Test: ~4 MB accettati sull'estrazione, rifiutati su `POST /api/:as/expenses`.
 - **Righe senza prezzo:** una riga data come articolo ma senza importo ("+ Patatine grandi", "Ketchup x2 OMAGGIO") viene scartata con l'avviso `Row "…" has no price: not counted as an item.`; resta un errore solo se nessun articolo ha un prezzo. `rowAmount` ignora misure (`0,5L`, `9PZ`, `500 g`) e conteggi (`x2`). Test in `receipt.test.ts`.
