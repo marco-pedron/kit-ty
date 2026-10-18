@@ -57,11 +57,17 @@ const TIP_LABEL = /^\s*(tip|tips|mancia|trinkgeld|pourboire|propina|service|serv
 const TAX_LABEL = /^\s*(tax|sales tax|vat|iva|mwst|tva)\b/iu;
 const QTY_X_UNIT = /(\d{1,3})\s*[xX×]\s*(\d[\d.,']*)/u;
 
+// Numbers that are not prices: a measure ("0,5L", "9PZ", "500 g") or a count ("x2", "×3").
+const MEASURE = /\d+(?:[.,]\d+)?\s*(?:l|cl|ml|g|gr|kg|pz|pc|pcs)(?!\p{L})/giu;
+const COUNT = /(?<!\p{L})[x×]\s*\d{1,3}(?![\d.,'])/giu;
+
 /** The last amount printed on a row: the line total, the subtotal, the total… */
 export function rowAmount(row: string, currency: CurrencyCode): bigint | null {
   // OCR often reads "4,50" as "4, 50"
   const last = row
     .replace(/(\d[.,])\s+(\d)/gu, '$1$2')
+    .replace(MEASURE, ' ')
+    .replace(COUNT, ' ')
     .match(AMOUNT)
     ?.at(-1);
   return last === undefined ? null : parsePrintedAmount(last, currency);
@@ -123,8 +129,21 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     .sort((a, b) => a.row - b.row);
   if (llmItems.length === 0) errors.push('items: no row is an item');
 
-  const items: ReceiptItem[] = llmItems.map((it, k) => {
-    const total = amountOf(`item ${k}`, it.row);
+  // A row without a price (a menu component "+ Fries", a freebie) is part of the item above:
+  // dropped and said, never given an amount. Only when no item row has a price is it an error.
+  const priced = llmItems.flatMap((it) => {
+    const total = rowAmount(rows[it.row] ?? '', r.currency);
+    return total === null ? [] : [{ ...it, total }];
+  });
+  if (llmItems.length > 0 && priced.length === 0)
+    llmItems.forEach((it, k) => amountOf(`item ${k}`, it.row));
+  else
+    for (const it of llmItems)
+      if (!priced.some((p) => p.row === it.row))
+        dropped.push(`Row "${rows[it.row]}" has no price: not counted as an item.`);
+
+  const items: ReceiptItem[] = priced.map((it) => {
+    const total = it.total;
     const m = QTY_X_UNIT.exec(rows[it.row] ?? '');
     const printedUnit = m?.[2] ? parsePrintedAmount(m[2], r.currency) : null;
     // A printed "q x unit" wins over the model's quantity.

@@ -11,6 +11,7 @@
 - [x] A5 Flussi dell'agente (fake → reale): ★1 (A5a, A5b), ★3 wallet reale (#19); passi 2-7 verdi sul reale con `pnpm e2e:demo` (B8, sab 17/10 16:55)
 - [x] A7 liquidityPlan (SPEC §10.5) (branch `a/A7-liquidity-plan`)
 - [x] A6 (P1) Anti-injection e hash dei modelli (sab 17/10 19:40, branch `a/A6-ai-hardening`)
+- [x] Robustezza dell'estrazione (dom 18/10 10:30, branch `a/receipt-robustness`, PR in bozza)
 
 ## Bloccato da
 - niente
@@ -69,6 +70,12 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 
 ## Registro
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+### Robustezza dell'estrazione, dom 18/10 10:30
+- **Corpo da 16 MiB solo su `POST /api/:as/expenses/extract`:** hook `onRoute` in `server.ts` (le rotte sono di C, il loro file non è toccato); le altre rotte restano a 1 MiB. Test: ~4 MB accettati sull'estrazione, rifiutati su `POST /api/:as/expenses`.
+- **Righe senza prezzo:** una riga data come articolo ma senza importo ("+ Patatine grandi", "Ketchup x2 OMAGGIO") viene scartata con l'avviso `Row "…" has no price: not counted as an item.`; resta un errore solo se nessun articolo ha un prezzo. `rowAmount` ignora misure (`0,5L`, `9PZ`, `500 g`) e conteggi (`x2`). Test in `receipt.test.ts`.
+- **Prompt ed esempio: provati e annullati** (commit di revert): con le nuove regole e l'esempio, `usd-supermarket` di `ai:eval` falliva ("row 7 is both the subtotal and the tax"). Senza: `ai:eval` verde, 0 correzioni.
+- **Misurato:** `ai:eval` verde; `ai:eval:hard` 0/6 prima e 0/6 dopo, ma ora nessuno scontrino fallisce per "has no amount"; `e2e:demo` 12/12 (log `infra/.out/logs/20261018-101750-e2e-demo.log`).
+- **Problemi noti:** l'OCR stampa "26 , 80" (spazio prima della virgola) e `rowAmount` legge "80" → 80,00 (totale di eur-fastfood); `eval.ts` va in crash nella parte ostile se lo scontrino della divisione non è stato estratto.
 ### A6, sab 17/10 19:40
 - **Hash dei modelli (SPEC §13 #19):** prima di caricare, `qvac-engine.ts` calcola lo sha256 dei file in cache (`QVAC_CACHE_DIR`, default `~/.qvac/models`, file `<prefisso>_<modelId>`) di `OCR_LATIN`, `OCR_CRAFT` (il rilevatore) e `QWEN3_1_7B_INST_Q4` e lo confronta con `sha256Checksum` della costante dell'SDK (fissato da `@qvac/sdk` 0.21.0). File alterato o mancante → AI in `error`, modulo manuale; l'agente parte comunque. Costo: ~9 s in più al caricamento (1,15 GB), in background.
 - **Anti-injection (SPEC §13 #6):** 5 frasi ostili in `ai:eval` (istruzioni nascoste, membri inventati "mallory"/"eve", articoli 7 e 99, finto JSON): nessuna produce un membro o un articolo fuori dalla richiesta (lo schema `json_schema` lo impedisce già al campionamento, e la validazione lo ricontrolla). Le divisioni prodotte possono essere sbagliate, ma restano entro membri e articoli veri, e il debitore approva gli importi, non la frase. Unit test: 5 risposte "dirottate" del modello rifiutate dopo 2 tentativi, frase sempre passata come dato delimitato dopo le regole.
