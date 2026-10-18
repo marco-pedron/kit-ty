@@ -5,7 +5,11 @@
 
 ## In breve
 
-_(compilato a fine lavoro, vedi §3)_
+- **Funziona end to end, alle 09:40** (in anticipo sui punti di verifica delle 10:00 e delle 10:40): seed `1ch` verde due volte di fila (114 s e 92 s), `e2e:demo` in modalità `1ch` **12/12 verde** con i numeri di SPEC §16, giro della UI reale dei passi 1-7 riuscito.
+- **Nome della modalità:** `KITTY_RAIL_MODE=ln-1ch-swap`, con `KITTY_RLN_FLAVOR=kaleido`.
+- **DUSD dalla tesoreria WDK come su main**: funziona con il fork al primo colpo, nessun fallback sull'emissione RLN.
+- `ln-2ch` resta il default: typecheck, lint e **586 test** verdi (compresi quelli di `ln-2ch` e 6 nuovi per i due flavor). L'`e2e:demo` di `ln-2ch` **non** è stato rilanciato: avrebbe richiesto `demo:reset` sullo stack della demo, che non si tocca.
+- Il watcher di dave nell'agente è stato provato dal vivo (claim on-chain di uno scambio lasciato `paid`).
 
 ## 1. Come si avvia
 
@@ -56,12 +60,36 @@ docker compose -f infra/docker-compose.1ch.yml down        # -v per cancellare a
 
 ## 3. Cosa è stato provato
 
-_(compilato a fine lavoro)_
+| Prova | Esito | Numeri |
+|---|---|---|
+| `pnpm typecheck && pnpm lint && pnpm test` | ✅ | 56 file, 586 test (580 di prima + 6 sui flavor) |
+| `pnpm demo:reset:1ch` (due volte di fila) | ✅ ✅ | 114 s, 92 s. Per ogni viaggiatore: 1 canale, 50.00 dal suo lato, 30.00 da quello di dave, 50.00 on-chain. dave: 200.00 on-chain (riserva), 3 canali |
+| `pnpm e2e:demo:1ch` | ✅ 12/12 | AI sullo scontrino VND 53 s (primo caricamento); quote 3.09 / 3.09 / 3.50; bob pagato in automatico dopo 24 s, **0 blocchi**, prova verificata; contestazione e conferma di dave; scaduta dopo 30 s; "Copri ed escludi" in **77 s, 7 blocchi, 1 chiusura**; charlie 100.00 on-chain; alice 56.59 (3.09 da bob + 3.50 garantiti); backup cifrati dei 3 viaggiatori sul relay (lock → backup → unlock funziona anche sul fork); stessa testa del registro su 4/4 |
+| Giro della UI reale (`pnpm dev:1ch`, Chrome via Playwright, finestra 390×844) | ✅ passi 1-7 | 1: Home di alice con "50.00 entered your channel with an atomic swap", HTLC txid e preimage. 2: foto caricata **dalla UI**, AI sul dispositivo, frase, "Split with AI", parti 3.09/3.09/3.50 "Computed by the ledger", "Send to the group" **dalla UI**. 3: bob pagato in automatico ("Paid 3.09 to alice automatically: no objection in 20 s…"). 4-5-6: contestazione, conferma e "Copri ed escludi" chiamati **dall'API dell'agente** (non cliccati), con gli screenshot delle schermate: su dave l'operazione "Closing the channel with charlie…" con il tempo trascorso. 7: alice 56.59, registro uguale e valido su 4/4. Screenshot in `apps/web/.shots/1ch/` (gitignored) |
+| Watcher di dave nell'agente, dal vivo | ✅ | scambio di 1.00 per alice lasciato `paid`; `SwapWatcher.tick()` prende P da `/getpayment` (`Outbound`), verifica sha256, claim on-chain al blocco 137 (T = 735), stato `claimed_onchain` su disco; secondo tick: niente da fare |
+| Memoria con i due stack e il secondo agente QVAC | ⚠️ | libera tra il 19% e il 50% sul Mac da 8 GB, con lo stack demo e il `pnpm dev` di main accesi. Mai sotto il 15% (c'era un sorvegliante pronto a fermare l'e2e). `dev:1ch` spento a fine prova |
+
+**Non provato:** riavvio dell'agente di dave tra incasso LN e claim (lo stato su disco è lo stesso dell'esperimento, caso 9 di `RESULTS.md`, ma non rifatto con l'agente); scambio fallito e refund dopo T dentro l'app (solo nell'esperimento); `demo:lose-phone` in `1ch`; i passi 4-6 cliccati a mano in UI (solo via API, con screenshot); `e2e:demo` di `ln-2ch` (vedi sopra).
+
+**Dopo queste prove lo stack `kitty-1ch` non è pronto per una demo** (charlie escluso, uno scambio di prova in più): prima di usarlo, `pnpm demo:reset:1ch`.
 
 ## 4. Rischi sul palco
 
-_(compilato a fine lavoro)_
+1. **Immagine del fork.** `kitty/rln:kaleido-next` è costruita in locale da `kaleidoswap/rgb-lightning-node` `1e4b1c3` (rgb-lib da `branch = master`, rust-lightning da un fork personale). Esiste solo su questa macchina; ricostruirla richiede tempo e rete. Mai sui volumi della demo.
+2. **Watcher di dave.** Gira dentro l'agente di dave. Se l'agente è spento quando un viaggiatore incassa lo scambio e resta spento fino a T, dave perde D. Sul palco il rischio è nullo: tutti gli scambi si chiudono nel seed (il watcher del seed li riscuote subito) e T è 600 blocchi dopo. Ma va detto: in produzione è un processo critico, come un watchtower.
+3. **Sweep a tempo.** Al passo 6 la chiusura del canale di charlie aspetta lo sweep di LDK, che parte a tempo e non a blocchi: misurato **77 s** (e2e) e circa 90 s (giro UI), contro pochi secondi di `ln-2ch`. La UI mostra l'operazione in corso con il tempo trascorso, ma il testo "…the DUSD sweep back on-chain takes about 2 min" è **troncato** sulla larghezza del telefono: si legge solo "Closing the channel with charlie…" e i secondi. Servono 1-2 minuti di parlato pronti per quel momento. Il saldo on-chain di charlie si aggiorna dopo.
+4. **RAM.** Due stack più due agenti con QVAC su 8 GB: si è scesi al 19% libero durante il caricamento dei modelli. Per il palco: **un solo agente acceso**, cioè o la demo `ln-2ch` o `dev:1ch`, mai entrambi.
+5. **Il riquadro dello scambio resta visibile** anche dopo l'esclusione di charlie (dice "entered your channel", che resta vero, ma il canale è chiuso). Cosmetico.
+6. **Due wallet in più per persona:** accanto a ogni nodo c'è un wallet rgb-lib del fork (`htlc-tool`, in Docker, file in `infra/data/1ch/run/wallets`). Funziona, ma è un pezzo in più da spiegare se la giuria chiede.
+7. `/signmessage` resta rotto anche nel fork: nessun impatto (si usa ed25519 come su main).
 
 ## 5. Cosa servirebbe per portarlo su main (decisione del PM)
 
-_(compilato a fine lavoro)_
+Raccomandazione: **non oggi.** Il freeze è alle 11:00 e la demo `ln-2ch` è già verde; questa modalità cambia l'immagine di tutti i nodi e aggiunge un processo critico. Se il PM vuole comunque mostrarla, il modo meno rischioso è **una slide o un video** del giro `1ch` (gli screenshot ci sono), oppure accenderla solo come seconda demo a domanda, con la demo `ln-2ch` spenta (RAM).
+
+Per portarla su main dopo l'hackathon:
+- **SPEC** (PM): §4 e §6.2 un canale per viaggiatore e lo scambio atomico all'onboarding; §10.4 la modalità `ln-1ch-swap`; §13 due righe (watcher di dave offline fino a T → perdita di D; griefing sul lock del viaggiatore → fondi fermi fino a T); §15 T = altezza + 600, `push_msat` 300 000 sat, allocazioni separate di D + L; §20 la decisione.
+- **Stream A** (`packages/shared`, `packages/ledger`): eventi firmati dello scambio (`SWAP_OFFERED`, `SWAP_LOCKED`, `SWAP_SETTLED`) e la loro validazione, così l'HTLC txid e la preimage stanno nel registro e non solo nel wallet; `RailModeSchema` e `BalanceView.swapIn` qui sono già retrocompatibili.
+- **Stream B**: l'immagine del fork in `infra/` con un tag fissato (e il motivo per cui `rgb-lib` del fork viene da `master`); `htlc-tool` come sidecar o libreria; lo scambio nel wallet (`lockForSwap`, `createHodlInvoice`, `claimHodl`, `refundSwap`; dave `verifySwap`, `claimSwap`) invece che nel seed; il refund del viaggiatore dopo T dentro l'app; il watcher come processo monitorato separato dall'agente; test di integrazione del riavvio.
+- **Stream C**: il testo dell'attesa dello sweep non troncato; il riquadro dello scambio nascosto a canale chiuso; i passi 4-6 provati a mano.
+- Domande a KaleidoSwap: esporre `claim_deadline_height` in `/getpayment`; poter limitare lo shadow offset del CLTV in `/sendpayment` (accorcerebbe T da ~4 giorni); pubblicare un'immagine con tag stabile.
