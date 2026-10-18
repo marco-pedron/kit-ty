@@ -88,13 +88,13 @@ describe('extractReceipt', () => {
 
   it('feeds the zod error back once, then succeeds', async () => {
     const { ai, calls } = await ready([
-      JSON.stringify({ ...dinnerJson, date: '17/10/2026' }),
+      JSON.stringify({ ...dinnerJson, totalRow: 0 }),
       JSON.stringify(dinnerJson),
     ]);
     const r = await ai.extractReceipt(img);
     expect(r.ok && r.attempts).toBe(2);
     const retry = calls[1]?.at(-1)?.content ?? '';
-    expect(retry).toContain('date: "17/10/2026" is not a date');
+    expect(retry).toContain('the total: row 0 "PHO RESTAURANT HANOI" has no amount');
   });
 
   it('gives up after 2 attempts with what it could parse (manual form)', async () => {

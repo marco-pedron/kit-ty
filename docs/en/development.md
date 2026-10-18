@@ -55,7 +55,7 @@ All from the repository root (`package.json`).
 | `pnpm e2e:onchain`              | **irreversible**: bob pays alice 1.00 with the on-chain RGB rail                                     |
 | `pnpm e2e:lose-phone`           | **irreversible**: bob pays, backs up, loses the phone, is restored, pays again                       |
 | `pnpm ai:eval`                  | the real models on the receipt fixtures and the demo sentences                                       |
-| `pnpm ai:eval:hard`             | the same on the hard fixtures (stress test, not a gate)                                              |
+| `pnpm ai:eval:simple`           | the same on 30 generated clean receipts in EUR, USD and VND                                          |
 | `pnpm ai:eval:offline`          | `ai:eval` with the network blocked by macOS `sandbox-exec`                                           |
 
 Workspace-level scripts: `pnpm --filter @kitty/web build` (Vite build) and

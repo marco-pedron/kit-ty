@@ -55,11 +55,16 @@ demo run with the Wi-Fi off; this repository does not include a step that downlo
    `subtotalRow`, `taxRow`, `tipRow`, `totalRow`. Row numbers are bounded to the rows that exist.
 3. **Code reads the amounts** from the rows the model pointed to (`receipt.ts`, `amounts.ts`):
    grouped thousands (`255.000`, `1,234.56`), `2 x 65.000` quantities, the last amount of a row,
-   in minor units of the currency. Measures (`0,5L`, `500 g`) and counts (`x2`) are not prices.
+   in minor units of the currency, also when OCR splits the decimal mark (`6 ,00`, `4, 50`).
+   Measures (`0,5L`, `500 g`) and counts (`x2`) are not prices. The model's quantity is kept only
+   when the row prints it. The date is read from the printed rows too (day/month/year, or
+   month/day/year on a USD receipt); the model's date is used only when none is printed.
 4. **Deterministic checks** add warnings, which the UI shows and never silently fixes: items vs
    subtotal; items + tax + tip vs total; quantity × unit price vs line total. A row the model
    called an item but that has no price (a menu component, a freebie) is dropped with a warning,
-   never given an amount. A date that is not `YYYY-MM-DD` is an error fed back to the model.
+   never given an amount, and so is a date row. A tax, tip or subtotal row without an amount
+   ("VAT included") is not read as one. A date that is not `YYYY-MM-DD` is an error fed back to
+   the model.
 
 Rule stated in the prompt and the schema: `quantity` is an integer. Items sold by weight or volume
 have quantity 1 and keep the measure in the label ("Bananas (0.73 kg)"). The split always uses
@@ -124,7 +129,7 @@ and items, which the payer sees in the preview and the debtor can contest.
 
 ```sh
 pnpm ai:eval            # the 3 fixtures: VND dinner, EUR taxi, USD supermarket
-pnpm ai:eval:hard       # cluttered and photographed receipts in infra/fixtures/receipts/hard/
+pnpm ai:eval:simple     # 30 generated clean receipts (EUR, USD, VND) in infra/fixtures/receipts/simple/
 pnpm ai:eval:offline    # same as ai:eval inside macOS sandbox-exec with no network
 ```
 
@@ -138,7 +143,7 @@ pnpm ai:eval:offline    # same as ai:eval inside macOS sandbox-exec with no netw
 - **hostile**: hostile sentences must never produce a member or an item outside the request
   (failing to produce a split is acceptable).
 
-The process exits non-zero if anything fails. `ai:eval:hard` is a stress test whose failures are
-findings, not regressions. All three need the models in the local cache;
+The process exits non-zero if anything fails, and prints the receipts passed and the extraction
+latency (mean and max). All three need the models in the local cache;
 `ai:eval:offline` needs macOS (`infra/scripts/offline.sb`). The unit tests of the AI layer run
 with a fake engine in `pnpm test` and need no model.

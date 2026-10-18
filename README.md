@@ -56,6 +56,10 @@ Always start `pnpm dev:fakes` from an empty relay database. The fake wallet keep
 
 To run on real RGB Lightning nodes, build the node image once, then reset the demo and start the app with `pnpm demo:reset` and `pnpm dev`. The reset also wipes the relay database. The steps and the prerequisites are in [getting started](docs/en/getting-started.md).
 
+## Limitations
+
+The receipt is read on the device by a 1.7B model, which reads clean receipts well: 26 of 30 generated receipts in EUR, USD and VND come out with at most one correction (`pnpm ai:eval:simple`). Cluttered receipts, with codes, cash and change or sub-lines, can be misread. The app never trusts the reading blindly: code checks that items, tax and tip add up to the total and warns the payer when they do not, and every row can be fixed by hand before the expense is sent. The other gaps are listed in [limitations and roadmap](docs/en/limitations-and-roadmap.md).
+
 ## Prior work (declared)
 
 Some of the work happened before the hackathon, and we want to be explicit about it. When the hackathon started, nothing in this repository's apps and packages had been written yet.
