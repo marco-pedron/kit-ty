@@ -124,7 +124,7 @@ and items, which the payer sees in the preview and the debtor can contest.
 
 ```sh
 pnpm ai:eval            # the 3 fixtures: VND dinner, EUR taxi, USD supermarket
-pnpm ai:eval:hard       # cluttered and photographed receipts in infra/fixtures/receipts/hard/
+pnpm ai:eval:simple     # 30 generated clean receipts (EUR, USD, VND) in infra/fixtures/receipts/simple/
 pnpm ai:eval:offline    # same as ai:eval inside macOS sandbox-exec with no network
 ```
 
@@ -138,7 +138,7 @@ pnpm ai:eval:offline    # same as ai:eval inside macOS sandbox-exec with no netw
 - **hostile**: hostile sentences must never produce a member or an item outside the request
   (failing to produce a split is acceptable).
 
-The process exits non-zero if anything fails. `ai:eval:hard` is a stress test whose failures are
-findings, not regressions. All three need the models in the local cache;
+The process exits non-zero if anything fails, and prints the receipts passed and the extraction
+latency (mean and max). All three need the models in the local cache;
 `ai:eval:offline` needs macOS (`infra/scripts/offline.sb`). The unit tests of the AI layer run
 with a fake engine in `pnpm test` and need no model.

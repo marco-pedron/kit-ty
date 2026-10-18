@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { rowAmount, toReceipt } from './receipt.js';
 
 // toReceipt over OCR rows like a fast-food receipt: menu components and freebies printed
-// under an item, without a price of their own (infra/fixtures/receipts/hard/eur-fastfood).
+// under an item, without a price of their own.
 
 const ROWS = [
   'BURGER STATION',
