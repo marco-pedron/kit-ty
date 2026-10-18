@@ -5,7 +5,7 @@ import {
   type SplitAssignment,
   type SplitPreview,
 } from '@kitty/shared';
-import { Camera, Mic, ScanLine } from 'lucide-react';
+import { Camera, Mic, ScanLine, Sparkles } from 'lucide-react';
 import { useRef, useState, type ReactNode } from 'react';
 import { cap } from '../history.js';
 import { formatMinor, parseMinor, receiptGap, withItemTotal } from '../receipt-edit.js';
@@ -15,7 +15,7 @@ import { NavBar } from '../ui/Bars.js';
 import { Button } from '../ui/Button.js';
 import { Section } from '../ui/List.js';
 import { Mascot } from '../ui/Mascot.js';
-import { ErrorNote } from '../ui/Notes.js';
+import { AiNote, ErrorNote } from '../ui/Notes.js';
 import type { ScreenProps } from './types.js';
 import { Working } from '../ui/PlusMinus.js';
 
@@ -60,6 +60,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('photo');
   const [startedAt, setStartedAt] = useState(0);
+  const [readMs, setReadMs] = useState<number | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [sentence, setSentence] = useState('');
@@ -88,7 +89,9 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
     setReceipt(null);
     setAssignments(null);
     setPreview(null);
-    setStartedAt(Date.now());
+    setReadMs(null);
+    const t0 = Date.now();
+    setStartedAt(t0);
     setStep('reading');
     try {
       const p = await readPhoto(file);
@@ -104,6 +107,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
           0,
         );
       setReceipt(r.data);
+      setReadMs(Date.now() - t0);
       setStep('check');
     } catch (e) {
       setError(toClientError(e));
@@ -170,22 +174,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
     return (
       <>
         <NavBar title="New expense" back={{ label: 'Back', onClick: () => setStep('photo') }} />
-        <div className="flex flex-col items-center px-8 pt-6 text-center">
-          {photo && (
-            <img
-              src={photo.url}
-              alt="Your receipt"
-              className="h-40 w-32 rounded-card bg-bg-cell object-cover"
-            />
-          )}
-          <div className="mt-8">
-            <Mascot size={128} label="The kit+ty kitten is reading" />
-          </div>
-          <p className="mt-4 text-headline font-semibold">Reading the receipt</p>
-          <p className="text-subhead text-label-2" role="status">
-            on your phone… <Elapsed since={startedAt} />
-          </p>
-        </div>
+        <ReadingView photo={photo} startedAt={startedAt} />
       </>
     );
 
@@ -197,6 +186,15 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
           back={{ label: 'Back', onClick: () => setStep('photo') }}
         />
         <div className="space-y-6 px-4 pt-4" data-noswipe>
+          {readMs !== null && (
+            <p className="flex items-center justify-center gap-1.5 text-footnote text-label-2">
+              <Sparkles size={13} strokeWidth={2} aria-hidden />
+              Read on your phone in{' '}
+              <span className="tabular font-semibold text-label">
+                {(readMs / 1000).toFixed(1)} s
+              </span>
+            </p>
+          )}
           <ReceiptEditor receipt={receipt} onChange={edit} disabled={splitting || sending} />
 
           <Section header="Split between">
@@ -204,14 +202,27 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
               <label htmlFor="who" className="sr-only">
                 Who had what?
               </label>
-              <textarea
-                id="who"
-                rows={2}
-                value={sentence}
-                onChange={(e) => setSentence(e.target.value)}
-                placeholder="Who had what? For example: taxi for all three"
-                className="w-full resize-none rounded-control bg-bg-fill px-3 py-2.5 text-body placeholder:text-label-3"
-              />
+              <div className="relative">
+                <textarea
+                  id="who"
+                  rows={3}
+                  value={sentence}
+                  onChange={(e) => setSentence(e.target.value)}
+                  placeholder="Who had what? For example: taxi for all three"
+                  className="block w-full resize-none rounded-control bg-bg-fill px-3 pt-2.5 pb-9 text-body placeholder:text-label-3"
+                />
+                {/* Voice input is not built yet: shown, disabled. */}
+                <button
+                  type="button"
+                  disabled
+                  aria-label="Dictate, coming soon"
+                  className="absolute right-2 bottom-2 inline-flex h-7 items-center gap-1.5 rounded-full bg-bg-cell px-2.5 text-caption font-semibold text-label-3"
+                >
+                  <Mic size={14} strokeWidth={2} aria-hidden />
+                  <span aria-hidden className="h-3 w-px bg-separator" />
+                  soon
+                </button>
+              </div>
               {assignments !== null && (
                 <div className="flex flex-wrap gap-2">
                   {[...new Set(assignments.flatMap((a) => a.members))].map((m) => (
@@ -227,8 +238,9 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
                 onClick={() => void split()}
                 disabled={sentence.trim() === '' || splitting || sending}
               >
-                {splitting ? 'Splitting on your phone…' : 'Split with AI'}
+                {splitting ? <Working text="Splitting on your phone…" /> : 'Split with AI'}
               </Button>
+              <AiNote />
               {note && <p className="text-subhead text-label">{note}</p>}
               {question && (
                 <form
@@ -266,7 +278,10 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
                     className={`ml-4 flex min-h-11 items-center justify-between pr-4 ${i < preview.shares.length - 1 ? 'hairline-b' : ''}`}
                   >
                     <span>{sh.member === as ? 'You' : cap(sh.member)}</span>
-                    <span className="tabular font-semibold">{formatCents(sh.cents)}</span>
+                    <span className="tabular font-semibold">
+                      {formatCents(sh.cents)}
+                      <span className="ml-1 text-footnote font-normal text-label-2">DUSD</span>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -339,13 +354,58 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
   );
 }
 
-function Elapsed({ since }: { since: number }) {
-  const now = useNow(100);
-  const tenths = Math.max(0, Math.floor((now - since) / 100));
+// While the AI reads (brief §5): the receipt first and biggest; the kitten small, lower; a
+// playful phrase that changes every 3.5 s with the seconds in it and three breathing dots; then,
+// quieter, what is actually happening.
+const PHRASES = [
+  'QVAC is doing its thing',
+  'Kit is playing with yarn',
+  'Kit is licking its fur',
+  'Kit is purring',
+  'Kit is chasing a laser',
+  'Kit is stretching',
+  'Kit is kneading the receipt',
+  'Kit is counting the noodles',
+  'Kit is sitting on the keyboard',
+  'Kit is staring at the decimals',
+] as const;
+const PHRASE_MS = 3500;
+
+function ReadingView({ photo, startedAt }: { photo: Photo | null; startedAt: number }) {
+  const now = useNow(250);
+  const elapsed = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const phrase = PHRASES[Math.floor((now - startedAt) / PHRASE_MS) % PHRASES.length] ?? PHRASES[0];
   return (
-    <span className="tabular">
-      {Math.floor(tenths / 10)}.{tenths % 10} s
-    </span>
+    <div className="flex flex-col items-center px-6 pt-4 text-center">
+      {photo && (
+        <img
+          src={photo.url}
+          alt="Your receipt"
+          className="card max-h-[46dvh] w-auto max-w-full object-contain p-1"
+        />
+      )}
+      <div className="mt-10 flex flex-col items-center">
+        <Mascot size={64} label="Kit, the kit+ty kitten, is reading" />
+        <p role="status" className="mt-3 text-headline font-semibold">
+          <span key={phrase} className="animate-phrase inline-block">
+            {phrase}
+          </span>{' '}
+          <span className="font-normal text-label-2">
+            for <span className="tabular">{elapsed}</span> s
+          </span>
+          <span className="dots ml-0.5 text-label-2" aria-hidden>
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </p>
+        <p className="mt-2 max-w-72 text-footnote text-label-2">
+          Your agent is reading the receipt. Everything stays on your phone: the photo is never sent
+          over the internet.
+        </p>
+        <AiNote className="mt-3" />
+      </div>
+    </div>
   );
 }
 

@@ -1,7 +1,8 @@
 import svgSource from '../../../../docs/design/kitty-mascot.svg?raw';
 
 // The +ty kitten (DESIGN.md §7): docs/design/kitty-mascot.svg, pixel art inlined, not an <img>,
-// so its colour variables (--kitty-cat-line, --kitty-cat-fill) and the two-frame #paw wave work.
+// so its colour variables (--kitty-cat-line, --kitty-cat-fill) and the paw work: one arm, behind
+// the body, swinging on the shoulder (it never leaves the body).
 // It is the long-wait loader (AI reading, payments, Cover and exclude, app start).
 
 const svg = svgSource.replace(

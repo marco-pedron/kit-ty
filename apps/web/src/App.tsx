@@ -5,7 +5,7 @@ import {
   type MemberId,
   type TripView,
 } from '@kitty/shared';
-import { Camera, QrCode, Users } from 'lucide-react';
+import { Camera, House, QrCode, Users } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import {
   hashOf,
@@ -29,7 +29,9 @@ import type { ScreenProps } from './screens/types.js';
 import { useTripState } from './state.js';
 import { paymentToasts, type Toast } from './toasts.js';
 import { TabBar, type TabItem } from './ui/Bars.js';
+import { FlashHost } from './ui/Flash.js';
 import { Mascot } from './ui/Mascot.js';
+import { ScrollFade } from './ui/ScrollFade.js';
 import { humanError } from './errors.js';
 import { Banner, OperationsDock } from './ui/Notes.js';
 import { StateView, Toasts } from './ui/Overlays.js';
@@ -82,6 +84,8 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
   return (
     <main className="relative mx-auto min-h-dvh max-w-[430px] bg-bg-grouped text-label">
       {children}
+      <ScrollFade />
+      <FlashHost />
     </main>
   );
 }
@@ -154,14 +158,16 @@ const SCREEN_VIEWS: Record<Screen, (p: ScreenProps) => ReactNode> = {
   },
 };
 
-const TABS: readonly TabItem<'groups' | 'new' | 'qr'>[] = [
+// Home has its own tab, as in Dave's bar (Members · Home · Log).
+const TABS: readonly TabItem<'groups' | 'home' | 'new' | 'qr'>[] = [
   { key: 'groups', label: 'Groups', icon: <Users size={22} strokeWidth={1.75} /> },
+  { key: 'home', label: 'Home', icon: <House size={22} strokeWidth={1.75} /> },
   { key: 'new', label: 'Expense', icon: <Camera size={22} strokeWidth={1.75} /> },
   { key: 'qr', label: 'QR', icon: <QrCode size={22} strokeWidth={1.75} /> },
 ];
 
 const tabOf = (s: Screen) =>
-  s === 'groups' || s === 'group' ? 'groups' : s === 'new' || s === 'qr' ? s : null;
+  s === 'groups' || s === 'group' ? 'groups' : s === 'home' || s === 'new' || s === 'qr' ? s : null;
 
 function Phone({ as }: { as: MemberId }) {
   const trip = useTripState(as);

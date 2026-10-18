@@ -48,16 +48,3 @@ export function formatCountdown(seconds: number): string {
   const m = Math.floor(seconds / 60);
   return `${m}:${String(seconds % 60).padStart(2, '0')}`;
 }
-
-/**
- * The traveler's net position under the balance (DESIGN.md §7): "+ty" when the others owe me
- * more than I owe, "-ty" when I owe more, null when even. Open lines only, from /state.
- */
-export function netPosition(me: {
-  oweCents: bigint;
-  owedToMeCents: bigint;
-}): { kind: 'plus' | 'minus'; cents: bigint } | null {
-  const net = me.owedToMeCents - me.oweCents;
-  if (net === 0n) return null;
-  return net > 0n ? { kind: 'plus', cents: net } : { kind: 'minus', cents: -net };
-}

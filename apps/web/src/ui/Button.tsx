@@ -8,7 +8,7 @@ export type ButtonVariant = 'filled' | 'gray' | 'plain' | 'destructive';
 const VARIANT: Record<ButtonVariant, string> = {
   filled: 'bg-accent text-on-accent disabled:bg-bg-fill disabled:text-label-3',
   gray: 'bg-bg-fill text-label disabled:text-label-3',
-  plain: 'bg-transparent text-accent-text disabled:text-label-3',
+  plain: 'bg-transparent text-accent-text active:bg-bg-fill disabled:text-label-3',
   destructive: 'bg-danger-soft text-danger disabled:text-label-3',
 };
 

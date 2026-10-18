@@ -1,5 +1,6 @@
 import { formatCents, type ExpenseView, type LineView, type MemberId } from '@kitty/shared';
 import { formatCountdown } from './lines.js';
+import { formatMinor } from './receipt-edit.js';
 
 // The history of a group as the wireframe draws it, seen by one member: what I paid ("Taxi · you
 // paid", who still owes), what arrived ("Bob paid you", +ty), what I paid others ("Dinner ·
@@ -20,6 +21,18 @@ export interface HistoryRow {
   proof: string | null;
   /** The payer waits for the debtors' agents: since when (the kitten and the time elapsed). */
   waitingSince: string | null;
+  /**
+   * A receipt I paid in cash or by card (fiat), to be repaid in DUSD: its amount in the receipt
+   * currency and when the rate was locked (at submission). null = a Lightning payment in DUSD.
+   */
+  fiat: { amount: string; currency: string; rateLockedAt: string } | null;
+}
+
+/** 255000n VND → "255,000"; 4550n EUR → "45.50". */
+export function formatFiat(amount: bigint, currency: ExpenseView['currency']): string {
+  const [int = '', frac] = formatMinor(amount, currency).split('.');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return frac === undefined ? grouped : `${grouped}.${frac}`;
 }
 
 export const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
@@ -41,17 +54,17 @@ function stillOwed(open: readonly LineView[]): string {
   if (first === undefined) return 'all settled';
   if (open.every((l) => l.cents === first.cents)) {
     const who = names(open.map((l) => cap(l.debtor)));
-    return `${who} ${open.length === 1 ? 'owes' : 'owe'} ${formatCents(first.cents)}`;
+    return `${who} ${open.length === 1 ? 'owes' : 'owe'} ${formatCents(first.cents)} DUSD`;
   }
-  return open.map((l) => `${cap(l.debtor)} owes ${formatCents(l.cents)}`).join(', ');
+  return open.map((l) => `${cap(l.debtor)} owes ${formatCents(l.cents)} DUSD`).join(', ');
 }
 
 function myPartSubtitle(l: LineView): string {
   switch (l.state) {
     case 'paid':
       return l.agent?.reason.includes('approved')
-        ? '-ty · you approved'
-        : '-ty · paid automatically';
+        ? '-ty! · you approved'
+        : '-ty! · paid automatically';
     case 'guaranteed':
       return 'covered by the operator';
     case 'voided':
@@ -86,12 +99,13 @@ export function historyRows(
             l.paidBy === 'guarantee'
               ? `Operator paid for ${cap(l.debtor)}`
               : `${cap(l.debtor)} paid you`,
-          subtitle: `+ty · ${e.merchant}`,
+          subtitle: `+ty! · ${e.merchant}`,
           cents: l.cents,
           sign: '+',
           muted: false,
           proof: proofOf(l),
           waitingSince: null,
+          fiat: null,
         });
       const undecided = e.status === 'voided' ? [] : e.lines.filter(UNDECIDED);
       rows.push({
@@ -105,10 +119,15 @@ export function historyRows(
             ? `You paid · Waiting for ${names(undecided.map((l) => cap(l.debtor)))}…`
             : `You paid · ${e.status === 'voided' ? 'voided' : stillOwed(e.lines.filter(OPEN))}`,
         cents: e.totalUsdCents,
-        sign: null,
+        sign: e.status === 'voided' ? null : '-',
         muted: e.status === 'voided',
         proof: null,
         waitingSince: undecided.length > 0 ? e.submittedAt : null,
+        fiat: {
+          amount: formatFiat(e.receiptTotal, e.currency),
+          currency: e.currency,
+          rateLockedAt: e.submittedAt,
+        },
       });
       continue;
     }
@@ -126,6 +145,7 @@ export function historyRows(
       muted: mine?.state === 'voided' || e.status === 'voided',
       proof: proofOf(mine),
       waitingSince: null,
+      fiat: null,
     });
   }
   return rows;
@@ -139,7 +159,7 @@ export function approvalText(
   secondsLeft: number | null,
 ): { title: string; sentence: string } {
   // The amount first: on a narrow screen the merchant is what gets cut.
-  const title = `${cap(l.payer)} paid · ${formatCents(l.cents)} · ${merchant}`;
+  const title = `${cap(l.payer)} paid · ${formatCents(l.cents)} DUSD · ${merchant}`;
   const askAlways = limitCents <= 0n;
   let sentence: string;
   if (l.resolution?.outcome === 'upheld') sentence = 'Dave upheld it: I need your OK';
@@ -147,6 +167,6 @@ export function approvalText(
   else if (l.state === 'awaiting_decision' && l.cents <= limitCents)
     sentence = `Paying in ${formatCountdown(secondsLeft ?? 0)} unless you dispute`;
   else if (askAlways) sentence = 'You asked me to always ask: I need your OK';
-  else sentence = `Above your limit of ${formatCents(limitCents)}: I need your OK`;
+  else sentence = `Above your limit of ${formatCents(limitCents)} DUSD: I need your OK`;
   return { title, sentence };
 }

@@ -69,7 +69,7 @@ export interface TabItem<K extends string> {
   icon: ReactNode;
 }
 
-/** Floating pill, three identical buttons, the active one in the accent (§7). */
+/** Floating pill, identical buttons (three or four), the active one in the accent (§7). */
 export function TabBar<K extends string>({
   items,
   active,
@@ -91,7 +91,7 @@ export function TabBar<K extends string>({
             type="button"
             onClick={() => onSelect(it.key)}
             aria-current={active === it.key ? 'page' : undefined}
-            className={`pressable flex h-[52px] w-[76px] flex-col items-center justify-center gap-0.5 rounded-full text-caption font-semibold ${active === it.key ? 'text-accent-text' : 'text-label-2'}`}
+            className={`pressable flex h-[52px] flex-col items-center justify-center gap-0.5 rounded-full text-caption font-semibold active:bg-bg-fill ${items.length > 3 ? 'w-[68px]' : 'w-[76px]'} ${active === it.key ? 'text-accent-text' : 'text-label-2'}`}
           >
             {it.icon}
             {it.label}
