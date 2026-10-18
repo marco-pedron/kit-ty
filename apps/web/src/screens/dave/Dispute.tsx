@@ -11,6 +11,7 @@ import { Row, Section } from '../../ui/List.js';
 import { ErrorNote } from '../../ui/Notes.js';
 import { AlertDialog, StateView } from '../../ui/Overlays.js';
 import { findDispute, type DaveProps } from './DaveApp.js';
+import { Working } from '../../ui/PlusMinus.js';
 
 // A dispute (wireframe, bottom left): the receipt rows the AI read, the debtor's reason, the
 // split; "Cancel whole expense" voids the whole expense, "Confirm" upholds the part (SPEC §6.6).
@@ -109,7 +110,7 @@ export function DisputeScreen({
             Cancel whole expense
           </Button>
           <Button full disabled={busy} onClick={() => resolve('upheld')}>
-            {busy ? 'Signing…' : 'Confirm'}
+            {busy ? <Working /> : 'Confirm'}
           </Button>
         </div>
         <p className="text-center text-footnote text-label-2">

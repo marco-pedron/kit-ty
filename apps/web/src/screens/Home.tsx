@@ -3,15 +3,24 @@ import { useState } from 'react';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { approvalText, cap, historyRows } from '../history.js';
 import { openProof } from '../nav.js';
-import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from '../lines.js';
+import {
+  canApprove,
+  canDispute,
+  formatCountdown,
+  needsMe,
+  netPosition,
+  secondsLeft,
+} from '../lines.js';
 import { toClientError, useNow } from '../state.js';
 import { Badge, LimitBadge } from '../ui/Badge.js';
 import { Button } from '../ui/Button.js';
+import { CatHead } from '../ui/CatHead.js';
 import { ApprovalCard, BalancePill, TransactionRow } from '../ui/Money.js';
 import { Sheet, StateView } from '../ui/Overlays.js';
 import { ErrorNote } from '../ui/Notes.js';
 import { Wordmark } from '../ui/Text.js';
 import type { ScreenProps } from './types.js';
+import { Working } from '../ui/PlusMinus.js';
 
 // Home (wireframe-traveler.pdf, centre): balance pill and eye top left, the kit+ty logo top
 // right (Profile); the group title with its limit badge (tap: the slider); the group card with
@@ -23,6 +32,8 @@ export function HomeScreen(props: ScreenProps) {
   const limit = (s?.me?.policy ?? DEFAULT_POLICY).autoPayLimitCents;
   const [disputing, setDisputing] = useState<{ line: LineView; merchant: string } | null>(null);
 
+  if (s?.members.find((m) => m.memberId === as)?.status === 'excluded')
+    return <ExcludedScreen {...props} />;
   return (
     <>
       <TopBar {...props} />
@@ -97,11 +108,14 @@ function TopBar({ trip, as, go }: ScreenProps) {
   };
   return (
     <header className="hairline-b sticky top-0 z-20 flex items-start justify-between bg-bg-cell px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-2">
-      <BalancePill
-        cents={trip.state?.me?.balance?.tripOutboundCents ?? null}
-        hidden={hidden}
-        onToggle={toggle}
-      />
+      <div>
+        <BalancePill
+          cents={trip.state?.me?.balance?.tripOutboundCents ?? null}
+          hidden={hidden}
+          onToggle={toggle}
+        />
+        {trip.state?.me != null && !hidden && <NetChip me={trip.state.me} />}
+      </div>
       <button
         type="button"
         onClick={() => go('profile')}
@@ -111,6 +125,43 @@ function TopBar({ trip, as, go }: ScreenProps) {
         <Wordmark />
       </button>
     </header>
+  );
+}
+
+/** "+ty 6.59 DUSD" when the others owe me, "−ty 3.09 DUSD" when I owe; nothing when even. */
+function NetChip({ me }: { me: { oweCents: bigint; owedToMeCents: bigint } }) {
+  const net = netPosition(me);
+  if (net === null) return null;
+  return (
+    <p
+      className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-subhead text-label ${net.kind === 'plus' ? 'bg-positive-soft' : 'bg-accent-soft'}`}
+    >
+      <span className="font-brand font-bold">{net.kind === 'plus' ? '+ty' : '−ty'}</span>
+      <span className="tabular">{formatCents(net.cents)} DUSD</span>
+      <span className="sr-only">{net.kind === 'plus' ? 'owed to you' : 'you owe'}</span>
+    </p>
+  );
+}
+
+/** After Cover and exclude: the out head, who covered, what is left, and the log. */
+function ExcludedScreen({ trip, go }: ScreenProps) {
+  const s = trip.state;
+  const left = s?.me?.balance;
+  return (
+    <div className="flex flex-col items-center px-8 pt-[18dvh] text-center">
+      <CatHead variant="out" size={128} label="The kitten, out of the group" />
+      <h1 className="mt-6 text-title2 font-bold">You're out of {s?.trip?.name ?? 'the group'}.</h1>
+      <p className="mt-1 text-body text-label-2">Dave covered your part.</p>
+      <div className="mt-6 rounded-card bg-bg-cell px-5 py-3">
+        <p className="text-footnote text-label-2">Your funds, back on-chain</p>
+        <p className="tabular text-title2 font-semibold">
+          {left == null ? '—' : `${formatCents(left.onchainCents)} DUSD`}
+        </p>
+      </div>
+      <Button variant="plain" className="mt-4" onClick={() => go('log')}>
+        See the verified log
+      </Button>
+    </div>
   );
 }
 
@@ -282,7 +333,7 @@ function DisputeSheet({
         />
         {error && <ErrorNote error={error} />}
         <Button type="submit" full disabled={reason.trim() === '' || busy}>
-          {busy ? 'Signing…' : 'Send dispute'}
+          {busy ? <Working /> : 'Send dispute'}
         </Button>
         <Button variant="plain" full onClick={onClose}>
           Cancel

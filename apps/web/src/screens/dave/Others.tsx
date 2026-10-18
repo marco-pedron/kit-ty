@@ -33,7 +33,12 @@ export function MembersScreen({ state: s, go }: DaveProps) {
               return (
                 <Row
                   key={m.memberId}
-                  leading={<Avatar name={m.displayName} />}
+                  leading={
+                    <Avatar
+                      name={m.displayName}
+                      {...(st === 'excluded' && { variant: 'out' as const })}
+                    />
+                  }
                   title={cap(m.displayName)}
                   subtitle={
                     st === 'excluded'
@@ -65,8 +70,8 @@ export function DaveProfile({ state: s, go }: DaveProps) {
       <NavBar title="Profile" large back={{ label: 'Home', onClick: () => go({ name: 'home' }) }} />
       <div className="space-y-6 px-4">
         <div className="flex flex-col items-center pt-2">
-          <Avatar name="Dave" me size={80} />
-          <p className="mt-3 text-title2 font-bold">Dave</p>
+          <Avatar name="Dave" me size={96} />
+          <p className="mt-2 text-title2 font-bold">Dave</p>
         </div>
         <Section>
           <Row

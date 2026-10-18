@@ -1,15 +1,23 @@
 import { formatCents } from '@kitty/shared';
+import wordmark from '../assets/kitty-wordmark.svg?raw';
 
 // Brand and money typography (DESIGN.md §4): Zilla Slab only for the kit+ty wordmark and the
 // +ty / -ty prefixes; amounts in the UI font with tabular figures.
 
+/** kit-ty_brand/kitty-wordmark.svg inlined: the letters in currentColor, the "+" in pink. */
 export function Wordmark({ size = 'title2' }: { size?: 'title2' | 'large' }) {
   return (
     <span
-      className={`font-brand font-bold text-label ${size === 'large' ? 'text-large-title' : 'text-title2'}`}
-    >
-      kit<span className="text-cat-line">+</span>ty
-    </span>
+      role="img"
+      aria-label="kit+ty"
+      className={`inline-block text-label ${size === 'large' ? 'h-12' : 'h-7'}`}
+      dangerouslySetInnerHTML={{
+        __html: wordmark.replace(
+          / role="img" aria-label="[^"]*"/,
+          ' aria-hidden="true" height="100%"',
+        ),
+      }}
+    />
   );
 }
 

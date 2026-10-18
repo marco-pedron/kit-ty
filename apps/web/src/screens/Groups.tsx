@@ -15,6 +15,7 @@ import { Row, Section } from '../ui/List.js';
 import { ErrorNote } from '../ui/Notes.js';
 import { StateView } from '../ui/Overlays.js';
 import type { ScreenProps } from './types.js';
+import { Working } from '../ui/PlusMinus.js';
 
 // Groups (wireframe, bottom left): each group with my balance and its limit badge; Group 2 dashed
 // and inactive; "Join group" later. Group settings (bottom right): the one limit slider, the
@@ -89,6 +90,10 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
     <>
       <NavBar title={s.trip.name} back={{ label: 'Groups', onClick: () => go('groups') }} />
       <div className="space-y-6 px-4 pt-4">
+        <div className="flex flex-col items-center">
+          <Avatar name={as} me size={96} />
+          <p className="mt-2 text-title2 font-bold">{cap(as)}</p>
+        </div>
         <LimitSlider
           trip={trip}
           channelCents={params.tripChannelCents}
@@ -100,7 +105,14 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
             return (
               <Row
                 key={m.memberId}
-                leading={<Avatar name={m.displayName} me={m.memberId === as} size={32} />}
+                leading={
+                  <Avatar
+                    name={m.displayName}
+                    me={m.memberId === as}
+                    size={32}
+                    {...(st === 'excluded' && { variant: 'out' as const })}
+                  />
+                }
                 title={`${cap(m.displayName)}${m.memberId === as ? ' (you)' : ''}`}
                 value={<Badge kind={st}>{st}</Badge>}
               />
@@ -160,13 +172,15 @@ function LimitSlider({
   return (
     <Section
       footer={
-        excluded
-          ? 'You were excluded from this trip.'
-          : saving === 'saving'
-            ? 'Saving…'
-            : saving === 'saved'
-              ? 'Saved: signed and shared with your agent.'
-              : explain
+        excluded ? (
+          'You were excluded from this trip.'
+        ) : saving === 'saving' ? (
+          <Working text="Saving…" />
+        ) : saving === 'saved' ? (
+          'Saved: signed and shared with your agent.'
+        ) : (
+          explain
+        )
       }
     >
       <div className="px-4 pt-3 pb-3">

@@ -64,7 +64,7 @@ export function CoverScreen({
       <NavBar title="Cover and exclude" back={back} />
       <div className="space-y-6 px-4 pt-4">
         <div className="flex items-center gap-3 px-1">
-          <Avatar name={member} size={40} />
+          <Avatar name={member} size={40} {...(excluded && { variant: 'out' as const })} />
           <div>
             <p className="text-headline font-semibold">{cap(member)}</p>
             <p className="text-subhead text-label-2">

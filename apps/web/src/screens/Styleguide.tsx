@@ -7,7 +7,9 @@ import { NavBar, TabBar } from '../ui/Bars.js';
 import { Button } from '../ui/Button.js';
 import { Segmented, Slider } from '../ui/Controls.js';
 import { Row, Section, Tile } from '../ui/List.js';
+import { CatHead, type HeadVariant } from '../ui/CatHead.js';
 import { Mascot } from '../ui/Mascot.js';
+import { PlusMinus, Working } from '../ui/PlusMinus.js';
 import { ApprovalCard, BalancePill, TransactionRow } from '../ui/Money.js';
 import { ErrorNote } from '../ui/Notes.js';
 import { Sheet, StateView, Toasts } from '../ui/Overlays.js';
@@ -176,6 +178,34 @@ export function Styleguide() {
           </div>
         </Section>
 
+        <Section header="Heads at 32 and 96">
+          <div className="flex flex-wrap items-end gap-3 p-4">
+            {(
+              [
+                'happy',
+                'angry',
+                'worried',
+                'out',
+                'alice',
+                'bob',
+                'charlie',
+                'dave',
+              ] as HeadVariant[]
+            ).map((v) => (
+              <span key={v} className="flex flex-col items-center gap-1">
+                <CatHead variant={v} size={96} />
+                <CatHead variant={v} size={32} />
+                <span className="text-caption text-label-2">{v}</span>
+              </span>
+            ))}
+          </div>
+        </Section>
+        <Section header="Short wait">
+          <div className="flex items-center gap-4 p-4">
+            <PlusMinus size={32} />
+            <Working />
+          </div>
+        </Section>
         <Section header="Mascot">
           <div className="flex items-end gap-4 p-4">
             <Mascot size={22} waving={false} />

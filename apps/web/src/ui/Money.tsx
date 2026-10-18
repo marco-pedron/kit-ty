@@ -6,6 +6,7 @@ import { Amount } from './Text.js';
 import { Button } from './Button.js';
 import { Mascot } from './Mascot.js';
 import { Elapsed } from './Notes.js';
+import { Working } from './PlusMinus.js';
 
 // Money pieces of Home (DESIGN.md §7, wireframe): the balance pill, a history row, the card of a
 // part waiting for me.
@@ -164,7 +165,7 @@ export function ApprovalCard({
           )}
           {onApprove !== undefined && (
             <Button full onClick={onApprove} disabled={busy}>
-              {busy ? 'Signing…' : 'Approve'}
+              {busy ? <Working /> : 'Approve'}
             </Button>
           )}
         </div>

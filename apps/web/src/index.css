@@ -5,50 +5,50 @@
    one of these variables; Tailwind's own palette is switched off below. */
 :root {
   /* sfondi stile iOS (grouped) */
-  --bg-grouped:    #F6F2F4;   /* systemGroupedBackground, appena caldo */
-  --bg-cell:       #FFFEFE;   /* celle e card: il bianco che domina */
-  --bg-fill:       rgba(120,110,116,0.12);  /* fill di controlli e campi */
-  --separator:     rgba(60,50,58,0.18);     /* 0.5px */
+  --bg-grouped: #f6f2f4; /* systemGroupedBackground, appena caldo */
+  --bg-cell: #fffefe; /* celle e card: il bianco che domina */
+  --bg-fill: rgba(120, 110, 116, 0.12); /* fill di controlli e campi */
+  --separator: rgba(60, 50, 58, 0.18); /* 0.5px */
 
   /* etichette */
-  --label:         #1C1A1C;
-  --label-2:       rgba(28,26,28,0.60);
-  --label-3:       rgba(28,26,28,0.30);
+  --label: #1c1a1c;
+  --label-2: rgba(28, 26, 28, 0.6);
+  --label-3: rgba(28, 26, 28, 0.3);
 
   /* identità */
-  --accent:        #F25481;
-  --accent-soft:   #FDE7EE;
-  --on-accent:     #FFFFFF;
-  --positive:      #9CE7AB;
-  --positive-soft: #E9F9ED;
-  --on-positive:   #1F3B27;
-  --danger:        #FF3B30;
+  --accent: #f25481;
+  --accent-soft: #fde7ee;
+  --on-accent: #ffffff;
+  --positive: #9ce7ab;
+  --positive-soft: #e9f9ed;
+  --on-positive: #1f3b27;
+  --danger: #ff3b30;
 
-  --kitty-cat-line: #F25481;
-  --kitty-cat-fill: #FFFFFF;
+  --kitty-cat-line: #f25481;
+  --kitty-cat-fill: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-grouped:    #000000;
-    --bg-cell:       #1C1C1E;
-    --bg-fill:       rgba(120,120,128,0.24);
-    --separator:     rgba(84,84,88,0.65);
+    --bg-grouped: #000000;
+    --bg-cell: #1c1c1e;
+    --bg-fill: rgba(120, 120, 128, 0.24);
+    --separator: rgba(84, 84, 88, 0.65);
 
-    --label:         #FFFFFF;
-    --label-2:       rgba(235,235,245,0.60);
-    --label-3:       rgba(235,235,245,0.30);
+    --label: #ffffff;
+    --label-2: rgba(235, 235, 245, 0.6);
+    --label-3: rgba(235, 235, 245, 0.3);
 
-    --accent:        #81366F;
-    --accent-soft:   #3A2034;
-    --on-accent:     #FFFFFF;
-    --positive:      #42848A;
-    --positive-soft: #1E3335;
-    --on-positive:   #FFFFFF;
-    --danger:        #FF453A;
+    --accent: #81366f;
+    --accent-soft: #3a2034;
+    --on-accent: #ffffff;
+    --positive: #42848a;
+    --positive-soft: #1e3335;
+    --on-positive: #ffffff;
+    --danger: #ff453a;
 
-    --kitty-cat-line: #F25481;   /* il gattino resta rosa e bianco */
-    --kitty-cat-fill: #FFFFFF;
+    --kitty-cat-line: #f25481; /* il gattino resta rosa e bianco */
+    --kitty-cat-fill: #ffffff;
   }
 }
 
@@ -232,8 +232,33 @@
 }
 
 /* The kitten's paw (docs/design/kitty-mascot.svg) is still when asked to, or with reduced motion. */
-.mascot-still #paw {
+.mascot-still #paw .up,
+.mascot-still #paw .down {
   animation: none;
+}
+.mascot-still #paw .down {
+  opacity: 0;
+}
+
+/* The short-wait loader (ui/PlusMinus.tsx): the "+" turns two and a quarter times on the crossing
+   of its bars, slow in and slow out, and rests as a "−" before the next round. */
+.plusminus {
+  transform-origin: 50% 50%;
+  animation: plus-to-minus 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes plus-to-minus {
+  0% {
+    transform: rotate(0deg);
+  }
+  70%,
+  100% {
+    transform: rotate(810deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plusminus {
+    animation: none;
+  }
 }
 
 @utility range-ios {

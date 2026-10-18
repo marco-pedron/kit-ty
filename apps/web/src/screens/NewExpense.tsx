@@ -17,6 +17,7 @@ import { Section } from '../ui/List.js';
 import { Mascot } from '../ui/Mascot.js';
 import { ErrorNote } from '../ui/Notes.js';
 import type { ScreenProps } from './types.js';
+import { Working } from '../ui/PlusMinus.js';
 
 // New expense (wireframe, story 1): 1 photo → 2 the AI reads it on the phone (the kitten waves)
 // → 3 check the rows, say who had what, see the parts the ledger computed, send to the group.
@@ -278,7 +279,7 @@ export function NewExpenseScreen({ trip, as, go }: ScreenProps) {
             onClick={() => void send()}
             disabled={preview === null || sending || blocked !== null}
           >
-            {sending ? 'Signing and sending…' : 'Send to the group'}
+            {sending ? <Working text="Signing and sending…" /> : 'Send to the group'}
           </Button>
         </div>
       </>

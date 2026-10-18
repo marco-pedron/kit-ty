@@ -11,12 +11,14 @@ import { cap } from '../../history.js';
 import { toClientError } from '../../state.js';
 import { Avatar } from '../../ui/Avatar.js';
 import { Button } from '../../ui/Button.js';
+import { CatHead, type HeadVariant } from '../../ui/CatHead.js';
 import { Section } from '../../ui/List.js';
 import { BalancePill } from '../../ui/Money.js';
 import { EmptyRow, ErrorNote } from '../../ui/Notes.js';
 import { AlertDialog, Sheet } from '../../ui/Overlays.js';
 import { Wordmark } from '../../ui/Text.js';
 import { Ago, lineKey, type DaveProps } from './DaveApp.js';
+import { Working } from '../../ui/PlusMinus.js';
 
 // Dave's Home (wireframe, centre): the guarantee pill, then DISPUTES (Cancel / Confirm),
 // INSOLVENT (Cover and exclude) and TODAY'S RATE (Set).
@@ -62,7 +64,7 @@ export function DaveHome(props: DaveProps) {
         </button>
       </header>
       <div className="space-y-6 px-4 pt-4">
-        <Section header="Disputes">
+        <Section header={<HeadHeader variant="angry" text="Disputes" />}>
           {disputes.length === 0 ? (
             <Empty text="No disputes. Everyone agrees on the expenses." />
           ) : (
@@ -76,7 +78,7 @@ export function DaveHome(props: DaveProps) {
             ))
           )}
         </Section>
-        <Section header="Insolvent">
+        <Section header={<HeadHeader variant="worried" text="Insolvent" />}>
           {defaults.length === 0 ? (
             <Empty text="Everyone is paying on time." />
           ) : (
@@ -94,6 +96,16 @@ export function DaveHome(props: DaveProps) {
         <p className="text-center text-footnote text-label-2">Group: {s.trip?.name ?? '—'}</p>
       </div>
     </>
+  );
+}
+
+/** A section header with the head that says its mood: angry for disputes, worried for insolvent. */
+function HeadHeader({ variant, text }: { variant: HeadVariant; text: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <CatHead variant={variant} size={22} />
+      {text}
+    </span>
   );
 }
 
@@ -145,7 +157,7 @@ function DisputeCard({ d, last, state, trip, go }: DaveProps & { d: DisputeView;
           Cancel {cap(d.debtor)}'s part
         </Button>
         <Button full disabled={busy} onClick={() => resolve('upheld')}>
-          {busy ? 'Signing…' : 'Confirm'}
+          {busy ? <Working /> : 'Confirm'}
         </Button>
       </div>
       <p className="mt-2 text-footnote text-label-2">
@@ -289,7 +301,7 @@ function RateSheet({
         </label>
         {error && <ErrorNote error={error} />}
         <Button type="submit" full disabled={value === null || busy}>
-          {busy ? 'Signing…' : 'Set the rate'}
+          {busy ? <Working /> : 'Set the rate'}
         </Button>
         <Button variant="plain" full onClick={onClose}>
           Cancel

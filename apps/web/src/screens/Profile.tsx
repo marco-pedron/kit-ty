@@ -20,8 +20,8 @@ export function ProfileScreen({ trip, as, go }: ScreenProps) {
       <NavBar title="Profile" large back={{ label: 'Home', onClick: () => go('home') }} />
       <div className="space-y-6 px-4">
         <div className="flex flex-col items-center pt-2">
-          <Avatar name={name} me size={80} />
-          <p className="mt-3 text-title2 font-bold">{name}</p>
+          <Avatar name={name} me size={96} />
+          <p className="mt-2 text-title2 font-bold">{name}</p>
         </div>
         <Section>
           <Row

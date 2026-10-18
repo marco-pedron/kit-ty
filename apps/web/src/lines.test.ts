@@ -1,6 +1,13 @@
 import type { LineView } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
-import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from './lines.js';
+import {
+  canApprove,
+  canDispute,
+  formatCountdown,
+  needsMe,
+  netPosition,
+  secondsLeft,
+} from './lines.js';
 
 const line = (over: Partial<LineView>): LineView => ({
   expenseId: 'x1',
@@ -73,5 +80,23 @@ describe('what a debtor can do on a part', () => {
     const approved = line({ state: 'due', resolution: upheld, agent: { pay: true, reason: '' } });
     expect(canApprove(approved)).toBe(false);
     expect(canApprove(line({ state: 'due' }))).toBe(false);
+  });
+});
+
+describe('net position chip', () => {
+  it('is +ty when the others owe me more', () => {
+    expect(netPosition({ oweCents: 0n, owedToMeCents: 659n })).toEqual({
+      kind: 'plus',
+      cents: 659n,
+    });
+  });
+  it('is -ty when I owe more', () => {
+    expect(netPosition({ oweCents: 309n, owedToMeCents: 0n })).toEqual({
+      kind: 'minus',
+      cents: 309n,
+    });
+  });
+  it('is hidden when even', () => {
+    expect(netPosition({ oweCents: 350n, owedToMeCents: 350n })).toBeNull();
   });
 });
