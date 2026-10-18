@@ -29,7 +29,10 @@
     "e2e:liquidity": "./infra/scripts/e2e.sh liquidity",
     "demo:lose-phone": "./infra/scripts/lose-phone.sh",
     "e2e:lose-phone": "./infra/scripts/e2e.sh lose-phone",
-    "e2e:onchain": "./infra/scripts/e2e.sh onchain"
+    "e2e:onchain": "./infra/scripts/e2e.sh onchain",
+    "demo:reset:1ch": "./infra/scripts/demo-reset-1ch.sh",
+    "dev:1ch": "bash -c \"source infra/scripts/env-1ch.sh && pnpm dev\"",
+    "e2e:demo:1ch": "bash -c \"source infra/scripts/env-1ch.sh && ./infra/scripts/e2e.sh demo\""
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

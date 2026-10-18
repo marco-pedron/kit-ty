@@ -24,7 +24,7 @@ const HTLC_MSAT = 3_000_000;
 // ---------- persistence ----------
 
 function store(who: string) {
-  const dir = join(ROOT, 'run', 'swaps', who);
+  const dir = join(process.env.KK_RUN_DIR ?? join(ROOT, 'run'), 'swaps', who);
   mkdirSync(dir, { recursive: true });
   return {
     save: (id: string, rec: object) => writeFileSync(join(dir, `${id}.json`), JSON.stringify(rec, null, 2), { mode: 0o600 }),

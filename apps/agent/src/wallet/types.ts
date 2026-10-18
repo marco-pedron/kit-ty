@@ -14,6 +14,8 @@ export interface WalletBalances {
   inboundCents: bigint;
   /** DUSD on-chain on the member's node (seed on-ramp, swept channel closes). */
   onchainCents: bigint;
+  /** EXPERIMENT ln-1ch-swap: the onboarding swap that brought D into the channel. */
+  swapIn?: { lockTxid: string; preimage: string; paymentHash: string; cents: bigint } | null;
 }
 
 export interface Wallet {

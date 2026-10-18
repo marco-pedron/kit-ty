@@ -141,6 +141,19 @@ export const BalanceViewSchema = z.object({
   tripChannelCents: minorString,
   /** Below topupWarnPercent of D (SPEC §6.9). */
   topupWarning: z.boolean(),
+  /**
+   * EXPERIMENT ln-1ch-swap only: how D entered the channel, the atomic swap of the onboarding
+   * (on-chain HTLC lock txid, and the preimage that settled it). From the wallet, not the log.
+   */
+  swapIn: z
+    .object({
+      lockTxid: z.string(),
+      preimage: z.string(),
+      paymentHash: z.string(),
+      cents: minorString,
+    })
+    .nullable()
+    .optional(),
 });
 export type BalanceView = z.output<typeof BalanceViewSchema>;
 

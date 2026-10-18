@@ -27,6 +27,9 @@ export function HomeScreen(props: ScreenProps) {
     <>
       <TopBar {...props} />
       <div className="space-y-6 px-4 pt-4">
+        {s?.me?.balance?.swapIn != null && (
+          <SwapInNote swap={s.me.balance.swapIn} explorer={s.explorerBaseUrl} />
+        )}
         <section>
           <div className="flex items-center justify-between gap-3 pb-2">
             <h2 className="truncate text-title2 font-bold">{s?.trip?.name ?? 'Your group'}</h2>
@@ -72,6 +75,48 @@ export function HomeScreen(props: ScreenProps) {
       )}
       <span className="sr-only">Signed in as {as}</span>
     </>
+  );
+}
+
+/**
+ * EXPERIMENT ln-1ch-swap: how the traveler's D entered the channel. The atomic swap of the
+ * onboarding, from the traveler's own wallet: the on-chain HTLC lock and the preimage that
+ * settled it (the same preimage lets dave claim the lock; nobody held the funds in between).
+ */
+function SwapInNote({
+  swap,
+  explorer,
+}: {
+  swap: { lockTxid: string; preimage: string; cents: bigint };
+  explorer: string;
+}) {
+  const short = (h: string) => `${h.slice(0, 10)}…${h.slice(-6)}`;
+  return (
+    <section aria-label="How your funds entered the channel" className="rounded-card bg-bg-cell p-4">
+      <p className="text-subhead font-semibold">
+        {formatCents(swap.cents)} in your channel, entered with an atomic swap
+      </p>
+      <p className="mt-1 text-footnote text-label-2">
+        Your on-chain DUSD were locked in an HTLC; the operator paid you in the channel; your
+        preimage released the lock to the operator. No one held your funds in between.
+      </p>
+      <dl className="mt-2 space-y-1 text-footnote">
+        <div className="flex justify-between gap-3">
+          <dt className="text-label-2">HTLC txid</dt>
+          <dd className="font-mono [overflow-wrap:anywhere]">
+            <a href={`${explorer}/tx/${swap.lockTxid}`} target="_blank" rel="noreferrer">
+              {short(swap.lockTxid)}
+            </a>
+          </dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-label-2">Preimage</dt>
+          <dd className="font-mono [overflow-wrap:anywhere]" title={swap.preimage}>
+            {short(swap.preimage)}
+          </dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 

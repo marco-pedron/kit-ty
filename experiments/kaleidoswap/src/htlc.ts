@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { mine, post, rawTx, refresh, PROXY_ENDPOINT, type Member } from './lib.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const WALLETS = join(ROOT, 'run', 'wallets');
+const WALLETS = join(process.env.KK_RUN_DIR ?? join(ROOT, 'run'), 'wallets');
 const NETWORK = process.env.KK_NETWORK ?? 'kitty-kaleido_default';
 const IMAGE = process.env.KK_HTLC_IMAGE ?? 'kitty/htlc-tool:dev';
 export const HTLC_SAT = 1000;

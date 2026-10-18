@@ -11,6 +11,7 @@ import {
 } from '@kitty/shared';
 import { explorerTxUrl, type Esplora, type Miner } from './chain.js';
 import { toWalletError, WalletError } from './errors.js';
+import { travelerSwapInfo } from './swap-watcher.js';
 import type { Wallet, WalletBalances } from './types.js';
 
 // The real Wallet of one member, motore `rln-rest` (gate 2, SPEC §14.0, §20): the member's own
@@ -45,6 +46,8 @@ export interface RlnWalletOptions {
    * Claimable, Claiming and Cancelled (experiments/kaleidoswap/vendor/rln-kaleido-openapi.yaml).
    */
   flavor?: RlnFlavor;
+  /** EXPERIMENT ln-1ch-swap: where this member's onboarding swap record is (balances().swapIn). */
+  swapRecord?: { runDir: string; member: string };
 }
 
 export type RlnFlavor = 'd4762ac' | 'kaleido';
@@ -377,10 +380,12 @@ export class RlnWallet implements Wallet {
         await this.refreshTransfers().catch(() => undefined);
       }
       const b = await this.assetBalance();
+      const sr = this.opts.swapRecord;
       return {
         tripOutboundCents: b.offchainOutbound,
         inboundCents: b.offchainInbound,
         onchainCents: b.settled,
+        ...(sr && { swapIn: travelerSwapInfo(sr.runDir, sr.member) }),
       };
     } catch (e) {
       throw toWalletError(e, 'other');

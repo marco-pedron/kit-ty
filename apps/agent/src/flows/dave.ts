@@ -226,7 +226,12 @@ export class CoordinatorAgent extends MemberAgent {
 
     let closingTxids = [...member.closingTxids];
     if (!member.excluded) {
-      const op = this.startOp('closing_channels', `Closing both channels with ${memberId}…`);
+      // EXPERIMENT ln-1ch-swap: one channel, and the fork's sweep waits ~2 min on a timer
+      const text =
+        process.env.KITTY_RAIL_MODE === 'ln-1ch-swap'
+          ? `Closing the channel with ${memberId}… the DUSD sweep back on-chain takes about 2 min`
+          : `Closing both channels with ${memberId}…`;
+      const op = this.startOp('closing_channels', text);
       try {
         ({ txids: closingTxids } = await this.wallet.closeChannelsWith(member.nodePubkey));
         this.endOp(op, 'done');

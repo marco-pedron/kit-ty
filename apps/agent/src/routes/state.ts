@@ -142,6 +142,7 @@ function balanceView(trip: TripState, b: WalletBalances | null): BalanceView | n
     onchainCents: b.onchainCents,
     tripChannelCents: d,
     topupWarning: b.tripOutboundCents * 100n < d * BigInt(trip.params.topupWarnPercent),
+    ...(b.swapIn !== undefined && { swapIn: b.swapIn }),
   };
 }
 

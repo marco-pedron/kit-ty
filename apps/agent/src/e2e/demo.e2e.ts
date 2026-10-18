@@ -33,6 +33,15 @@ const note = (k: string, v: unknown) => {
   console.log(`[e2e] ${k}: ${JSON.stringify(v, (_, x) => (typeof x === 'bigint' ? `${x}` : x))}`);
 };
 
+/**
+ * EXPERIMENT ln-1ch-swap (demo:reset:1ch): one channel per traveler, so one close in step 6, and
+ * the fork's sweep runs on a timer (~130 s), so step 6 takes minutes.
+ */
+const ONE_CH = process.env.KITTY_RAIL_MODE === 'ln-1ch-swap';
+const SEED_STATE =
+  process.env.KITTY_SEED_STATE_FILE ??
+  fileURLToPath(new URL('../../../../infra/.out/seed-state.json', import.meta.url));
+
 /** The close of step 6 must confirm and sweep within this many blocks (B7: ~7, before: 11). */
 const CLOSE_MAX_BLOCKS = 8;
 
@@ -230,7 +239,7 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
     note('cover and exclude', { ...r, ms: Date.now() - t1, blocksMined });
 
     expect(r.covered?.rail).toBe('ln');
-    expect(r.closingTxids).toHaveLength(2);
+    expect(r.closingTxids).toHaveLength(ONE_CH ? 1 : 2);
     expect(blocksMined).toBeLessThanOrEqual(CLOSE_MAX_BLOCKS);
     for (const txid of r.closingTxids) {
       const res = await fetch(`${ESPLORA}/tx/${txid}`);
@@ -252,7 +261,7 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
     const op = dave.coordinator?.members.find((m) => m.memberId === 'charlie');
     expect(op?.guaranteeUsedCents).toBe(350n);
     expect(op?.operatorCreditCents).toBe(350n);
-  });
+  }, ONE_CH ? 420_000 : undefined);
 
   it("step 6: charlie's 50.00 come back to him on-chain", async () => {
     const was = before.charlie?.me?.balance;
@@ -287,10 +296,7 @@ describe('B8 the demo of SPEC §16 on the regtest stack (irreversible)', () => {
 
   it('B6: every traveler backed their node up to the relay, encrypted', async () => {
     const seed = JSON.parse(
-      readFileSync(
-        fileURLToPath(new URL('../../../../infra/.out/seed-state.json', import.meta.url)),
-        'utf8',
-      ),
+      readFileSync(SEED_STATE, 'utf8'),
     ) as { pubkeys: Record<ActorId, string> };
     const sizes = await waitFor(
       "a backup of every traveler's node on the relay",

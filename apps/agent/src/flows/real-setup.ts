@@ -25,6 +25,9 @@ export function realSetup(config: Config): { wallets: Record<ActorId, Wallet>; s
       new RlnWallet({
         ...loadMemberWalletOptions(a, { nodeUrl: urls[a] }),
         flavor: config.KITTY_RLN_FLAVOR,
+        ...(config.KITTY_RAIL_MODE === 'ln-1ch-swap' &&
+          a !== 'dave' &&
+          process.env.KK_RUN_DIR && { swapRecord: { runDir: process.env.KK_RUN_DIR, member: a } }),
       }),
   );
   const state = loadSeedState();
