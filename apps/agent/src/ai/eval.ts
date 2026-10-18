@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { MemberId, Receipt } from '@kitty/shared';
+import { ReceiptSchema, type MemberId, type Receipt } from '@kitty/shared';
 import { createAiService } from './ai-service.js';
 import { createQvacEngine } from './qvac-engine.js';
 
@@ -35,6 +35,17 @@ const spec = JSON.parse(readFileSync(`${dir}expected.json`, 'utf8')) as {
     assignments: { itemIndex: number; members: MemberId[] }[];
   };
   hostile: { receipt: string; payer: MemberId; members: MemberId[]; sentences: string[] };
+  splitCases: {
+    receipts: Record<string, Record<string, unknown>>;
+    payer: MemberId;
+    members: MemberId[];
+    cases: {
+      receipt: string;
+      sentence: string;
+      assignments: { itemIndex: number; members: MemberId[] }[];
+      unassigned: number[];
+    }[];
+  };
 };
 
 function corrections(got: Receipt, want: Expected): string[] {
@@ -100,6 +111,25 @@ for (const sentence of s.sentences) {
   if (!pass) failed++;
   console.log(
     `${pass ? '✓' : '✖'} split "${sentence}": ${r.latencyMs} ms, ${r.ok ? got : r.error}`,
+  );
+}
+
+// Typed receipts (no OCR): shared items, partial names ("pho" for "Pho Bo") and plurals ("the
+// cokes"); items the sentence does not name must stay unassigned, never guessed.
+const sc = spec.splitCases;
+for (const c of sc.cases) {
+  const receipt = ReceiptSchema.parse(sc.receipts[c.receipt]);
+  const r = await ai.proposeSplit(receipt, sc.members, c.sentence, undefined, sc.payer);
+  const got = r.ok ? JSON.stringify(r.data.assignments) : null;
+  const pass =
+    r.ok &&
+    got === JSON.stringify(c.assignments) &&
+    JSON.stringify(r.data.unassigned) === JSON.stringify(c.unassigned);
+  if (!pass) failed++;
+  console.log(
+    `${pass ? '✓' : '✖'} split [${c.receipt}] "${c.sentence}": ${r.latencyMs} ms, ${
+      r.ok ? `${got} unassigned ${JSON.stringify(r.data.unassigned)}` : r.error
+    }`,
   );
 }
 

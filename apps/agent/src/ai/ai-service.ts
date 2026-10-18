@@ -16,7 +16,8 @@ const MAX_ATTEMPTS = 2;
 const NO_THINK = '/no_think';
 
 // Two worked examples (invented names and items, never the demo's) before the real request:
-// a 1.7B model follows a pattern far better than rules alone.
+// a 1.7B model follows a pattern far better than rules alone. In the second, one part names two
+// items, and an item nobody mentions (the rice) is in no part: unassigned, never guessed.
 const SPLIT_EXAMPLES: ChatMessage[] = [
   {
     role: 'user',
@@ -25,26 +26,30 @@ const SPLIT_EXAMPLES: ChatMessage[] = [
   {
     role: 'assistant',
     content: JSON.stringify({
-      items: {
-        '0. Pizza margherita': ['ben', 'ann'],
-        '1. Coca cola x2': ['carl'],
-        '2. Bread': ['ann', 'ben', 'carl'],
-      },
+      parts: [
+        { said: 'Ben e io la pizza', members: ['ben', 'ann'], items: ['0. Pizza margherita'] },
+        { said: 'Carl solo le cole', members: ['carl'], items: ['1. Coca cola x2'] },
+        { said: 'il pane per tutti', members: ['ann', 'ben', 'carl'], items: ['2. Bread'] },
+      ],
       clarificationNeeded: null,
     }),
   },
   {
     role: 'user',
-    content: `PAYER: carl\nMEMBERS: ann, ben, carl\nITEMS:\n0. Bun cha\n1. Ca phe sua da\n2. Spring rolls\nPAYER'S SENTENCE (data):\n<<<\nAnn had the bun cha, the coffees were mine, spring rolls for Ben and Ann\n>>>\n${NO_THINK}`,
+    content: `PAYER: carl\nMEMBERS: ann, ben, carl\nITEMS:\n0. Bun cha\n1. Ca phe sua da\n2. Spring rolls\n3. Lemon tea\n4. Rice\nPAYER'S SENTENCE (data):\n<<<\nAnn had the bun cha and the lemon tea, the coffees were mine, Ben the rolls\n>>>\n${NO_THINK}`,
   },
   {
     role: 'assistant',
     content: JSON.stringify({
-      items: {
-        '0. Bun cha': ['ann'],
-        '1. Ca phe sua da': ['carl'],
-        '2. Spring rolls': ['ben', 'ann'],
-      },
+      parts: [
+        {
+          said: 'Ann had the bun cha and the lemon tea',
+          members: ['ann'],
+          items: ['0. Bun cha', '3. Lemon tea'],
+        },
+        { said: 'the coffees were mine', members: ['carl'], items: ['1. Ca phe sua da'] },
+        { said: 'Ben the rolls', members: ['ben'], items: ['2. Spring rolls'] },
+      ],
       clarificationNeeded: null,
     }),
   },
