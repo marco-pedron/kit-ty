@@ -14,7 +14,7 @@ describe('loadConfig', () => {
       PAYMENT_DEADLINE_SECONDS: 120,
       INVOICE_EXPIRY_SECONDS: 3600,
       KITTY_STT_LANGUAGE: 'en',
-      KITTY_STT_MODEL: 'WHISPER_BASE_Q8_0',
+      KITTY_STT_MODEL: 'WHISPER_SMALL_Q8_0',
     });
     expect(() => loadConfig({ KITTY_STT_LANGUAGE: 'fr' })).toThrow(/KITTY_STT_LANGUAGE/);
     expect(nodeUrls(c).dave).toBe('http://127.0.0.1:3004');

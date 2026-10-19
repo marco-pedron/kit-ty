@@ -6,7 +6,7 @@ import type { OcrBlock } from './ocr-lines.js';
 // receipt text, QWEN3_1_7B_INST_Q4 for the JSON, both loaded once and from the local cache,
 // so it works with the Wi-Fi off. The SDK is imported inside load(): if it cannot be loaded
 // on this machine the agent still starts, with the AI in error (manual form).
-// Speech (docs/vendor/QVAC.md: Transcription): WHISPER_BASE_Q8_0 or _SMALL_, multilingual, with the Silero
+// Speech (docs/vendor/QVAC.md: Transcription): WHISPER_SMALL_Q8_0 (or _BASE_), multilingual, with the Silero
 // VAD, loaded by loadSpeech() after the others; Whisper takes one language at load time.
 
 type Sdk = typeof import('@qvac/sdk');
@@ -16,7 +16,7 @@ export interface QvacEngineOptions {
   maxTokens?: number;
   /** Language of the dictated sentence (KITTY_STT_LANGUAGE). */
   speechLanguage?: 'en' | 'it';
-  /** Whisper size (KITTY_STT_MODEL): base is lighter, small hears better. */
+  /** Whisper size (KITTY_STT_MODEL): small by default (ai:eval:speech), base is lighter. */
   speechModel?: SpeechModel;
 }
 
@@ -72,7 +72,7 @@ export function createQvacEngine(opts: QvacEngineOptions = {}): AiEngine {
 
     async loadSpeech() {
       sdk ??= await import('@qvac/sdk');
-      const whisper = sdk[opts.speechModel ?? 'WHISPER_BASE_Q8_0'];
+      const whisper = sdk[opts.speechModel ?? 'WHISPER_SMALL_Q8_0'];
       await verifyModels([whisper, sdk.VAD_SILERO_5_1_2], qvacCacheDir());
       speechId = await sdk.loadModel({
         modelSrc: whisper,

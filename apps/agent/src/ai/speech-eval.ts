@@ -24,7 +24,7 @@ const spec = JSON.parse(readFileSync(`${dir}expected.json`, 'utf8')) as {
 // At least 9 tracks in 10 with every keyword heard.
 const PASS_SHARE = 0.9;
 const model: SpeechModel =
-  process.env.KITTY_STT_MODEL === 'WHISPER_SMALL_Q8_0' ? 'WHISPER_SMALL_Q8_0' : 'WHISPER_BASE_Q8_0';
+  process.env.KITTY_STT_MODEL === 'WHISPER_BASE_Q8_0' ? 'WHISPER_BASE_Q8_0' : 'WHISPER_SMALL_Q8_0';
 
 if (process.argv.includes('--download')) {
   const sdk = await import('@qvac/sdk');
