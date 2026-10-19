@@ -24,7 +24,10 @@ let runtime: AgentRuntime | null = null;
 const ai = config.KITTY_FAKES
   ? undefined
   : createAiService({
-      engine: createQvacEngine({ speechLanguage: config.KITTY_STT_LANGUAGE }),
+      engine: createQvacEngine({
+        speechLanguage: config.KITTY_STT_LANGUAGE,
+        speechModel: config.KITTY_STT_MODEL,
+      }),
       log: { info: (m) => app.log.info(m), error: (m) => app.log.error(m) },
     });
 const app = buildAgentServer(config, { runtime: () => runtime, ...(ai && { ai }) });

@@ -71,6 +71,21 @@ const cleanTranscript = (raw: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
+// Names, then item labels without quantities or measures ("Coke x2" → "Coke"): a number in the
+// prompt is echoed back by Whisper ("Coke x4").
+function speechHint(members: MemberId[], items: string[]): string | undefined {
+  const labels = items
+    .map((l) =>
+      l
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\b\d+\s*[x×]\b|\b[x×]\s*\d+\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter((l, i, all) => l !== '' && all.indexOf(l) === i);
+  const parts = [members.map(cap).join(', '), labels.join(', ')].filter((p) => p !== '');
+  return parts.length > 0 ? `${parts.join('. ')}.` : undefined;
+}
 
 const prompt = (name: string) =>
   readFileSync(new URL(`./prompts/${name}.md`, import.meta.url), 'utf8').trim();
@@ -291,8 +306,7 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
       return serial(async () => {
         const start = now();
         // Whisper's initial prompt: the words it should spell as the split expects.
-        const words = [...(hints.members ?? []).map(cap), ...(hints.items ?? [])];
-        const hint = words.length > 0 ? `${words.join(', ')}.` : undefined;
+        const hint = speechHint(hints.members ?? [], hints.items ?? []);
         let raw: string;
         try {
           raw = await opts.engine.transcribe(wav.pcm, hint);

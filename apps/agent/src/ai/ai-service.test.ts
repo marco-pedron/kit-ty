@@ -396,7 +396,7 @@ describe('transcribe', () => {
     expect(ai.speechStatus()).toBe('ready');
     const r = await ai.transcribe(speechWav(), {
       members: ['alice', 'bob', 'charlie'],
-      items: ['Pho bo', 'Water'],
+      items: ['Pho bo x2', 'Coke x2', '2x Coke', 'Bananas (0.73 kg)', 'Water'],
     });
     expect(r).toMatchObject({
       ok: true,
@@ -404,7 +404,7 @@ describe('transcribe', () => {
       attempts: 1,
     });
     expect(heard[0]?.pcm.length).toBe(3200);
-    expect(heard[0]?.prompt).toBe('Alice, Bob, Charlie, Pho bo, Water.');
+    expect(heard[0]?.prompt).toBe('Alice, Bob, Charlie. Pho bo, Coke, Bananas, Water.');
   });
 
   it('refuses a recording in another format before running the model', async () => {

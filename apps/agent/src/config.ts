@@ -31,6 +31,7 @@ export const ConfigSchema = z.object({
   INVOICE_EXPIRY_SECONDS: seconds(3600),
   // Whisper takes one language at load time (QVAC 0.21): the language the payer dictates in.
   KITTY_STT_LANGUAGE: z.enum(['en', 'it']).default('en'),
+  KITTY_STT_MODEL: z.enum(['WHISPER_BASE_Q8_0', 'WHISPER_SMALL_Q8_0']).default('WHISPER_BASE_Q8_0'),
 });
 
 export type Config = z.output<typeof ConfigSchema>;
