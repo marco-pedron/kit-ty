@@ -1,0 +1,83 @@
+{
+  "receipt": "eur-pizzeria-02.png",
+  "merchant": "PIZZERIA VESUVIO",
+  "date": "2026-10-18",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Acqua frizzante",
+      "quantity": 3,
+      "unitPrice": "150",
+      "total": "450"
+    },
+    {
+      "label": "Birra media",
+      "quantity": 1,
+      "unitPrice": "550",
+      "total": "550"
+    },
+    {
+      "label": "Calzone",
+      "quantity": 1,
+      "unitPrice": "850",
+      "total": "850"
+    },
+    {
+      "label": "Coca cola",
+      "quantity": 2,
+      "unitPrice": "300",
+      "total": "600"
+    }
+  ],
+  "subtotal": "2450",
+  "tax": null,
+  "tip": "240",
+  "total": "2690",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "PIZZERIA VESUVIO",
+    "18/10/2026 14:10",
+    "Acqua frizzante 3 x 1,50 4,50 4.50",
+    "Birra media 5,50",
+    "Calzone 8,50",
+    "Coca cola 2 x 3,00 6,00 6",
+    "Subtotal 24,50",
+    "Tip 2,40",
+    "TOTALE EUR 26,90",
+    "VAT included"
+  ]
+}

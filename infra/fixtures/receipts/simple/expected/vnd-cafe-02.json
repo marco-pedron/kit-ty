@@ -1,0 +1,83 @@
+{
+  "receipt": "vnd-cafe-02.png",
+  "merchant": "CAFE PHO CO",
+  "date": "2026-10-30",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Ca phe den",
+      "quantity": 1,
+      "unitPrice": "24000",
+      "total": "24000"
+    },
+    {
+      "label": "Tra da",
+      "quantity": 2,
+      "unitPrice": "7000",
+      "total": "14000"
+    },
+    {
+      "label": "Ca phe sua da",
+      "quantity": 3,
+      "unitPrice": "31000",
+      "total": "93000"
+    },
+    {
+      "label": "Sinh to bo",
+      "quantity": 1,
+      "unitPrice": "45000",
+      "total": "45000"
+    }
+  ],
+  "subtotal": "176000",
+  "tax": null,
+  "tip": "30000",
+  "total": "206000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CAFE PHO CO",
+    "30/10/2026 10:56",
+    "Ca phe den 24.000",
+    "Tra da 2 x 7.000 14.000 2 x 7.000 14.000",
+    "Ca phe sua da 3 x 31.000 93.000 93.000",
+    "Sinh to bo 45.000",
+    "Subtotal 176.000",
+    "Tip 30.000",
+    "TOTAL VND 206.000",
+    "Thank you!"
+  ]
+}

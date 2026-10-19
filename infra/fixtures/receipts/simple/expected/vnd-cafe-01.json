@@ -1,0 +1,67 @@
+{
+  "receipt": "vnd-cafe-01.png",
+  "merchant": "CAFE HOA SEN",
+  "date": "2026-10-17",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Tra da",
+      "quantity": 1,
+      "unitPrice": "7000",
+      "total": "7000"
+    },
+    {
+      "label": "Ca phe sua da",
+      "quantity": 2,
+      "unitPrice": "30000",
+      "total": "60000"
+    },
+    {
+      "label": "Ca phe den",
+      "quantity": 2,
+      "unitPrice": "29000",
+      "total": "58000"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "125000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CAFE HOA SEN",
+    "17/10/2026 15:08",
+    "Tra da 7.000",
+    "Ca phe sua da 2 x 30.000 60.000",
+    "Ca phe den 2 x 29.000 58.000",
+    "TOTAL VND 125.000"
+  ]
+}

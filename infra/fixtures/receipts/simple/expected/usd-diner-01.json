@@ -1,0 +1,69 @@
+{
+  "receipt": "usd-diner-01.png",
+  "merchant": "SUNRISE DINER",
+  "date": "2026-10-01",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Pancakes",
+      "quantity": 1,
+      "unitPrice": "1100",
+      "total": "1100"
+    },
+    {
+      "label": "Coffee",
+      "quantity": 1,
+      "unitPrice": "350",
+      "total": "350"
+    },
+    {
+      "label": "Apple pie",
+      "quantity": 2,
+      "unitPrice": "475",
+      "total": "950"
+    }
+  ],
+  "subtotal": "2400",
+  "tax": null,
+  "tip": null,
+  "total": "2400",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "SUNRISE DINER",
+    "10/01/2026 09:45",
+    "Pancakes 11.00",
+    "Coffee 3.50 3.50",
+    "Apple pie 2 x 4.75 9.50",
+    "Subtotal 24.00",
+    "TOTAL USD 24.00",
+    "Have a nice day!"
+  ]
+}

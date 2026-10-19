@@ -1,0 +1,94 @@
+{
+  "receipt": "usd-grocery-02.png",
+  "merchant": "GREEN VALLEY MARKET",
+  "date": "2026-10-06",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Eggs",
+      "quantity": 3,
+      "unitPrice": "315",
+      "total": "945"
+    },
+    {
+      "label": "Cereal",
+      "quantity": 1,
+      "unitPrice": "570",
+      "total": "570"
+    },
+    {
+      "label": "Apples",
+      "quantity": 1,
+      "unitPrice": "275",
+      "total": "275"
+    },
+    {
+      "label": "Orange soda",
+      "quantity": 2,
+      "unitPrice": "175",
+      "total": "350"
+    },
+    {
+      "label": "Bananas",
+      "quantity": 2,
+      "unitPrice": "175",
+      "total": "350"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "2490",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "GREEN VALLEY MARKET",
+    "10/06/2026 15:29",
+    "Eggs 3 x 3.15 9.45",
+    "Cereal 5.70",
+    "Apples 2.75",
+    "0 Orange soda 2 x 1.75 3.50",
+    "2 x 1.75 3.50 Bananas",
+    "TOTAL USD 24.90",
+    "Thank you!"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "receipt": "vnd-street-01.png",
+  "merchant": "QUAN BUN CHA",
+  "date": "2026-10-07",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Banh mi",
+      "quantity": 1,
+      "unitPrice": "24000",
+      "total": "24000"
+    },
+    {
+      "label": "Pho ga",
+      "quantity": 1,
+      "unitPrice": "45000",
+      "total": "45000"
+    },
+    {
+      "label": "Goi cuon",
+      "quantity": 1,
+      "unitPrice": "43000",
+      "total": "43000"
+    },
+    {
+      "label": "Com tam",
+      "quantity": 3,
+      "unitPrice": "40000",
+      "total": "120000"
+    }
+  ],
+  "subtotal": "232000",
+  "tax": null,
+  "tip": "25000",
+  "total": "257000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "QUAN BUN CHA",
+    "07/10/2026 14:42",
+    "Bank mi 24.000",
+    "Pho ga 45.000",
+    "Goi com 43.000",
+    "Com tam 3 x 40.000 120.000",
+    "Subtotal 232.000",
+    "Tip 25.000",
+    "TOTAL VND 257.000"
+  ]
+}

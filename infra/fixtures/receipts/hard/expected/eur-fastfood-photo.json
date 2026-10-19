@@ -1,0 +1,60 @@
+{
+  "receipt": "eur-fastfood-photo.png",
+  "_derivedFrom": "eur-fastfood.png",
+  "merchant": "BURGER STATION",
+  "date": "2026-10-17",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "MENU CLASSIC L",
+      "quantity": 2,
+      "unitPrice": "890",
+      "total": "1780"
+    },
+    {
+      "label": "NUGGETS 9PZ",
+      "quantity": 1,
+      "unitPrice": "520",
+      "total": "520"
+    },
+    {
+      "label": "GELATO CARAMELLO",
+      "quantity": 2,
+      "unitPrice": "190",
+      "total": "380"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "2680",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  }
+}

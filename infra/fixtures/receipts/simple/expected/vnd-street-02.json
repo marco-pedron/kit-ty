@@ -1,0 +1,70 @@
+{
+  "receipt": "vnd-street-02.png",
+  "merchant": "BANH MI PHO",
+  "date": "2026-10-09",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Nuoc mia",
+      "quantity": 2,
+      "unitPrice": "10000",
+      "total": "20000"
+    },
+    {
+      "label": "Banh mi",
+      "quantity": 1,
+      "unitPrice": "27000",
+      "total": "27000"
+    },
+    {
+      "label": "Goi cuon",
+      "quantity": 1,
+      "unitPrice": "44000",
+      "total": "44000"
+    }
+  ],
+  "subtotal": "91000",
+  "tax": null,
+  "tip": "15000",
+  "total": "106000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "manual",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "BANH MI PHO",
+    "09/10/2026 12:50",
+    "Nuoc mia 2 x 10.000 20.000 2 x 10.000 20.000",
+    "Bank mi 27.000",
+    "Goi com 44.000",
+    "Subtotal 91.000 21.000",
+    "Tip 15.000",
+    "TOTAL VND 106.000",
+    "Cam on quy khach!"
+  ]
+}

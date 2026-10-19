@@ -1,0 +1,82 @@
+{
+  "receipt": "vnd-minimart-03.png",
+  "merchant": "MINIMART BEN THANH",
+  "date": "2026-10-20",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Nuoc suoi",
+      "quantity": 1,
+      "unitPrice": "8000",
+      "total": "8000"
+    },
+    {
+      "label": "Bia Saigon",
+      "quantity": 3,
+      "unitPrice": "21000",
+      "total": "63000"
+    },
+    {
+      "label": "Tra xanh",
+      "quantity": 2,
+      "unitPrice": "12000",
+      "total": "24000"
+    },
+    {
+      "label": "Banh quy",
+      "quantity": 1,
+      "unitPrice": "19000",
+      "total": "19000"
+    }
+  ],
+  "subtotal": "114000",
+  "tax": null,
+  "tip": "25000",
+  "total": "139000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MINIMART BEN THANH",
+    "20/10/2026 17:42",
+    "Nuoc suoi 8.000",
+    "Bia Saigon 3 x 21.000 63.000",
+    "Tra xanh 2 x 12.000 24.000",
+    "Bank quy 29.000",
+    "Subtotal 114.000",
+    "Tip 25.000",
+    "TOTAL VND 139.000"
+  ]
+}

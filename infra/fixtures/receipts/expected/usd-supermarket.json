@@ -1,0 +1,82 @@
+{
+  "receipt": "usd-supermarket.png",
+  "merchant": "FRESH MARKET",
+  "date": "2026-10-16",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Bananas 0.73 kg",
+      "quantity": 1,
+      "unitPrice": "80",
+      "total": "80"
+    },
+    {
+      "label": "Water 1.5L",
+      "quantity": 2,
+      "unitPrice": "125",
+      "total": "250"
+    },
+    {
+      "label": "Rice crackers",
+      "quantity": 1,
+      "unitPrice": "340",
+      "total": "340"
+    },
+    {
+      "label": "Instant noodles",
+      "quantity": 3,
+      "unitPrice": "90",
+      "total": "270"
+    }
+  ],
+  "subtotal": "940",
+  "tax": "75",
+  "tip": null,
+  "total": "1015",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "FRESH MARKET",
+    "10/16/2026 18:05",
+    "3.73 kg @ 1.10/kg 0.80",
+    "Water 1.5L 2 x 1.25 2.50",
+    "Rice crackers 3.40",
+    "Instant noodles 3 x 0.90 2.70",
+    "Subtotal 9.40",
+    "Sales tax 0.75",
+    "TOTAL USD 10.15"
+  ]
+}

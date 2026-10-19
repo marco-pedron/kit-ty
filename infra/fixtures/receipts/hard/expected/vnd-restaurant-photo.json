@@ -1,0 +1,72 @@
+{
+  "receipt": "vnd-restaurant-photo.png",
+  "_derivedFrom": "vnd-restaurant.png",
+  "merchant": "NHA HANG PHO 36",
+  "date": "2026-10-17",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Pho bo tai",
+      "quantity": 2,
+      "unitPrice": "65000",
+      "total": "130000"
+    },
+    {
+      "label": "Bia Sai Gon",
+      "quantity": 3,
+      "unitPrice": "25000",
+      "total": "75000"
+    },
+    {
+      "label": "Tra da",
+      "quantity": 3,
+      "unitPrice": "5000",
+      "total": "15000"
+    },
+    {
+      "label": "Nem ran",
+      "quantity": 1,
+      "unitPrice": "45000",
+      "total": "45000"
+    }
+  ],
+  "subtotal": "265000",
+  "tax": "21200",
+  "tip": null,
+  "total": "286200",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  }
+}

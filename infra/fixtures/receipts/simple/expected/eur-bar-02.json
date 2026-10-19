@@ -1,0 +1,57 @@
+{
+  "receipt": "eur-bar-02.png",
+  "merchant": "CAFFE DEL PONTE",
+  "date": "2026-10-13",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Tramezzino",
+      "quantity": 1,
+      "unitPrice": "360",
+      "total": "360"
+    },
+    {
+      "label": "Cappuccino",
+      "quantity": 3,
+      "unitPrice": "150",
+      "total": "450"
+    }
+  ],
+  "subtotal": "810",
+  "tax": null,
+  "tip": "80",
+  "total": "890",
+  "_source": {
+    "merchant": "manual",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CAFFE DEL PONTÉ",
+    "13/10/2026 15:29",
+    "Tramezzino 3,60",
+    "Cappuccino 3 x 1.50 4.50",
+    "Subtotal 8,10",
+    "Tip 0,80",
+    "TOTAL EUR 8,90",
+    "IVA inclusa"
+  ]
+}

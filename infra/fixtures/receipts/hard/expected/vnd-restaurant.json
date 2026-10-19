@@ -1,0 +1,100 @@
+{
+  "receipt": "vnd-restaurant.png",
+  "merchant": "NHA HANG PHO 36",
+  "date": "2026-10-17",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Pho bo tai",
+      "quantity": 2,
+      "unitPrice": "65000",
+      "total": "130000"
+    },
+    {
+      "label": "Bia Sai Gon",
+      "quantity": 3,
+      "unitPrice": "25000",
+      "total": "75000"
+    },
+    {
+      "label": "Tra da",
+      "quantity": 3,
+      "unitPrice": "5000",
+      "total": "15000"
+    },
+    {
+      "label": "Nem ran",
+      "quantity": 1,
+      "unitPrice": "45000",
+      "total": "45000"
+    }
+  ],
+  "subtotal": "265000",
+  "tax": "21200",
+  "tip": null,
+  "total": "286200",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "NHA HANG PHO 36",
+    "36 Pho Hang Bac, Hoan Kiem, Ha Noi",
+    "MST: 0109876543 DT: 024 0000 3636",
+    "10",
+    "HOA DON THANH TOAN",
+    "So HD: 000184 Ban: 07 Khach: 3",
+    "Vaio : 19:12 Ra : 20:41",
+    "Ngay: 17/10/2016",
+    "10",
+    "Pho bo ta 2 x 65.000 130.000 2 x 65.000 130.000",
+    "Bia Sai Goni 3 x 25.000 75.000 T5.000",
+    "Tra da 3 x 5.000 15.000",
+    "1 x 45.000 45.000 45.000",
+    "10",
+    "Tam tinh 265.000",
+    "The VAT 8% 21.200",
+    "Tong Cong (VND) 286.200",
+    "Tien khach dua 300.000",
+    "13.800",
+    "10,86 USD (ty gia 26.350)",
+    "10",
+    "wifi: PH036 guest Pass: 88889999",
+    "Ma tra cuăn HABT: 7202 X9PL-0184",
+    "Hash: c41e09b7a2f35d8e0b9ca4f72d3e51",
+    "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "Quet ma de chuyen koan",
+    "Can on quy khach! Hen gap lai"
+  ]
+}

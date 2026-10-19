@@ -1,0 +1,94 @@
+{
+  "receipt": "eur-fastfood.png",
+  "merchant": "BURGER STATION",
+  "date": "2026-10-17",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "MENU CLASSIC L",
+      "quantity": 2,
+      "unitPrice": "890",
+      "total": "1780"
+    },
+    {
+      "label": "NUGGETS 9PZ",
+      "quantity": 1,
+      "unitPrice": "520",
+      "total": "520"
+    },
+    {
+      "label": "GELATO CARAMELLO",
+      "quantity": 2,
+      "unitPrice": "190",
+      "total": "380"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "2680",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "BURGER STATION",
+    "Burger Station Torino S.r.l.",
+    "Via Garibaldi 41 - 10122 Torino (TO)",
+    "P.IVA 10987654321 Tel. 011 000 4471",
+    "10",
+    "DOCUMENTO COMMERCIALE",
+    "Di vendita o prestazione",
+    "10",
+    "ORDINANCE N.",
+    "247",
+    "Casa 03 Op. 17 Tauolo 12",
+    "2 x MENU CLASSIC L 8,90 17,80",
+    "+ Patatine grandi",
+    "+ Bibita 0,5L",
+    "1 x NUGGETS 9PZ 5,20",
+    "2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times 2 \\times",
+    "Ketchup x2 OMAGGI0",
+    "10",
+    "TOTALE COMPLESSIVO 26,80",
+    "di cu'I VIA 10% 2,44",
+    "Pagamento contante 30,00",
+    "Resto 3,20",
+    "Importo pagato 26,80",
+    "10",
+    "17-10-2026 13:27 DOC.N. 09422-0187",
+    "AT 99MEX012345 Z-REP 0311",
+    "Hash: 8f3a91c0d7e4b65a1f09e3c77d2b418",
+    "Punti Station Club accumulati: 26",
+    "QR code",
+    "BAGNO: inquidita il QR o digita 4821",
+    "A black and white QR code is displayed on a white background.",
+    "Sondaggi: vincoli da MENU da 8,99!",
+    "Grazie e arrivedi"
+  ]
+}

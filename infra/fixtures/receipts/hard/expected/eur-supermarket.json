@@ -1,0 +1,162 @@
+{
+  "receipt": "eur-supermarket.png",
+  "merchant": "SUPERMERCATO SOLE",
+  "date": "2026-10-16",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "BANANE",
+      "quantity": 1,
+      "unitPrice": "183",
+      "total": "183"
+    },
+    {
+      "label": "LATTE INTERO 1L",
+      "quantity": 2,
+      "unitPrice": "129",
+      "total": "258"
+    },
+    {
+      "label": "PASTA SPAGHETTI 500G",
+      "quantity": 1,
+      "unitPrice": "99",
+      "total": "99"
+    },
+    {
+      "label": "ACQUA NAT. 6X1,5L",
+      "quantity": 1,
+      "unitPrice": "234",
+      "total": "234"
+    },
+    {
+      "label": "YOGURT GRECO",
+      "quantity": 3,
+      "unitPrice": "89",
+      "total": "267"
+    },
+    {
+      "label": "PANE COMUNE",
+      "quantity": 1,
+      "unitPrice": "132",
+      "total": "132"
+    },
+    {
+      "label": "SHAMPOO 250ML",
+      "quantity": 1,
+      "unitPrice": "349",
+      "total": "349"
+    },
+    {
+      "label": "CAFFE MACINATO 250G",
+      "quantity": 1,
+      "unitPrice": "325",
+      "total": "325"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "1847",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "SUPERMERCATO SOLE",
+    "Corso Vittorio 200 - 10125 Torino",
+    "P.IVA 01234560019 Punto vendita 0815",
+    "10",
+    "DOCUMENTO COMMERCIALE",
+    "10",
+    "8001234000014",
+    "BANANE 1,83 B",
+    "0,734 kg x 2,49 EUR/kg",
+    "8001234000001",
+    "LATTE INTERO 1L 2 x 1,29 2,58 A",
+    "800123400000038",
+    "PASTA SPAGHETTI 500G 0,99 A",
+    "80012340000045",
+    "ACQUA MAT. 6X1,5L 2,34 C",
+    "8001234000062",
+    "YOGURT GRECO 3 x 0,89 2,67 A",
+    "800123400869",
+    "PANE COUNTE 1,32 B",
+    "0,412 kg x 3,20 EUR/kg",
+    "8001234000076",
+    "SHAMPOO 250ML 3,49 C",
+    "8001234000883",
+    "CAFFE MACINATO 250G 3,25 C",
+    "10",
+    "TOTALE EUR 18,47",
+    "11",
+    "Pagamento elettronico 18,47",
+    "Carta ********* 4417 Aut. 093751",
+    "10",
+    "Alíg Imporible Imposta",
+    "A 4% 6,00 0,24",
+    "B 10% 2,86 0,29",
+    "C 22% 7,44 1,64",
+    "10",
+    "16-10-2026 18:52 DOC.N. 1127-0694",
+    "Hash: 5be0f29ac3d147f8a6b0c92d1e3fa7",
+    "Punti carta Sole 18 Salado 1.240",
+    "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+    "2900012345678",
+    "Conservare per eventuali risi"
+  ]
+}

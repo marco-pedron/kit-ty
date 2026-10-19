@@ -1,0 +1,55 @@
+{
+  "receipt": "eur-grocery-01.png",
+  "merchant": "ALIMENTARI LA BOTTEGA",
+  "date": "2026-10-18",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Pasta",
+      "quantity": 3,
+      "unitPrice": "120",
+      "total": "360"
+    },
+    {
+      "label": "Olio di oliva",
+      "quantity": 1,
+      "unitPrice": "640",
+      "total": "640"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "1000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "ALIMENTARI LA BOTTEGA",
+    "18/10/2026 16:53",
+    "Pasta 3 x 1,20 3,60",
+    "Olio di oliva 6,40",
+    "TOTAL EUR 10,000",
+    "IVA inclusa"
+  ]
+}

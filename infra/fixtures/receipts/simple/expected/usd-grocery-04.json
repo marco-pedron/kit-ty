@@ -1,0 +1,70 @@
+{
+  "receipt": "usd-grocery-04.png",
+  "merchant": "CITY PANTRY",
+  "date": "2026-10-22",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Peanut butter",
+      "quantity": 2,
+      "unitPrice": "445",
+      "total": "890"
+    },
+    {
+      "label": "Eggs",
+      "quantity": 1,
+      "unitPrice": "400",
+      "total": "400"
+    },
+    {
+      "label": "Bread",
+      "quantity": 2,
+      "unitPrice": "250",
+      "total": "500"
+    }
+  ],
+  "subtotal": "1790",
+  "tax": null,
+  "tip": "180",
+  "total": "1970",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CITY PANTRY",
+    "10/22/2026 17:15",
+    "Peanut butter 2 x 4.45 8.90",
+    "Eggs 4.00",
+    "Bread 2 x 2.50 5.00",
+    "Subtotal 17.90",
+    "Tip 1.80",
+    "TOTAL USD 19.70",
+    "Thank you!"
+  ]
+}

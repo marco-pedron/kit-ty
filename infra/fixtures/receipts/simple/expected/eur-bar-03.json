@@ -1,0 +1,55 @@
+{
+  "receipt": "eur-bar-03.png",
+  "merchant": "BAR DELLA STAZIONE",
+  "date": "2026-10-22",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Tramezzino",
+      "quantity": 2,
+      "unitPrice": "340",
+      "total": "680"
+    },
+    {
+      "label": "Caffe espresso",
+      "quantity": 2,
+      "unitPrice": "120",
+      "total": "240"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "920",
+  "_source": {
+    "merchant": "manual",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "BAR DELLA STAZZONE",
+    "22/10/2026 15:49",
+    "Tramezzino 2 x 3,40 6,80",
+    "Caffè espresso 2 x 1,20 2,40",
+    "TOTAL EUR 9,20",
+    "VAT included"
+  ]
+}

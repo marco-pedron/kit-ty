@@ -1,0 +1,56 @@
+{
+  "receipt": "eur-taxi.png",
+  "merchant": "TAXI CITY CAB",
+  "date": "2026-10-15",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Airport transfer",
+      "quantity": 1,
+      "unitPrice": "3850",
+      "total": "3850"
+    },
+    {
+      "label": "Luggage supplement",
+      "quantity": 1,
+      "unitPrice": "200",
+      "total": "200"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": "450",
+  "total": "4500",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "TAXI CITY CAB",
+    "Date: 15/10/2026 08:12",
+    "Airport transfer 38,50",
+    "Luggage supplement 2,00",
+    "Tip 4,50",
+    "TOTAL EUR 45,00",
+    "VAT included"
+  ]
+}

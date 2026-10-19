@@ -1,0 +1,69 @@
+{
+  "receipt": "eur-museum-01.png",
+  "merchant": "MUSEO CIVICO",
+  "date": "2026-10-31",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Biglietto intero",
+      "quantity": 1,
+      "unitPrice": "1450",
+      "total": "1450"
+    },
+    {
+      "label": "Catalogo mostra",
+      "quantity": 1,
+      "unitPrice": "2450",
+      "total": "2450"
+    },
+    {
+      "label": "Mostra temporanea",
+      "quantity": 1,
+      "unitPrice": "800",
+      "total": "800"
+    }
+  ],
+  "subtotal": "4700",
+  "tax": null,
+  "tip": "470",
+  "total": "5170",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "manual",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MUSEO CIVICO",
+    "31/10/2026 17:06",
+    "Biglietto intero 14,50",
+    "Catalog mostra 24,50",
+    "Mostra temporanea 8,00",
+    "Subtotal 47,000",
+    "Tip 4,70",
+    "TOTAL EUR 51,70"
+  ]
+}

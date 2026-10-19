@@ -1,0 +1,69 @@
+{
+  "receipt": "eur-museum-02.png",
+  "merchant": "MUSEO DEL MARE",
+  "date": "2026-10-21",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Mostra temporanea",
+      "quantity": 1,
+      "unitPrice": "600",
+      "total": "600"
+    },
+    {
+      "label": "Catalogo mostra",
+      "quantity": 3,
+      "unitPrice": "1850",
+      "total": "5550"
+    },
+    {
+      "label": "Biglietto ridotto",
+      "quantity": 2,
+      "unitPrice": "800",
+      "total": "1600"
+    }
+  ],
+  "subtotal": "7750",
+  "tax": null,
+  "tip": "1160",
+  "total": "8910",
+  "_source": {
+    "merchant": "manual",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "manual",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MUSÉO DEL MARE",
+    "21/10/2026 22:25",
+    "Mostra temporanea 6,00",
+    "Catalog mostra 3 x 18,50 55,50 55,50",
+    "Biglietto ridotto 2 x 8,00 16,00",
+    "Subtotal 77,500 77,500",
+    "Tip 11,60",
+    "TOTAL EUR 89,10"
+  ]
+}

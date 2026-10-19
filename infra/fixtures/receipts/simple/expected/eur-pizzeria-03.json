@@ -1,0 +1,68 @@
+{
+  "receipt": "eur-pizzeria-03.png",
+  "merchant": "PIZZERIA LA BRACE",
+  "date": "2026-10-17",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Coca cola",
+      "quantity": 2,
+      "unitPrice": "350",
+      "total": "700"
+    },
+    {
+      "label": "Patatine fritte",
+      "quantity": 1,
+      "unitPrice": "400",
+      "total": "400"
+    },
+    {
+      "label": "Tiramisu",
+      "quantity": 1,
+      "unitPrice": "550",
+      "total": "550"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "1650",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "PIZZERIA LA BRACE",
+    "17/10/2026 10:55",
+    "Coca cola 2 x 3,50 7,00 7 90",
+    "Patatine fritte 4,00",
+    "Tiramisu 5,50",
+    "TOTALE EUR 16,50",
+    "Grazie e arrivaderciti!"
+  ]
+}

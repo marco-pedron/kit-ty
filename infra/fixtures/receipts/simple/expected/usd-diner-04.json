@@ -1,0 +1,70 @@
+{
+  "receipt": "usd-diner-04.png",
+  "merchant": "ROADSIDE GRILL",
+  "date": "2026-10-03",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "French fries",
+      "quantity": 2,
+      "unitPrice": "425",
+      "total": "850"
+    },
+    {
+      "label": "Apple pie",
+      "quantity": 2,
+      "unitPrice": "450",
+      "total": "900"
+    },
+    {
+      "label": "Pancakes",
+      "quantity": 2,
+      "unitPrice": "775",
+      "total": "1550"
+    }
+  ],
+  "subtotal": "3300",
+  "tax": null,
+  "tip": "500",
+  "total": "3800",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "ROADSIDE GRILL",
+    "10/03/2026 09:43",
+    "French fries 2 x 4.25 8.50 8.50",
+    "Apple pie 2 x 4.50 9.00",
+    "Pancakes 2 x 7.75 15.50 15.50",
+    "Subtotal 33.00",
+    "Tip 5.00",
+    "TOTAL USD 38.00",
+    "Have a nice day!"
+  ]
+}

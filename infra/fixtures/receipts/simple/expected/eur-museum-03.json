@@ -1,0 +1,82 @@
+{
+  "receipt": "eur-museum-03.png",
+  "merchant": "GALLERIA MODERNA",
+  "date": "2026-10-29",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Biglietto intero",
+      "quantity": 2,
+      "unitPrice": "1750",
+      "total": "3500"
+    },
+    {
+      "label": "Biglietto ridotto",
+      "quantity": 1,
+      "unitPrice": "900",
+      "total": "900"
+    },
+    {
+      "label": "Mostra temporanea",
+      "quantity": 2,
+      "unitPrice": "800",
+      "total": "1600"
+    },
+    {
+      "label": "Catalogo mostra",
+      "quantity": 1,
+      "unitPrice": "1700",
+      "total": "1700"
+    }
+  ],
+  "subtotal": "7700",
+  "tax": null,
+  "tip": "770",
+  "total": "8470",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "manual",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "GALLERIA MODERNA",
+    "29/10/2026 16:15",
+    "Biglietto intero 2 x 17,50 35,00 55",
+    "Biglietto ridottto 9,00",
+    "Mostra temporanea 2 x 8,00 16,00 16,00",
+    "Catalog mostra 17,00",
+    "Subtotal 77,000",
+    "Tip 7,70",
+    "TOTALE EUR 84,70"
+  ]
+}

@@ -1,0 +1,83 @@
+{
+  "receipt": "eur-grocery-02.png",
+  "merchant": "MINIMARKET CENTRO",
+  "date": "2026-10-08",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "Biscotti",
+      "quantity": 3,
+      "unitPrice": "200",
+      "total": "600"
+    },
+    {
+      "label": "Pane",
+      "quantity": 3,
+      "unitPrice": "200",
+      "total": "600"
+    },
+    {
+      "label": "Vino rosso",
+      "quantity": 2,
+      "unitPrice": "1040",
+      "total": "2080"
+    },
+    {
+      "label": "Pasta",
+      "quantity": 2,
+      "unitPrice": "100",
+      "total": "200"
+    }
+  ],
+  "subtotal": "3480",
+  "tax": null,
+  "tip": "520",
+  "total": "4000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MINIMARKET CENTRO",
+    "08/10/2026 11:32",
+    "Biscotti 3 x 2,00 6,00 6",
+    "Pane 3 x 2,00 6,00 6",
+    "Vino rosso 2 x 10,40 20,80",
+    "Pasta 2 x 1,00 2 x 00 2 x 00",
+    "Subtotal 34,80",
+    "Tip 5,20",
+    "TOTAL EUR 40,00",
+    "Grazie e arrivaderciti!"
+  ]
+}

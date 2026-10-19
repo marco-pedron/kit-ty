@@ -1,0 +1,56 @@
+{
+  "receipt": "vnd-minimart-01.png",
+  "merchant": "MINIMART XANH",
+  "date": "2026-10-04",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Tra xanh",
+      "quantity": 1,
+      "unitPrice": "10000",
+      "total": "10000"
+    },
+    {
+      "label": "Bia Saigon",
+      "quantity": 1,
+      "unitPrice": "21000",
+      "total": "21000"
+    }
+  ],
+  "subtotal": "31000",
+  "tax": null,
+  "tip": "25000",
+  "total": "56000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MINIMART XANH",
+    "04/10/2026 15:11",
+    "Tra xanh 10.000",
+    "Bia Saigon 21.000",
+    "Subtotal 31.000",
+    "Tip 25.000",
+    "TOTAL VND 56.000"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "receipt": "usd-diner-03.png",
+  "merchant": "BLUE MOON DINER",
+  "date": "2026-10-13",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Milkshake",
+      "quantity": 2,
+      "unitPrice": "650",
+      "total": "1300"
+    },
+    {
+      "label": "Club sandwich",
+      "quantity": 1,
+      "unitPrice": "1275",
+      "total": "1275"
+    },
+    {
+      "label": "French fries",
+      "quantity": 1,
+      "unitPrice": "425",
+      "total": "425"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "3000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "BLUE MOON DINER",
+    "10/13/2026 07:24",
+    "2 x 6.50 13.00 13.00",
+    "Club sandwich 12.75",
+    "French fries 4.25",
+    "TOTAL USD 30.00"
+  ]
+}

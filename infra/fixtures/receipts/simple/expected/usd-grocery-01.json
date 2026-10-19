@@ -1,0 +1,70 @@
+{
+  "receipt": "usd-grocery-01.png",
+  "merchant": "CORNER GROCERY",
+  "date": "2026-10-18",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Orange soda",
+      "quantity": 1,
+      "unitPrice": "215",
+      "total": "215"
+    },
+    {
+      "label": "Bread",
+      "quantity": 1,
+      "unitPrice": "280",
+      "total": "280"
+    },
+    {
+      "label": "Eggs",
+      "quantity": 2,
+      "unitPrice": "510",
+      "total": "1020"
+    }
+  ],
+  "subtotal": "1515",
+  "tax": "136",
+  "tip": null,
+  "total": "1651",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CORNER GROCERY",
+    "10/18/2026 11:46",
+    "Orange soda 2.15",
+    "Bread",
+    "Eggs 2 x 5.10 10.20",
+    "Subtotal 15.15",
+    "Sales tax 1.36",
+    "TOTAL USD 16.51",
+    "Have a nice day!"
+  ]
+}

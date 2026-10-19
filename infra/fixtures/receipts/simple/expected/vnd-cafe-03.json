@@ -1,0 +1,83 @@
+{
+  "receipt": "vnd-cafe-03.png",
+  "merchant": "CAFE SONG XANH",
+  "date": "2026-10-29",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Banh flan",
+      "quantity": 1,
+      "unitPrice": "15000",
+      "total": "15000"
+    },
+    {
+      "label": "Sinh to bo",
+      "quantity": 3,
+      "unitPrice": "39000",
+      "total": "117000"
+    },
+    {
+      "label": "Tra da",
+      "quantity": 1,
+      "unitPrice": "7000",
+      "total": "7000"
+    },
+    {
+      "label": "Ca phe sua da",
+      "quantity": 2,
+      "unitPrice": "39000",
+      "total": "78000"
+    }
+  ],
+  "subtotal": "217000",
+  "tax": null,
+  "tip": "30000",
+  "total": "247000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "CAFE SONG XANH",
+    "29/10/2026 08:05",
+    "Bank f Plan 15.000 25.000",
+    "Sinh to bo 3 x 39.000 117.000",
+    "Tra da 7.000",
+    "Ca phe sua da 2 x 39.000 78.000",
+    "Subtotal 217.000",
+    "Tip 30.000",
+    "TOTAL VND 247000",
+    "Cam on quy khach!"
+  ]
+}

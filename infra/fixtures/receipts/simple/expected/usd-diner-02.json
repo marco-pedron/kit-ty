@@ -1,0 +1,55 @@
+{
+  "receipt": "usd-diner-02.png",
+  "merchant": "MAIN STREET DINER",
+  "date": "2026-10-22",
+  "currency": "USD",
+  "items": [
+    {
+      "label": "Club sandwich",
+      "quantity": 1,
+      "unitPrice": "1150",
+      "total": "1150"
+    },
+    {
+      "label": "Orange juice",
+      "quantity": 1,
+      "unitPrice": "325",
+      "total": "325"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "1475",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "MAIN STREET DINER",
+    "10/22/2026 10:03",
+    "Club sandwich 11.50",
+    "Orange juice 3.25",
+    "TOTAL USD 14.75",
+    "Thank you!"
+  ]
+}

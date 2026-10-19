@@ -1,0 +1,120 @@
+{
+  "receipt": "eur-supermarket-photo.png",
+  "_derivedFrom": "eur-supermarket.png",
+  "merchant": "SUPERMERCATO SOLE",
+  "date": "2026-10-16",
+  "currency": "EUR",
+  "items": [
+    {
+      "label": "BANANE",
+      "quantity": 1,
+      "unitPrice": "183",
+      "total": "183"
+    },
+    {
+      "label": "LATTE INTERO 1L",
+      "quantity": 2,
+      "unitPrice": "129",
+      "total": "258"
+    },
+    {
+      "label": "PASTA SPAGHETTI 500G",
+      "quantity": 1,
+      "unitPrice": "99",
+      "total": "99"
+    },
+    {
+      "label": "ACQUA NAT. 6X1,5L",
+      "quantity": 1,
+      "unitPrice": "234",
+      "total": "234"
+    },
+    {
+      "label": "YOGURT GRECO",
+      "quantity": 3,
+      "unitPrice": "89",
+      "total": "267"
+    },
+    {
+      "label": "PANE COMUNE",
+      "quantity": 1,
+      "unitPrice": "132",
+      "total": "132"
+    },
+    {
+      "label": "SHAMPOO 250ML",
+      "quantity": 1,
+      "unitPrice": "349",
+      "total": "349"
+    },
+    {
+      "label": "CAFFE MACINATO 250G",
+      "quantity": 1,
+      "unitPrice": "325",
+      "total": "325"
+    }
+  ],
+  "subtotal": null,
+  "tax": null,
+  "tip": null,
+  "total": "1847",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "manual",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  }
+}

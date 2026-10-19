@@ -1,0 +1,57 @@
+{
+  "receipt": "vnd-street-03.png",
+  "merchant": "QUAN COM TAM",
+  "date": "2026-10-22",
+  "currency": "VND",
+  "items": [
+    {
+      "label": "Pho ga",
+      "quantity": 1,
+      "unitPrice": "42000",
+      "total": "42000"
+    },
+    {
+      "label": "Nuoc mia",
+      "quantity": 3,
+      "unitPrice": "12000",
+      "total": "36000"
+    }
+  ],
+  "subtotal": "78000",
+  "tax": null,
+  "tip": "30000",
+  "total": "108000",
+  "_source": {
+    "merchant": "smolvlm2",
+    "date": "generator",
+    "currency": "generator",
+    "items": [
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      },
+      {
+        "label": "smolvlm2",
+        "quantity": "generator",
+        "unitPrice": "generator",
+        "total": "generator"
+      }
+    ],
+    "subtotal": "smolvlm2",
+    "tax": "generator",
+    "tip": "generator",
+    "total": "generator"
+  },
+  "_vlmRows": [
+    "QUAN COM TAM",
+    "22/10/2026 13:25",
+    "Pho ga 42.000",
+    "Nuoc mia 3 x 12.000 36.000",
+    "Subtotal 78.000",
+    "Tip 30.000",
+    "TOTAL VND 108.000",
+    "Thank you!"
+  ]
+}
