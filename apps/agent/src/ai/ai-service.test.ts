@@ -51,8 +51,12 @@ const dinner: Receipt = {
   warnings: [],
 };
 
-function scripted(answers: string[], opts: { failLoad?: boolean } = {}) {
+function scripted(
+  answers: string[],
+  opts: { failLoad?: boolean; failSpeech?: boolean; heard?: string[] } = {},
+) {
   const calls: ChatMessage[][] = [];
+  const heard: { pcm: Uint8Array; prompt?: string }[] = [];
   const engine: AiEngine = {
     load: async () => {
       if (opts.failLoad) throw new Error('no model in cache');
@@ -64,8 +68,17 @@ function scripted(answers: string[], opts: { failLoad?: boolean } = {}) {
       if (a === undefined) throw new Error('no more answers');
       return a;
     },
+    loadSpeech: async () => {
+      if (opts.failSpeech) throw new Error('no whisper in cache');
+    },
+    transcribe: async (pcm, prompt) => {
+      heard.push({ pcm, ...(prompt !== undefined && { prompt }) });
+      const t = opts.heard?.shift();
+      if (t === undefined) throw new Error('whisper crashed');
+      return t;
+    },
   };
-  return { engine, calls };
+  return { engine, calls, heard };
 }
 
 async function ready(answers: string[]) {
@@ -346,5 +359,86 @@ describe('status', () => {
     const r = await ai.extractReceipt(img);
     expect(!r.ok && r.error).toContain('on-device AI is error');
     expect(s.calls).toHaveLength(0);
+  });
+});
+
+// 0.1 s of 16 kHz mono PCM16 in a minimal WAV (wav.test.ts covers the format rules).
+function speechWav(samples = 1600): Uint8Array {
+  const b = new Uint8Array(44 + samples * 2);
+  const v = new DataView(b.buffer);
+  const put = (at: number, t: string) => [...t].forEach((c, i) => (b[at + i] = c.charCodeAt(0)));
+  put(0, 'RIFF');
+  v.setUint32(4, b.length - 8, true);
+  put(8, 'WAVE');
+  put(12, 'fmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, 16_000, true);
+  v.setUint16(34, 16, true);
+  put(36, 'data');
+  v.setUint32(40, samples * 2, true);
+  return b;
+}
+
+describe('transcribe', () => {
+  async function speech(opts: Parameters<typeof scripted>[1]) {
+    const s = scripted([], opts);
+    const ai = createAiService({ engine: s.engine });
+    await ai.speechLoaded;
+    return { ai, heard: s.heard };
+  }
+
+  it('hands Whisper the samples without the header, names and items as a hint, and cleans the text', async () => {
+    const { ai, heard } = await speech({
+      heard: [' [BLANK_AUDIO] Bob and I had the pho,\n Charlie only beers  '],
+    });
+    expect(ai.speechStatus()).toBe('ready');
+    const r = await ai.transcribe(speechWav(), {
+      members: ['alice', 'bob', 'charlie'],
+      items: ['Pho bo x2', 'Coke x2', '2x Coke', 'Bananas (0.73 kg)', 'Water'],
+    });
+    expect(r).toMatchObject({
+      ok: true,
+      data: { text: 'Bob and I had the pho, Charlie only beers' },
+      attempts: 1,
+    });
+    expect(heard[0]?.pcm.length).toBe(3200);
+    expect(heard[0]?.prompt).toBe('Alice, Bob, Charlie. Pho bo, Coke, Bananas, Water.');
+  });
+
+  it('refuses a recording in another format before running the model', async () => {
+    const { ai, heard } = await speech({ heard: ['never'] });
+    const r = await ai.transcribe(new TextEncoder().encode('OggS…'));
+    expect(r).toMatchObject({ ok: false, partial: {}, error: 'the recording is not a WAV file' });
+    expect(heard).toHaveLength(0);
+  });
+
+  it('silence or only markers → ok: false, the payer types instead', async () => {
+    const { ai } = await speech({ heard: ['[BLANK_AUDIO]'] });
+    const r = await ai.transcribe(speechWav());
+    expect(r).toMatchObject({ ok: false, error: 'no speech heard in the recording' });
+  });
+
+  it('a model error is an answer, not a throw', async () => {
+    const { ai } = await speech({ heard: [] });
+    const r = await ai.transcribe(speechWav());
+    expect(!r.ok && r.error).toBe('speech to text failed: whisper crashed');
+  });
+
+  it('a missing Whisper leaves receipt and split ready', async () => {
+    const { ai, heard } = await speech({ failSpeech: true, heard: ['never'] });
+    expect(ai.status()).toBe('ready');
+    expect(ai.speechStatus()).toBe('error');
+    expect(ai.speechError()).toBe('no whisper in cache');
+    const r = await ai.transcribe(speechWav());
+    expect(!r.ok && r.error).toBe('speech to text is error: no whisper in cache');
+    expect(heard).toHaveLength(0);
+  });
+
+  it('never loads speech when the other models failed', async () => {
+    const { ai } = await speech({ failLoad: true });
+    expect(ai.speechStatus()).toBe('error');
+    expect(ai.speechError()).toBe('the on-device AI did not load');
   });
 });

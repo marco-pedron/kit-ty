@@ -1,11 +1,20 @@
 import { readFileSync } from 'node:fs';
-import type { AiResult, AiStatus, MemberId, Receipt, SplitProposal } from '@kitty/shared';
+import {
+  TranscriptSchema,
+  type AiResult,
+  type AiStatus,
+  type MemberId,
+  type Receipt,
+  type SplitProposal,
+  type Transcript,
+} from '@kitty/shared';
 import type { AiEngine, ChatMessage } from './engine.js';
 import { parseLlmJson } from './llm-text.js';
 import { blocksToLines } from './ocr-lines.js';
 import { llmReceiptJsonSchema, toReceipt } from './receipt.js';
 import { itemKey, llmSplitJsonSchema, toSplitProposal } from './split.js';
 import type { AiService } from './types.js';
+import { wavToPcm16 } from './wav.js';
 
 // The on-device AI of SPEC §11 over any AiEngine (QVAC in production). Every model output goes
 // through zod: at most 2 attempts with the error fed back, then `ok: false` with what could be
@@ -55,6 +64,29 @@ const SPLIT_EXAMPLES: ChatMessage[] = [
   },
 ];
 
+// Whisper marks what is not speech in brackets ("[BLANK_AUDIO]", "[Music]"): never the sentence.
+const cleanTranscript = (raw: string) =>
+  raw
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+const cap = (m: string) => m.charAt(0).toUpperCase() + m.slice(1);
+// Names, then item labels without quantities or measures ("Coke x2" → "Coke"): a number in the
+// prompt is echoed back by Whisper ("Coke x4").
+function speechHint(members: MemberId[], items: string[]): string | undefined {
+  const labels = items
+    .map((l) =>
+      l
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\b\d+\s*[x×]\b|\b[x×]\s*\d+\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
+    )
+    .filter((l, i, all) => l !== '' && all.indexOf(l) === i);
+  const parts = [members.map(cap).join(', '), labels.join(', ')].filter((p) => p !== '');
+  return parts.length > 0 ? `${parts.join('. ')}.` : undefined;
+}
+
 const prompt = (name: string) =>
   readFileSync(new URL(`./prompts/${name}.md`, import.meta.url), 'utf8').trim();
 
@@ -69,6 +101,10 @@ export interface AiServiceHandle extends AiService {
   error(): string | undefined;
   /** Resolves when loading ends, either way. */
   loaded: Promise<void>;
+  /** The speech model's load error; undefined unless speechStatus() is 'error'. */
+  speechError(): string | undefined;
+  /** Resolves when the speech model's loading ends, either way (after `loaded`). */
+  speechLoaded: Promise<void>;
 }
 
 type Converted<T, P> = { ok: true; data: T } | { ok: false; error: string; partial: P };
@@ -89,6 +125,25 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
       opts.log?.error(`on-device AI failed to load: ${loadError}; the manual form stays available`);
     },
   );
+  // Speech after the others, on its own: without it the payer types the sentence.
+  let speechStatus: AiStatus['status'] = 'loading';
+  let speechError: string | undefined;
+  const speechLoaded = loaded
+    .then(() => {
+      if (status !== 'ready') throw new Error('the on-device AI did not load');
+      return opts.engine.loadSpeech();
+    })
+    .then(
+      () => {
+        speechStatus = 'ready';
+        opts.log?.info('on-device speech to text ready');
+      },
+      (e: unknown) => {
+        speechStatus = 'error';
+        speechError = e instanceof Error ? e.message : String(e);
+        opts.log?.error(`speech to text failed to load: ${speechError}; typing stays available`);
+      },
+    );
 
   // One model run at a time: the models are loaded once and shared by the travelers' agents.
   let queue: Promise<unknown> = Promise.resolve();
@@ -139,10 +194,21 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
     latencyMs: 0,
   });
 
+  const refused = (error: string): AiResult<Transcript> => ({
+    ok: false,
+    partial: {},
+    error,
+    attempts: 1,
+    latencyMs: 0,
+  });
+
   return {
     loaded,
     status: () => status,
     error: () => loadError,
+    speechLoaded,
+    speechStatus: () => speechStatus,
+    speechError: () => speechError,
 
     extractReceipt(image: Uint8Array): Promise<AiResult<Receipt>> {
       if (status !== 'ready') return Promise.resolve(notReady({}));
@@ -224,6 +290,40 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
           { unassigned: all },
           start,
         );
+      });
+    },
+
+    transcribe(
+      audio: Uint8Array,
+      hints: { members?: MemberId[]; items?: string[] } = {},
+    ): Promise<AiResult<Transcript>> {
+      if (speechStatus !== 'ready')
+        return Promise.resolve(
+          refused(`speech to text is ${speechStatus}${speechError ? `: ${speechError}` : ''}`),
+        );
+      const wav = wavToPcm16(audio);
+      if (!wav.ok) return Promise.resolve(refused(wav.error));
+      return serial(async () => {
+        const start = now();
+        // Whisper's initial prompt: the words it should spell as the split expects.
+        const hint = speechHint(hints.members ?? [], hints.items ?? []);
+        let raw: string;
+        try {
+          raw = await opts.engine.transcribe(wav.pcm, hint);
+        } catch (e) {
+          const error = `speech to text failed: ${e instanceof Error ? e.message : String(e)}`;
+          return { ok: false, partial: {}, error, attempts: 1, latencyMs: now() - start };
+        }
+        const t = TranscriptSchema.safeParse({ text: cleanTranscript(raw) });
+        return t.success
+          ? { ok: true, data: t.data, attempts: 1, latencyMs: now() - start }
+          : {
+              ok: false,
+              partial: {},
+              error: 'no speech heard in the recording',
+              attempts: 1,
+              latencyMs: now() - start,
+            };
       });
     },
   };

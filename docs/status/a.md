@@ -13,11 +13,15 @@
 - [x] A6 (P1) Anti-injection e hash dei modelli (sab 17/10 19:40, branch `a/A6-ai-hardening`)
 - [x] Robustezza dell'estrazione (dom 18/10 10:30, branch `a/receipt-robustness`)
 - [x] Scontrini semplici (dom 18/10 12:00, branch `a/simple-receipts`, PR in bozza)
+- [x] A8 Speech to text on-device, solo la funzione (mar 20/10, branch `a/A8-speech-to-text`); il bottone resta "soon" finché C non collega rotta e UI
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
+- **Registrazioni vere (prossima PR di A, domani):** tracce in `infra/fixtures/audio/recorded/`, poi rivedere soglia e modello; verificare la catena trascrizione → `proposeSplit`.
+- **Per C (dettatura):** handler di `transcribe` (`POST /api/:as/expenses/transcribe`, già in `routes` di `@kitty/shared`, oggi 404) con `deps.ai.transcribe(audio, { members: activeTravelers(agent), items: body.items })`, controllando `speechStatus() === 'ready'`; in UI registrazione e conversione a WAV PCM16 mono 16 kHz (≤ 30 s), testo trascritto messo nella textarea, poi "Split with AI" come oggi. Esporre `speechStatus()` in `/state` (serve un campo in `TripView`: chiedilo ad A).
+- **Per il PM:** SPEC §11 (quarto compito "dettatura della frase", input non fidato come la frase scritta) e §14.3 (la rotta `transcribe`); l'ID A8 non è in PLAN.md.
 - Niente di A aperto. **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7) e la nota di B9 sul canale grande almeno quanto la riga più grande.
 
 ## API di `MemberAgent` per C3 (`apps/agent/src/flows/member-agent.ts`)
@@ -70,7 +74,20 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 - Operazioni per C7: `covering`, `closing_channels` in `dave.operations()`.
 
 ## Registro
-<!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
+
+### A8 Speech to text, mar 20/10
+- Funziona: `AiService.transcribe(audio, hints?) → AiResult<Transcript>` (`apps/agent/src/ai/ai-service.ts`) e `speechStatus()`. WAV PCM16 mono 16 kHz ≤ 30 s → `wavToPcm16` (`wav.ts`, toglie l'header perché QVAC passa un Buffer a Whisper senza decodificarlo) → Whisper + VAD `VAD_SILERO_5_1_2` con `audio_format: 's16le'` → testo ripulito dai marcatori `[BLANK_AUDIO]` → `TranscriptSchema`. Suggerimento a Whisper (`prompt`): nomi dei viaggiatori attivi, poi voci dello scontrino senza quantità ("Coke x2" → "Coke": un numero nel prompt Whisper lo ripete). Mai un'eccezione: formato sbagliato, silenzio o errore del modello danno `ok: false`.
+- Whisper si carica **dopo** OCR e LLM e da solo: se manca o l'hash non torna (`verifyModels`), `speechStatus()` = `error` e scontrino e divisione restano `ready` (provato spostando il file dalla cache).
+- Config: `KITTY_STT_MODEL` = `WHISPER_SMALL_Q8_0` (default, 264 MB) | `WHISPER_BASE_Q8_0` (82 MB); `KITTY_STT_LANGUAGE` = `en` (default, la demo è in inglese) | `it`. La lingua si fissa al caricamento: `auto` funziona in prova ma non è documentato in QVAC 0.21, quindi non usato.
+- Contratto (`@kitty/shared`): `TranscriptSchema`, `TranscriptResultSchema`, `TranscribeRequestSchema` (`audio/wav` base64 + `items?`), rotta `transcribe` solo per i viaggiatori. `FakeAi.transcribe` restituisce `DEMO_SENTENCE`.
+- Dataset (`infra/fixtures/audio/expected.json`): 7 frasi inglesi (la frase della demo + le `splitCases` degli scontrini) con le parole chiave della divisione, lette da 6 voci sintetiche di macOS (US, GB, AU, IE, IN, ZA). Le tracce sintetiche le genera l'eval con `say` e non vanno in git; le registrazioni vere andranno in `recorded/<id caso>-<chi parla>.wav` e l'eval le prende da solo.
+- Come si prova: `pnpm test` (`wav.test.ts`, blocco "transcribe" di `ai-service.test.ts`, fake, config); `pnpm ai:eval:speech -- --download` la prima volta, poi `pnpm ai:eval:speech` (`KITTY_STT_MODEL=WHISPER_BASE_Q8_0` per il base), anche con la rete bloccata (`sandbox-exec -f infra/scripts/offline.sb …`).
+- Esito sulle 42 tracce sintetiche (tutte le parole chiave sentite; "pho" escluso perché le voci sintetiche non sanno pronunciarlo, misurato a parte):
+  - small: **33/42**, coke 17/18, burger 12/18, pho 29/42, WER medio 15,5%, circa 1,0 s a frase;
+  - base: 26/42, coke 7/18, burger 13/18, pho 25/42, WER 15,8%, circa 0,3 s.
+  Gli errori dello small sono sulle voci con accento (IE, IN: "Bejur", "Bug" per burger). **L'eval resta rosso** (soglia 90%, decisione del 20/10) finché le registrazioni vere non dicono dove siamo.
+- Problemi noti: non ho provato la frase trascritta dentro `proposeSplit` (servono Qwen3 e OCR, non presenti nella cache di questa macchina): una parola sbagliata ("coax") potrebbe comunque dare la divisione giusta, o no. Le voci sintetiche non sono rappresentative.
+
 ### Scontrini semplici, dom 18/10 12:00
 - **Set semplice: 26/30** (≤ 1 correzione) in due esecuzioni dopo le correzioni, stessi 4 falliti; latenza media dell'estrazione 16,7 s e 19,2 s, massima 20,8 s e 34,9 s (altro carico sulla macchina). Prima delle correzioni: 14/30. `pnpm ai:eval` (demo) resta verde con 0 correzioni.
 - **Il set "hard" (scontrini affollati e fotografati) è stato provato e ha fallito sulle righe di rumore** (codici, contanti e resto, sotto-righe): tolto dalle fixture insieme a `ai:eval:hard`.

@@ -81,6 +81,8 @@ const engine: AiEngine = {
     return blocks;
   },
   complete: (messages, schema) => qvac.complete(messages, schema),
+  loadSpeech: () => Promise.resolve(), // speech has its own eval: pnpm ai:eval:speech
+  transcribe: () => Promise.reject(new Error('not loaded in this eval')),
 };
 const printRows = () => lastRows.forEach((row, i) => console.log(`   ${i}: ${row}`));
 

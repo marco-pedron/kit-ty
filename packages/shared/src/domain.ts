@@ -89,6 +89,11 @@ export type AiResult<T, P = Partial<T>> =
 export const ReceiptResultSchema = aiResult(ReceiptSchema, ReceiptSchema.partial());
 export const SplitResultSchema = aiResult(SplitProposalSchema, SplitProposalSchema.partial());
 
+/** Speech to text of the split sentence: untrusted data, shown to the payer before any split. */
+export const TranscriptSchema = z.object({ text: z.string().trim().min(1) });
+export type Transcript = z.output<typeof TranscriptSchema>;
+export const TranscriptResultSchema = aiResult(TranscriptSchema, TranscriptSchema.partial());
+
 export const AiStatusSchema = z.object({
   status: z.enum(['loading', 'ready', 'error']),
   error: z.string().optional(),

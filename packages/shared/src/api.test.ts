@@ -12,6 +12,7 @@ describe('route table (SPEC §14.3)', () => {
       [
         'GET /api/:as/state',
         'POST /api/:as/expenses/extract',
+        'POST /api/:as/expenses/transcribe',
         'POST /api/:as/expenses/split',
         'POST /api/:as/expenses',
         'POST /api/:as/expenses/:id/decision',
