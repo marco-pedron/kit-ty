@@ -1,0 +1,252 @@
+{
+  "receipts": {
+    "eur-fastfood": {
+      "date": "2026-10-17",
+      "currency": "EUR",
+      "items": [
+        {
+          "quantity": 2,
+          "unitPrice": "890",
+          "total": "1780"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "520",
+          "total": "520"
+        },
+        {
+          "quantity": 2,
+          "unitPrice": "190",
+          "total": "380"
+        }
+      ],
+      "tax": null,
+      "tip": null,
+      "total": "2680"
+    },
+    "eur-fastfood-photo": {
+      "date": "2026-10-17",
+      "currency": "EUR",
+      "items": [
+        {
+          "quantity": 2,
+          "unitPrice": "890",
+          "total": "1780"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "520",
+          "total": "520"
+        },
+        {
+          "quantity": 2,
+          "unitPrice": "190",
+          "total": "380"
+        }
+      ],
+      "tax": null,
+      "tip": null,
+      "total": "2680"
+    },
+    "vnd-restaurant": {
+      "date": "2026-10-17",
+      "currency": "VND",
+      "items": [
+        {
+          "quantity": 2,
+          "unitPrice": "65000",
+          "total": "130000"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "25000",
+          "total": "75000"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "5000",
+          "total": "15000"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "45000",
+          "total": "45000"
+        }
+      ],
+      "tax": "21200",
+      "tip": null,
+      "total": "286200"
+    },
+    "vnd-restaurant-photo": {
+      "date": "2026-10-17",
+      "currency": "VND",
+      "items": [
+        {
+          "quantity": 2,
+          "unitPrice": "65000",
+          "total": "130000"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "25000",
+          "total": "75000"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "5000",
+          "total": "15000"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "45000",
+          "total": "45000"
+        }
+      ],
+      "tax": "21200",
+      "tip": null,
+      "total": "286200"
+    },
+    "eur-supermarket": {
+      "date": "2026-10-16",
+      "currency": "EUR",
+      "items": [
+        {
+          "quantity": 1,
+          "unitPrice": "183",
+          "total": "183"
+        },
+        {
+          "quantity": 2,
+          "unitPrice": "129",
+          "total": "258"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "99",
+          "total": "99"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "234",
+          "total": "234"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "89",
+          "total": "267"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "132",
+          "total": "132"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "349",
+          "total": "349"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "325",
+          "total": "325"
+        }
+      ],
+      "tax": null,
+      "tip": null,
+      "total": "1847"
+    },
+    "eur-supermarket-photo": {
+      "date": "2026-10-16",
+      "currency": "EUR",
+      "items": [
+        {
+          "quantity": 1,
+          "unitPrice": "183",
+          "total": "183"
+        },
+        {
+          "quantity": 2,
+          "unitPrice": "129",
+          "total": "258"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "99",
+          "total": "99"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "234",
+          "total": "234"
+        },
+        {
+          "quantity": 3,
+          "unitPrice": "89",
+          "total": "267"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "132",
+          "total": "132"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "349",
+          "total": "349"
+        },
+        {
+          "quantity": 1,
+          "unitPrice": "325",
+          "total": "325"
+        }
+      ],
+      "tax": null,
+      "tip": null,
+      "total": "1847"
+    }
+  },
+  "split": {
+    "receipt": "vnd-restaurant-photo",
+    "payer": "alice",
+    "members": [
+      "alice",
+      "bob",
+      "charlie"
+    ],
+    "sentences": [
+      "Bob e io il pho, Charlie le birre, te e nem per tutti e tre",
+      "Bob and I had the pho, Charlie the beers, iced tea and spring rolls for all three"
+    ],
+    "assignments": [
+      {
+        "itemIndex": 0,
+        "members": [
+          "alice",
+          "bob"
+        ]
+      },
+      {
+        "itemIndex": 1,
+        "members": [
+          "charlie"
+        ]
+      },
+      {
+        "itemIndex": 2,
+        "members": [
+          "alice",
+          "bob",
+          "charlie"
+        ]
+      },
+      {
+        "itemIndex": 3,
+        "members": [
+          "alice",
+          "bob",
+          "charlie"
+        ]
+      }
+    ]
+  }
+}
