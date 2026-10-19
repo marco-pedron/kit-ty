@@ -13,11 +13,14 @@
 - [x] A6 (P1) Anti-injection e hash dei modelli (sab 17/10 19:40, branch `a/A6-ai-hardening`)
 - [x] Robustezza dell'estrazione (dom 18/10 10:30, branch `a/receipt-robustness`)
 - [x] Scontrini semplici (dom 18/10 12:00, branch `a/simple-receipts`, PR in bozza)
+- [x] A8 Speech to text on-device, solo la funzione (mar 20/10, branch `a/A8-speech-to-text`); il bottone resta "soon" finché C non collega rotta e UI
 
 ## Bloccato da
 - niente
 
 ## Prossimo passo
+- **Per C (dettatura):** handler di `transcribe` (`POST /api/:as/expenses/transcribe`, già in `routes` di `@kitty/shared`, oggi 404) con `deps.ai.transcribe(audio, { members: activeTravelers(agent), items: body.items })`, controllando `speechStatus() === 'ready'`; in UI registrazione e conversione a WAV PCM16 mono 16 kHz (≤ 30 s), testo trascritto messo nella textarea, poi "Split with AI" come oggi. Esporre `speechStatus()` in `/state` (serve un campo in `TripView`: chiedilo ad A).
+- **Per il PM:** SPEC §11 (quarto compito "dettatura della frase", input non fidato come la frase scritta) e §14.3 (la rotta `transcribe`); l'ID A8 non è in PLAN.md.
 - Niente di A aperto. **Per il PM, SPEC §10.5 punto 2:** sostituire "per `daRicevere(m) − margine(m) + soglia`" con "per `soglia − margine(m)`" (vedi registro A7) e la nota di B9 sul canale grande almeno quanto la riga più grande.
 
 ## API di `MemberAgent` per C3 (`apps/agent/src/flows/member-agent.ts`)
@@ -70,6 +73,15 @@ L'agente di Dave: `new CoordinatorAgent({ wallet, relay, verifier, now?, tripId?
 - Operazioni per C7: `covering`, `closing_channels` in `dave.operations()`.
 
 ## Registro
+
+### A8 Speech to text, mar 20/10
+- Funziona: `AiService.transcribe(audio, hints?) → AiResult<Transcript>` (`apps/agent/src/ai/ai-service.ts`) e `speechStatus()`. WAV PCM16 mono 16 kHz ≤ 30 s → `wavToPcm16` (`wav.ts`, toglie l'header perché QVAC passa un Buffer a Whisper senza decodificarlo) → `WHISPER_BASE_Q8_0` + VAD `VAD_SILERO_5_1_2` con `audio_format: 's16le'` → testo ripulito dai marcatori `[BLANK_AUDIO]` → `TranscriptSchema`. Suggerimento a Whisper (`prompt`): nomi dei viaggiatori attivi e voci dello scontrino. Mai un'eccezione: formato sbagliato, silenzio o errore del modello danno `ok: false`.
+- Whisper si carica **dopo** OCR e LLM e da solo: se manca o l'hash non torna (`verifyModels`), `speechStatus()` = `error` e scontrino e divisione restano `ready` (provato spostando il file dalla cache).
+- Lingua fissata al caricamento (QVAC 0.21 non documenta il rilevamento automatico): `KITTY_STT_LANGUAGE` = `en` (default) | `it`.
+- Contratto (`@kitty/shared`): `TranscriptSchema`, `TranscriptResultSchema`, `TranscribeRequestSchema` (`audio/wav` base64 + `items?`), rotta `transcribe` solo per i viaggiatori. `FakeAi.transcribe` restituisce `DEMO_SENTENCE`.
+- Come si prova: `pnpm test` (`wav.test.ts`, blocco "transcribe" di `ai-service.test.ts`, fake, config); `pnpm ai:eval:speech -- --download` la prima volta (82 MB nella cache QVAC), poi `pnpm ai:eval:speech` e `KITTY_STT_LANGUAGE=it pnpm ai:eval:speech`, anche con la rete bloccata (`sandbox-exec -f infra/scripts/offline.sb …`).
+- Esito dell'eval (fixture `infra/fixtures/audio/split-{en,it}.wav`, voci sintetiche di macOS): circa 330 ms per frase. EN "Bob and I had the foe, Charlie only beers, Water for all three." (la voce sintetica pronuncia proprio "foe"); IT "Bob e Iola Pho, Charlie solo Biire, Lacqua intre.". Il controllo stretto delle parole fallisce su `pho` (EN) e `birre` (IT).
+- Problemi noti: non ho provato la frase trascritta dentro `proposeSplit` (servono Qwen3 e OCR, che non sono nella cache di questa macchina). In italiano il modello base sbaglia le parole attaccate; `WHISPER_SMALL_Q8_0` è l'alternativa se serve.
 <!-- Per ogni task finito: data e ora, cosa funziona, come si prova (comandi), problemi noti. Il più recente in alto. -->
 ### Scontrini semplici, dom 18/10 12:00
 - **Set semplice: 26/30** (≤ 1 correzione) in due esecuzioni dopo le correzioni, stessi 4 falliti; latenza media dell'estrazione 16,7 s e 19,2 s, massima 20,8 s e 34,9 s (altro carico sulla macchina). Prima delle correzioni: 14/30. `pnpm ai:eval` (demo) resta verde con 0 correzioni.
