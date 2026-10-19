@@ -25,6 +25,7 @@
     "e2e:demo": "./infra/scripts/e2e.sh demo",
     "ai:eval": "pnpm --filter @kitty/agent ai:eval",
     "ai:eval:simple": "AI_EVAL_SET=simple pnpm --filter @kitty/agent ai:eval",
+    "ai:test": "vitest run -c apps/agent/src/ai/accuracy/vitest.accuracy.config.ts",
     "ai:eval:offline": "sandbox-exec -f infra/scripts/offline.sb pnpm --offline --filter @kitty/agent ai:eval",
     "e2e:liquidity": "./infra/scripts/e2e.sh liquidity",
     "demo:lose-phone": "./infra/scripts/lose-phone.sh",
