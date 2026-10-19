@@ -31,7 +31,6 @@ export default tseslint.config(
       '**/dist/**',
       'coverage/**',
       '**/node_modules/**',
-      '_legacy/**',
       'spikes/**',
       'packages/rln-client/src/schema.d.ts',
     ],
