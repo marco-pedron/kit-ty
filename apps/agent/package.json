@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "ai:eval": "tsx src/ai/eval.ts"
+    "ai:eval": "tsx src/ai/eval.ts",
+    "ai:eval:speech": "tsx src/ai/speech-eval.ts"
   },
   "dependencies": {
     "@kitty/ledger": "workspace:*",

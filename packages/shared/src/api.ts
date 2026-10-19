@@ -48,6 +48,8 @@ export const TranscribeRequestSchema = z.object({
     mimeType: z.literal('audio/wav'),
     dataBase64: z.base64(),
   }),
+  /** The receipt's item labels, so the model spells them as the split expects. */
+  items: z.array(z.string().max(200)).max(100).optional(),
 });
 
 export const SplitRequestSchema = z.object({

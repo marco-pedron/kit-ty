@@ -278,7 +278,10 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
       });
     },
 
-    transcribe(audio: Uint8Array, members: MemberId[] = []): Promise<AiResult<Transcript>> {
+    transcribe(
+      audio: Uint8Array,
+      hints: { members?: MemberId[]; items?: string[] } = {},
+    ): Promise<AiResult<Transcript>> {
       if (speechStatus !== 'ready')
         return Promise.resolve(
           refused(`speech to text is ${speechStatus}${speechError ? `: ${speechError}` : ''}`),
@@ -287,8 +290,9 @@ export function createAiService(opts: AiServiceOptions): AiServiceHandle {
       if (!wav.ok) return Promise.resolve(refused(wav.error));
       return serial(async () => {
         const start = now();
-        // The names, so Whisper spells them as the members are called.
-        const hint = members.length > 0 ? `${members.map(cap).join(', ')}.` : undefined;
+        // Whisper's initial prompt: the words it should spell as the split expects.
+        const words = [...(hints.members ?? []).map(cap), ...(hints.items ?? [])];
+        const hint = words.length > 0 ? `${words.join(', ')}.` : undefined;
         let raw: string;
         try {
           raw = await opts.engine.transcribe(wav.pcm, hint);

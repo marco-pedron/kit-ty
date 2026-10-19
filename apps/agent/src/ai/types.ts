@@ -48,8 +48,12 @@ export interface AiService {
   /**
    * WAV (PCM16, mono, 16 kHz, ≤ 30 s) → Whisper → the sentence, for the payer to read and edit
    * before proposeSplit. The text is untrusted data like a typed sentence (SPEC §13 #6): it moves
-   * no money. `members` are the active travelers, a hint so their names are spelled right.
+   * no money. `hints`: the active travelers and the receipt's item labels, so Whisper spells
+   * them as the split expects ("pho", not "foe"); they only bias what is heard.
    * A format refused, silence or a model error → `ok: false`; the payer types instead.
    */
-  transcribe(audio: Uint8Array, members?: MemberId[]): Promise<AiResult<Transcript>>;
+  transcribe(
+    audio: Uint8Array,
+    hints?: { members?: MemberId[]; items?: string[] },
+  ): Promise<AiResult<Transcript>>;
 }

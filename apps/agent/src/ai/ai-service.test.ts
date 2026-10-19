@@ -389,19 +389,22 @@ describe('transcribe', () => {
     return { ai, heard: s.heard };
   }
 
-  it('hands Whisper the samples without the header, the names as a hint, and cleans the text', async () => {
+  it('hands Whisper the samples without the header, names and items as a hint, and cleans the text', async () => {
     const { ai, heard } = await speech({
       heard: [' [BLANK_AUDIO] Bob and I had the pho,\n Charlie only beers  '],
     });
     expect(ai.speechStatus()).toBe('ready');
-    const r = await ai.transcribe(speechWav(), ['alice', 'bob', 'charlie']);
+    const r = await ai.transcribe(speechWav(), {
+      members: ['alice', 'bob', 'charlie'],
+      items: ['Pho bo', 'Water'],
+    });
     expect(r).toMatchObject({
       ok: true,
       data: { text: 'Bob and I had the pho, Charlie only beers' },
       attempts: 1,
     });
     expect(heard[0]?.pcm.length).toBe(3200);
-    expect(heard[0]?.prompt).toBe('Alice, Bob, Charlie.');
+    expect(heard[0]?.prompt).toBe('Alice, Bob, Charlie, Pho bo, Water.');
   });
 
   it('refuses a recording in another format before running the model', async () => {

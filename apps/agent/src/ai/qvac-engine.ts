@@ -67,7 +67,7 @@ export function createQvacEngine(opts: QvacEngineOptions = {}): AiEngine {
     },
 
     async loadSpeech() {
-      if (sdk === null) throw new Error('QVAC SDK not loaded');
+      sdk ??= await import('@qvac/sdk');
       await verifyModels([sdk.WHISPER_BASE_Q8_0, sdk.VAD_SILERO_5_1_2], qvacCacheDir());
       speechId = await sdk.loadModel({
         modelSrc: sdk.WHISPER_BASE_Q8_0,
