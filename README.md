@@ -64,7 +64,7 @@ The receipt is read on the device by a 1.7B model, which reads clean receipts we
 
 Some of the work happened before the hackathon, and we want to be explicit about it. When the hackathon started, nothing in this repository's apps and packages had been written yet.
 
-The first piece is a previous prototype, "settleup-trip" (14–15 October): a custodial version of the same idea, which we abandoned in favour of self-custodial channels. Its useful code sits in [`_legacy/`](_legacy) as reference only, copied and adapted, never imported. It contained:
+The first piece is a previous prototype, "settleup-trip" (14–15 October): a custodial version of the same idea, which we abandoned in favour of self-custodial channels. Its useful code was kept in `_legacy/` during the hackathon as reference only, copied and adapted, never imported, and removed afterwards (it is still in the git history, commit `64c9574`). It contained:
 
 - a pnpm monorepo with a typed RLN client generated from the OpenAPI spec;
 - the regtest Docker stack and its scripts (`infra:up/down/reset/check`, mining, funding);

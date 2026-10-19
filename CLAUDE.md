@@ -11,7 +11,7 @@ Progetto **kit+ty**: cassa distribuita per viaggi di gruppo, con canali Lightnin
   - Tesoreria WDK di dave (emissione e on-ramp dei DUSD): `docs/vendor/wdk-wallet-rgb.md` (scritto dallo spike 2) e i `.d.ts` del pacchetto. Versione **esatta**: `@utexo/wdk-wallet-rgb` `2.0.3`, su Node 22; se si installa un'altra versione, fermati e avvisa.
   - `@utexo/wdk-rgb-lightning` e `@utexo/rgb-lightning-node-nodejs`: non usati in demo, vedi SPEC §20.
   - QVAC SDK: `docs/vendor/QVAC.md` (linea v0.21). È enorme: cercaci dentro con grep la sezione che serve, non leggerlo tutto. `@qvac/sdk` fissato a `~0.21.0`; se si installa un'altra versione, fermati e avvisa.
-- Codice del vecchio progetto: `_legacy/`. Si **copia e adatta**, non si importa mai da lì. La cartella viene cancellata domenica.
+- Codice del vecchio progetto: la cartella `_legacy/` è stata rimossa dopo il submit; resta nella storia git (commit `64c9574`).
 
 ## Proprietà delle cartelle
 Ogni sessione lavora per uno stream (A, B o C, vedi `docs/PLAN.md` §2) e scrive **solo** nelle cartelle di quello stream. Il resto è in sola lettura. Se ti serve un cambiamento altrove, in particolare in `packages/shared`, descrivilo e fermati.
