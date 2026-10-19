@@ -6,7 +6,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAiService, type AiServiceHandle } from '../ai-service.js';
 import type { AiEngine } from '../engine.js';
 import { createQvacEngine } from '../qvac-engine.js';
-import { loadCases, sameText, type Case, type TextKind, type Verdict } from './compare.js';
+import {
+  itemMatches,
+  loadCases,
+  sameText,
+  type Case,
+  type TextKind,
+  type Verdict,
+} from './compare.js';
 
 // pnpm ai:test: the app's receipt OCR (ai-service extractReceipt: QVAC OCR + Qwen3 rows +
 // code for the amounts) on every fixture with an expected/<name>.json, field by field.
@@ -33,6 +40,8 @@ const extractions: {
   attempts: number;
   ms: number;
   error?: string;
+  /** expected items whose amounts match the item at the same position / at any position */
+  items: { expected: number; byPosition: number; anywhere: number };
 }[] = [];
 
 const show = (v: unknown) => (v === undefined || v === null ? 'null' : JSON.stringify(String(v)));
@@ -104,6 +113,7 @@ describe.each(loadCases())('$id', (c: Case) => {
       attempts: result.attempts,
       ms: result.latencyMs,
       ...(!result.ok && { error: result.error }),
+      items: itemMatches(e.items, got.items ?? []),
     });
   });
 
@@ -148,12 +158,16 @@ function writeReport() {
     s[r.pass ? 'pass' : 'fail']++;
     byReceipt.set(r.receipt, s);
   }
+  const sum = (k: 'expected' | 'byPosition' | 'anywhere') =>
+    extractions.reduce((a, x) => a + x.items[k], 0);
   const cell = (s: string) => s.replace(/\|/gu, '\\|').replace(/\n/gu, ' ');
   const md = [
     '# pnpm ai:test report',
     '',
     `${new Date().toISOString()}: ${pass}/${rows.length} field comparisons passed, ` +
-      `${extractions.filter((x) => x.ok).length}/${extractions.length} receipts extracted.`,
+      `${extractions.filter((x) => x.ok).length}/${extractions.length} receipts extracted. ` +
+      `Items with the right amounts: ${sum('byPosition')}/${sum('expected')} by position, ` +
+      `${sum('anywhere')}/${sum('expected')} at any position.`,
     '',
     '## By field',
     '',
@@ -163,11 +177,11 @@ function writeReport() {
     '',
     '## By receipt',
     '',
-    '| Receipt | Extracted | Attempts | ms | Pass | Fail |',
-    '|---|---|---|---|---|---|',
+    '| Receipt | Extracted | Attempts | ms | Pass | Fail | Items by position | Items anywhere |',
+    '|---|---|---|---|---|---|---|---|',
     ...extractions.map((x) => {
       const s = byReceipt.get(x.receipt) ?? { pass: 0, fail: 0 };
-      return `| ${x.receipt} | ${x.ok ? 'yes' : `no: ${cell(x.error ?? '')}`} | ${x.attempts} | ${x.ms} | ${s.pass} | ${s.fail} |`;
+      return `| ${x.receipt} | ${x.ok ? 'yes' : `no: ${cell(x.error ?? '')}`} | ${x.attempts} | ${x.ms} | ${s.pass} | ${s.fail} | ${x.items.byPosition}/${x.items.expected} | ${x.items.anywhere}/${x.items.expected} |`;
     }),
     '',
     '## Failures',
