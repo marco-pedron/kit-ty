@@ -2,7 +2,7 @@ import { PaymentProofSchema, ReceiptSchema, fakeVerify, sha256Hex } from '@kitty
 import { allocateExpense } from '@kitty/ledger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { DEMO_RECEIPT, DEMO_SPLIT, createFakeAi } from './fake-ai.js';
+import { DEMO_RECEIPT, DEMO_SENTENCE, DEMO_SPLIT, createFakeAi } from './fake-ai.js';
 import { FakeLightningNetwork } from './fake-wallet.js';
 import { FAKES_BANNER, assertNoFakes, fakesOn } from './guard.js';
 
@@ -92,6 +92,15 @@ describe('FakeWallet', () => {
 });
 
 describe('FakeAi', () => {
+  it('hears the demo sentence in any recording', async () => {
+    const ai = createFakeAi({ delayMs: 0 });
+    expect(ai.speechStatus()).toBe('ready');
+    expect(await ai.transcribe(new Uint8Array())).toMatchObject({
+      ok: true,
+      data: { text: DEMO_SENTENCE },
+    });
+  });
+
   it('returns the demo dinner, whose ledger split is 3.09 / 3.09 / 3.50', async () => {
     const ai = createFakeAi({ delayMs: 0 });
     const r = await ai.extractReceipt(new Uint8Array());

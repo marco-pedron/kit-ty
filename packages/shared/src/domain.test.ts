@@ -7,6 +7,8 @@ import {
   ReceiptResultSchema,
   ReceiptSchema,
   SplitProposalSchema,
+  TranscriptResultSchema,
+  TranscriptSchema,
   TripParamsSchema,
 } from './domain.js';
 import { dinner } from './test/samples.js';
@@ -63,5 +65,14 @@ describe('domain schemas', () => {
       latencyMs: 4100,
     } as const;
     expect(ReceiptResultSchema.safeParse(failed).success).toBe(true);
+  });
+
+  it('a transcript is trimmed and never empty', () => {
+    expect(TranscriptSchema.parse({ text: '  Bob and I had the pho \n' })).toEqual({
+      text: 'Bob and I had the pho',
+    });
+    expect(TranscriptSchema.safeParse({ text: '   ' }).success).toBe(false);
+    const failed = { ok: false, partial: {}, error: 'no speech', attempts: 1, latencyMs: 900 };
+    expect(TranscriptResultSchema.safeParse(failed).success).toBe(true);
   });
 });

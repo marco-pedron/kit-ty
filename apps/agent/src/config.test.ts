@@ -13,7 +13,9 @@ describe('loadConfig', () => {
       SILENT_ASSENT_SECONDS: 45,
       PAYMENT_DEADLINE_SECONDS: 120,
       INVOICE_EXPIRY_SECONDS: 3600,
+      KITTY_STT_LANGUAGE: 'en',
     });
+    expect(() => loadConfig({ KITTY_STT_LANGUAGE: 'fr' })).toThrow(/KITTY_STT_LANGUAGE/);
     expect(nodeUrls(c).dave).toBe('http://127.0.0.1:3004');
   });
 

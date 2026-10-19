@@ -5,6 +5,7 @@ import {
   ReceiptSchema,
   SplitAssignmentSchema,
   SplitResultSchema,
+  TranscriptResultSchema,
 } from './domain.js';
 import {
   ActorIdSchema,
@@ -37,6 +38,14 @@ import {
 export const ExtractRequestSchema = z.object({
   image: z.object({
     mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    dataBase64: z.base64(),
+  }),
+});
+
+/** WAV, PCM signed 16-bit, mono, 16 kHz, at most 30 s: the agent refuses any other format. */
+export const TranscribeRequestSchema = z.object({
+  audio: z.object({
+    mimeType: z.literal('audio/wav'),
     dataBase64: z.base64(),
   }),
 });
@@ -130,6 +139,14 @@ export const routes = {
     params: As,
     body: ExtractRequestSchema,
     response: ReceiptResultSchema,
+  },
+  transcribe: {
+    method: 'POST',
+    path: '/api/:as/expenses/transcribe',
+    roles: traveler,
+    params: As,
+    body: TranscribeRequestSchema,
+    response: TranscriptResultSchema,
   },
   proposeSplit: {
     method: 'POST',

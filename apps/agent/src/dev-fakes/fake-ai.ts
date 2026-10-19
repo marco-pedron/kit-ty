@@ -1,9 +1,9 @@
-import type { AiResult, MemberId, Receipt, SplitProposal } from '@kitty/shared';
+import type { AiResult, MemberId, Receipt, SplitProposal, Transcript } from '@kitty/shared';
 import type { AiService } from '../ai/types.js';
 import { assertFakesOn } from './guard.js';
 
 // DEV ONLY (KITTY_FAKES=1): stands in for QVAC until task A4. It never reads the image or the
-// sentence: it returns the demo dinner (SPEC §15) after a delay. /state reports ai.fake.
+// sentence (nor the recording): it returns the demo dinner (SPEC §15) after a delay. /state reports ai.fake.
 
 export const DEMO_RECEIPT: Receipt = {
   merchant: 'Pho restaurant, Hanoi',
@@ -38,6 +38,11 @@ export function createFakeAi(opts: { delayMs?: number } = {}): AiService {
   const delayMs = opts.delayMs ?? 2_000;
   return {
     status: () => 'ready',
+    speechStatus: () => 'ready',
+    async transcribe(): Promise<AiResult<Transcript>> {
+      await sleep(delayMs);
+      return { ok: true, data: { text: DEMO_SENTENCE }, attempts: 1, latencyMs: delayMs };
+    },
     async extractReceipt(): Promise<AiResult<Receipt>> {
       await sleep(delayMs);
       return { ok: true, data: DEMO_RECEIPT, attempts: 1, latencyMs: delayMs };

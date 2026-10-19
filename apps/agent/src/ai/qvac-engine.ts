@@ -6,18 +6,23 @@ import type { OcrBlock } from './ocr-lines.js';
 // receipt text, QWEN3_1_7B_INST_Q4 for the JSON, both loaded once and from the local cache,
 // so it works with the Wi-Fi off. The SDK is imported inside load(): if it cannot be loaded
 // on this machine the agent still starts, with the AI in error (manual form).
+// Speech (docs/vendor/QVAC.md: Transcription): WHISPER_BASE_Q8_0, multilingual, with the Silero
+// VAD, loaded by loadSpeech() after the others; Whisper takes one language at load time.
 
 type Sdk = typeof import('@qvac/sdk');
 
 export interface QvacEngineOptions {
   /** Max tokens of one answer; a receipt of 40 lines fits. */
   maxTokens?: number;
+  /** Language of the dictated sentence (KITTY_STT_LANGUAGE). */
+  speechLanguage?: 'en' | 'it';
 }
 
 export function createQvacEngine(opts: QvacEngineOptions = {}): AiEngine {
   let sdk: Sdk | null = null;
   let ocrId: string | null = null;
   let llmId: string | null = null;
+  let speechId: string | null = null;
 
   return {
     async load() {
@@ -59,6 +64,39 @@ export function createQvacEngine(opts: QvacEngineOptions = {}): AiEngine {
       });
       const final = await run.final;
       return final.contentText || final.raw.fullText;
+    },
+
+    async loadSpeech() {
+      if (sdk === null) throw new Error('QVAC SDK not loaded');
+      await verifyModels([sdk.WHISPER_BASE_Q8_0, sdk.VAD_SILERO_5_1_2], qvacCacheDir());
+      speechId = await sdk.loadModel({
+        modelSrc: sdk.WHISPER_BASE_Q8_0,
+        modelConfig: {
+          vadModelSrc: sdk.VAD_SILERO_5_1_2,
+          // wav.ts hands over the samples of the WAV, header stripped
+          audio_format: 's16le',
+          language: opts.speechLanguage ?? 'en',
+          translate: false,
+          no_timestamps: true,
+          suppress_blank: true,
+          suppress_nst: true,
+          temperature: 0.0,
+        },
+      });
+    },
+
+    async transcribe(pcm: Uint8Array, prompt?: string) {
+      if (sdk === null || speechId === null) throw new Error('speech model not loaded');
+      return sdk.transcribe({
+        modelId: speechId,
+        // bare-buffer's Buffer in the SDK types, as for the OCR image
+        audioChunk: Buffer.from(
+          pcm.buffer,
+          pcm.byteOffset,
+          pcm.byteLength,
+        ) as unknown as Parameters<Sdk['transcribe']>[0]['audioChunk'],
+        ...(prompt !== undefined && { prompt }),
+      });
     },
   };
 }

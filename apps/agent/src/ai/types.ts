@@ -1,6 +1,13 @@
 // On-device AI (SPEC §11), QVAC in-process, loaded once at agent start: ai-service.ts over
 // qvac-engine.ts (task A4); dev-fakes/fake-ai.ts with KITTY_FAKES=1.
-import type { AiResult, AiStatus, MemberId, Receipt, SplitProposal } from '@kitty/shared';
+import type {
+  AiResult,
+  AiStatus,
+  MemberId,
+  Receipt,
+  SplitProposal,
+  Transcript,
+} from '@kitty/shared';
 
 export interface AiService {
   /** Models load once: loading → ready | error. Shown in UI as "Runs on this device". */
@@ -31,4 +38,18 @@ export interface AiService {
     clarification?: { question: string; answer: string },
     payer?: MemberId,
   ): Promise<AiResult<SplitProposal>>;
+
+  /**
+   * The speech model loads on its own, after the others: a missing Whisper never takes the
+   * receipt or the split down. The dictation button shows only when this is 'ready'.
+   */
+  speechStatus(): AiStatus['status'];
+
+  /**
+   * WAV (PCM16, mono, 16 kHz, ≤ 30 s) → Whisper → the sentence, for the payer to read and edit
+   * before proposeSplit. The text is untrusted data like a typed sentence (SPEC §13 #6): it moves
+   * no money. `members` are the active travelers, a hint so their names are spelled right.
+   * A format refused, silence or a model error → `ok: false`; the payer types instead.
+   */
+  transcribe(audio: Uint8Array, members?: MemberId[]): Promise<AiResult<Transcript>>;
 }
