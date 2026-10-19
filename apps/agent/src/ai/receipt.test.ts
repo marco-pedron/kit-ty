@@ -242,3 +242,80 @@ describe('toReceipt, item rows', () => {
     expect(r.ok && r.receipt.items.map((it) => it.total)).toEqual([340n, 270n]);
   });
 });
+
+describe('rowAmount, OCR damage to numbers', () => {
+  it('reads a decimal mark the OCR lost at the end of the row', () => {
+    expect(rowAmount('Tip  0  80', 'EUR')).toBe(80n);
+    expect(rowAmount('Tip  4  50', 'USD')).toBe(450n);
+    // no decimals: still a lost thousands dot, never a decimal mark
+    expect(rowAmount('Tra  xanh  10  000', 'VND')).toBe(10_000n);
+  });
+
+  it('reads the letter O inside a number as a zero, never inside a word', () => {
+    expect(rowAmount('Pho  bo  tai  ~  65.000  130  00o', 'VND')).toBe(130_000n);
+    expect(rowAmount('BONO  5,00', 'EUR')).toBe(500n);
+  });
+
+  it('with decimals, the price is the last amount with its decimals', () => {
+    // a VAT code "C" read as "0"
+    expect(rowAmount('ACQUA  NAT  6XI , 5L  2,34  0', 'EUR')).toBe(234n);
+    expect(rowAmount('LATTE  INTERO  IL  2 X  1,29  2 ,58', 'EUR')).toBe(258n);
+  });
+
+  it('a count written with * is a count, not a price', () => {
+    expect(rowAmount('Ketchup *2  OMAGGIO', 'EUR')).toBeNull();
+  });
+});
+
+describe('toReceipt, quantities', () => {
+  const rows = [
+    'SHOP',
+    'MENU  CLASSIC  8 , 90  17,80',
+    'YOGURT  GRECO  0 , 89  2 ,67',
+    'Nem  ran  1 X  45 .000  45 .000',
+    'ACQUA  NAT . 6X1 , 5L  2,34',
+    '0,412 X 3,20 EUR/kg  1,32',
+    'Birra  media  5,50',
+    'TOTALE  31,00',
+  ];
+  const item = (row: number, label: string, quantity = 1) => ({ row, label, quantity });
+
+  it('a unit price before the total gives the count when the OCR lost the "q x"', () => {
+    const r = toReceipt(
+      { ...base, totalRow: 7, items: [item(1, 'Menu Classic'), item(2, 'Yogurt greco')] },
+      rows,
+    );
+    expect(r.ok && r.receipt.items).toEqual([
+      { label: 'Menu Classic', quantity: 2, unitPrice: 890n, total: 1780n },
+      { label: 'Yogurt greco', quantity: 3, unitPrice: 89n, total: 267n },
+    ]);
+  });
+
+  it('reads "q x unit" with OCR spaces in the unit', () => {
+    const r = toReceipt(
+      { ...base, currency: 'VND', totalRow: 7, items: [item(3, 'Nem ran')] },
+      rows,
+    );
+    expect(r.ok && r.receipt.items).toEqual([
+      { label: 'Nem ran', quantity: 1, unitPrice: 45_000n, total: 45_000n },
+    ]);
+  });
+
+  it('a pack size or a weight is not a count, even when the model says so', () => {
+    const r = toReceipt(
+      { ...base, totalRow: 7, items: [item(4, 'Acqua nat', 6), item(5, 'Pane', 412)] },
+      rows,
+    );
+    expect(r.ok && r.receipt.items.map((it) => [it.quantity, it.unitPrice, it.total])).toEqual([
+      [1, 234n, 234n],
+      [1, 132n, 132n],
+    ]);
+  });
+
+  it('a single amount stays one item: "Birra media 5,50" is not 5 × 1,10', () => {
+    const r = toReceipt({ ...base, totalRow: 7, items: [item(6, 'Birra media', 5)] }, rows);
+    expect(r.ok && r.receipt.items).toEqual([
+      { label: 'Birra media', quantity: 1, unitPrice: 550n, total: 550n },
+    ]);
+  });
+});

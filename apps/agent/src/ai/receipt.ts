@@ -52,14 +52,16 @@ export function llmReceiptJsonSchema(rowCount: number) {
 
 // An amount as printed: grouped thousands ("255.000", "1,234.56") or plain ("2.50", "38,50").
 const AMOUNT = /\d{1,3}(?:[.,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/gu;
-// "2 x 65.000", "3 X 0.90", "2×1.25"
 const TIP_LABEL = /^\s*(tip|tips|mancia|trinkgeld|pourboire|propina|service|servizio)\b/iu;
 const TAX_LABEL = /^\s*(tax|sales tax|vat|iva|mwst|tva)\b/iu;
-const QTY_X_UNIT = /(\d{1,3})\s*[xX×]\s*(\d[\d.,']*)/u;
+// "2 x 65.000", "3 X 0.90", "2×1.25", "2*1,50": a count times a unit price. Not a weight
+// ("0,412 x 3,20 EUR/kg": the count is a decimal) and not a pack size ("6X1,5L": the "unit"
+// is a measure).
+const QTY_X_UNIT = /(?<![\d.,'])(\d{1,3})\s*[xX×*]\s*(\d[\d.,']*)(?![\d.,'])(?!\s*\p{L})/u;
 
-// Numbers that are not prices: a measure ("0,5L", "9PZ", "500 g") or a count ("x2", "×3").
+// Numbers that are not prices: a measure ("0,5L", "9PZ", "500 g") or a count ("x2", "×3", "*2").
 const MEASURE = /\d+(?:[.,]\d+)?\s*(?:l|cl|ml|g|gr|kg|pz|pc|pcs)(?!\p{L})/giu;
-const COUNT = /(?<!\p{L})[x×]\s*\d{1,3}(?![\d.,'])/giu;
+const COUNT = /(?<!\p{L})[x×*]\s*\d{1,3}(?![\d.,'])/giu;
 
 /** The words of a label or row that name something: letters only, 3 or more, lowercase. */
 const wordsOf = (s: string) => new Set(s.toLowerCase().match(/\p{L}{3,}/gu) ?? []);
@@ -83,15 +85,60 @@ export function anchorRow(label: string, row: number, rows: readonly string[]): 
   return others.length === 1 ? (others[0] ?? row) : row;
 }
 
-/** The last amount printed on a row: the line total, the subtotal, the total… */
-export function rowAmount(row: string, currency: CurrencyCode): bigint | null {
-  // OCR often reads "4,50" as "4, 50", "4 ,50" or "4 , 50"
+/** A row with the OCR's usual damage to its numbers undone; words are left as read. */
+export function cleanNumbers(row: string, currency: CurrencyCode): string {
+  // OCR often reads "4,50" as "4, 50", "4 ,50" or "4 , 50", and "45.000" as "45 .000"
   let text = row.replace(/(\d)\s*([.,])\s*(\d)/gu, '$1$2$3');
+  // the letter O for a zero inside a number: "130 00o", "o311"
+  text = text.replace(/(?<![\p{L}\d.,])[\dOo.,]*\d[\dOo.,]*(?![\p{L}\d.,])/gu, (n) =>
+    n.replace(/[Oo]/gu, '0'),
+  );
   // without decimals, a lost thousands dot leaves "10  000" at the end of the row
   if (CURRENCY_EXPONENTS[currency] === 0)
     text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{3})\s*$/u, '$1$2');
-  const last = text.replace(MEASURE, ' ').replace(COUNT, ' ').match(AMOUNT)?.at(-1);
-  return last === undefined ? null : parsePrintedAmount(last, currency);
+  // with decimals, a lost decimal mark leaves "0  80" at the end of the row
+  else text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{2})\s*$/u, '$1,$2');
+  return text;
+}
+
+/** The amounts printed on a row, in order, as printed and in minor units. */
+function amountsOf(row: string, currency: CurrencyCode): { printed: string; minor: bigint }[] {
+  const text = cleanNumbers(row, currency).replace(MEASURE, ' ').replace(COUNT, ' ');
+  return (text.match(AMOUNT) ?? []).flatMap((printed) => {
+    const minor = parsePrintedAmount(printed, currency);
+    return minor === null ? [] : [{ printed, minor }];
+  });
+}
+
+/**
+ * The amount of a row: the line total, the subtotal, the total… The last one printed; with
+ * decimals, the last one with its decimals ("2,34 C" read as "2,34 0" is 2,34, not 0).
+ */
+export function rowAmount(row: string, currency: CurrencyCode): bigint | null {
+  const amounts = amountsOf(row, currency);
+  if (CURRENCY_EXPONENTS[currency] > 0) {
+    const withDecimals = amounts.filter((a) => /[.,]\d{2}$/u.test(a.printed));
+    if (withDecimals.length > 0) return withDecimals.at(-1)?.minor ?? null;
+  }
+  return amounts.at(-1)?.minor ?? null;
+}
+
+/**
+ * The unit price printed before the line total, when the total is a whole multiple of it:
+ * "MENU CLASSIC  8,90  17,80" is 2 × 8,90, even when the OCR lost the "2 x".
+ */
+function unitBefore(row: string, total: bigint, currency: CurrencyCode) {
+  const amounts = amountsOf(row, currency);
+  const at = amounts.map((a) => a.minor).lastIndexOf(total);
+  const [u, t] = [amounts[at - 1], amounts[at]];
+  if (at < 1 || u === undefined || t === undefined) return null;
+  // printed like a price, like the total: "6X1,5L  2,34" has no unit price "6"
+  const shape = (p: string) => /[.,']\d+$/u.test(p);
+  if (shape(u.printed) !== shape(t.printed)) return null;
+  const unit = u.minor;
+  if (unit <= 0n || total % unit !== 0n) return null;
+  const q = total / unit;
+  return q >= 2n && q <= 99n ? { quantity: Number(q), unitPrice: unit } : null;
 }
 
 // A printed date: "17/10/2026", "10/16/2026", "17.10.2026", "2026-10-17".
@@ -123,12 +170,13 @@ export function printedDate(rows: readonly string[], currency: CurrencyCode): st
 }
 
 /** A count printed on the row: "2 x 65.000", "x2", or a leading "2 Pho bo". */
-function hasPrintedCount(row: string, quantity: number): boolean {
+function hasPrintedCount(row: string, quantity: number, currency: CurrencyCode): boolean {
   const q = String(quantity);
+  // not a pack size: "6X1,5L" is one pack of 6 bottles
   return new RegExp(
-    `(?<![\\d.,])${q}\\s*[xX×]|[xX×]\\s*${q}(?![\\d.,])|^\\s*${q}\\s+\\p{L}`,
+    `(?<![\\d.,])${q}\\s*[xX×*](?!\\s*\\d[\\d.,']*\\s*\\p{L})|[xX×*]\\s*${q}(?![\\d.,])|^\\s*${q}\\s+\\p{L}`,
     'u',
-  ).test(row);
+  ).test(cleanNumbers(row, currency));
 }
 
 type Conversion =
@@ -217,7 +265,7 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
 
   const items: ReceiptItem[] = priced.map((it) => {
     const total = it.total;
-    const m = QTY_X_UNIT.exec(rows[it.row] ?? '');
+    const m = QTY_X_UNIT.exec(cleanNumbers(rows[it.row] ?? '', r.currency));
     const printedUnit = m?.[2] ? parsePrintedAmount(m[2], r.currency) : null;
     // A printed "q x unit" wins over the model's quantity.
     if (m?.[1] && printedUnit !== null)
@@ -228,9 +276,12 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
         total,
       };
     // The model's quantity only when the row prints it: "Birra media 5,50" is 1, not 5 × 1,10.
-    const printed = it.quantity > 1 && hasPrintedCount(rows[it.row] ?? '', it.quantity);
+    const printed = it.quantity > 1 && hasPrintedCount(rows[it.row] ?? '', it.quantity, r.currency);
     const q = BigInt(it.quantity);
     const unitPrice = printed && total % q === 0n ? total / q : total;
+    // Else a unit price printed before the total: the count is the ratio.
+    const ratio = unitPrice === total ? unitBefore(rows[it.row] ?? '', total, r.currency) : null;
+    if (ratio !== null) return { label: it.label.replace(/\s+/gu, ' ').trim(), ...ratio, total };
     return {
       label: it.label.replace(/\s+/gu, ' ').trim(),
       quantity: unitPrice === total ? 1 : it.quantity,
