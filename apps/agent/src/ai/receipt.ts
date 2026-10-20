@@ -101,6 +101,58 @@ export function cleanNumbers(row: string, currency: CurrencyCode): string {
   return text;
 }
 
+/** Text compared as printed: no case, accents, spaces or punctuation ("Water (1.5L)" = "Water 1.5L"). */
+const compact = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * The product name printed on an item row: the row without its "q x unit", its price per
+ * measure ("@ 1.10/kg", "2,49 EUR/kg"), the amounts and VAT codes at the end ("2,58 A") and a
+ * count at the start ("2 x MENU", or "X NUGGETS" when the OCR lost the digit). Measures that
+ * are part of the name stay ("Water 1.5L", "NUGGETS 9PZ").
+ */
+export function rowLabel(row: string, currency: CurrencyCode): string {
+  return cleanNumbers(row, currency)
+    .replace(new RegExp(QTY_X_UNIT.source, 'gu'), ' ')
+    .replace(/@?\s*\d[\d.,']*\s*(?:[€$£]|EUR|USD|VND)?\s*\/\s*\p{L}+/giu, ' ')
+    .replace(/(?:\s+[€$£]?\s*\d[\d.,']*\s*[€$£đ]?(?:\s+\p{Lu}(?!\p{L}))?)+\s*$/u, '')
+    .replace(/^\s*(?:\d{1,3}\s*)?[xX×*]\s+(?=\p{L})/u, '')
+    .replace(/[^\p{L}\p{N})\]]+$/u, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+/**
+ * The label of an item: the model's when it is the printed name (its casing, its "(0.73 kg)"),
+ * else the name printed on the row. A 1.7B model shortens names ("Pho" for "Pho bo") or copies
+ * prices into them ("Banh mi 27.000"); the row has the name as printed.
+ */
+function itemLabel(label: string, row: string, currency: CurrencyCode): string {
+  const printed = rowLabel(row, currency);
+  const own = label.replace(/\s+/gu, ' ').trim();
+  return /\p{L}{2,}/u.test(printed) && compact(printed) !== compact(own) ? printed : own;
+}
+
+/**
+ * The merchant as printed in the header (the rows above the items): the model's name when a
+ * header row prints it; the whole row when the model gave part of it ("VESUVIO" of
+ * "PIZZERIA VESUVIO"); else, when the model's name is not printed there (made up, or an item's
+ * name), the first header row with a name.
+ */
+export function printedMerchant(merchant: string, header: readonly string[]): string {
+  const named = header.filter((h) => /\p{L}{2,}/u.test(h) && printedDate([h], 'EUR') === null);
+  const tidy = (h: string) => h.replace(/\s+/gu, ' ').trim();
+  if (named.some((h) => compact(h) === compact(merchant))) return merchant.trim();
+  const words = [...wordsOf(merchant)];
+  const carrying = named.find((h) => words.length > 0 && words.every((w) => wordsOf(h).has(w)));
+  if (carrying !== undefined) return tidy(carrying);
+  return named[0] === undefined ? merchant.trim() : tidy(named[0]);
+}
+
 /** The amounts printed on a row, in order, as printed and in minor units. */
 function amountsOf(row: string, currency: CurrencyCode): { printed: string; minor: bigint }[] {
   const text = cleanNumbers(row, currency).replace(MEASURE, ' ').replace(COUNT, ' ');
@@ -270,7 +322,7 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     // A printed "q x unit" wins over the model's quantity.
     if (m?.[1] && printedUnit !== null)
       return {
-        label: it.label.replace(/\s+/gu, ' ').trim(),
+        label: itemLabel(it.label, rows[it.row] ?? '', r.currency),
         quantity: Number(m[1]),
         unitPrice: printedUnit,
         total,
@@ -281,9 +333,10 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     const unitPrice = printed && total % q === 0n ? total / q : total;
     // Else a unit price printed before the total: the count is the ratio.
     const ratio = unitPrice === total ? unitBefore(rows[it.row] ?? '', total, r.currency) : null;
-    if (ratio !== null) return { label: it.label.replace(/\s+/gu, ' ').trim(), ...ratio, total };
+    if (ratio !== null)
+      return { label: itemLabel(it.label, rows[it.row] ?? '', r.currency), ...ratio, total };
     return {
-      label: it.label.replace(/\s+/gu, ' ').trim(),
+      label: itemLabel(it.label, rows[it.row] ?? '', r.currency),
       quantity: unitPrice === total ? 1 : it.quantity,
       unitPrice,
       total,
@@ -291,7 +344,7 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
   });
 
   const receipt: Receipt = {
-    merchant: r.merchant.trim(),
+    merchant: printedMerchant(r.merchant, rows.slice(0, llmItems[0]?.row ?? rows.length)),
     date: printedDate(rows, r.currency) ?? r.date,
     currency: r.currency,
     items,

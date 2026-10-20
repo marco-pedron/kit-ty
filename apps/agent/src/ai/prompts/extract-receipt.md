@@ -23,4 +23,5 @@ Rules:
   "$", "USD" → USD).
 - `date`: YYYY-MM-DD. "17/10/2026" is day/month/year → "2026-10-17"; a US receipt in USD
   writes month/day/year ("10/16/2026" → "2026-10-16").
-- `merchant`: the shop or restaurant name.
+- `merchant`: the shop or restaurant name as on its sign, usually the first row; not the
+  company's legal name (with S.r.l., S.p.A., Ltd, GmbH, Inc.) and not an address.

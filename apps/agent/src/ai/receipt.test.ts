@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ReceiptResultSchema } from '@kitty/shared';
-import { printedDate, rowAmount, toReceipt } from './receipt.js';
+import { printedDate, printedMerchant, rowAmount, rowLabel, toReceipt } from './receipt.js';
 
 // toReceipt over OCR rows like a fast-food receipt: menu components and freebies printed
 // under an item, without a price of their own.
@@ -317,5 +317,67 @@ describe('toReceipt, quantities', () => {
     expect(r.ok && r.receipt.items).toEqual([
       { label: 'Birra media', quantity: 1, unitPrice: 550n, total: 550n },
     ]);
+  });
+});
+
+describe('rowLabel', () => {
+  it.each([
+    ['Pho  bo  2 X 65.000  130.000', 'VND', 'Pho bo'],
+    ['Nuoc mia  2 X 10.000  20.000', 'VND', 'Nuoc mia'],
+    ['Instant  noodles  3 X 0.90  2.70', 'USD', 'Instant noodles'],
+    ['Bananas  0.73  kg  @  1.10/kg  0.80', 'USD', 'Bananas 0.73 kg'],
+    ['2 x MENU CLASSIC L   8,90  17,80', 'EUR', 'MENU CLASSIC L'],
+    ['X NUGGETS  9PZ  5,20', 'EUR', 'NUGGETS 9PZ'],
+    ['LATTE  INTERO  1L  2 X  1,29  2 ,58 A', 'EUR', 'LATTE INTERO 1L'],
+    ['ACQUA  NAT . 6X1 , 5L  2,34', 'EUR', 'ACQUA NAT . 6X1,5L'],
+    ['0,734 kg  2 ,49  EUR/kg', 'EUR', '0,734 kg'],
+  ] as const)('%s → %s', (row, currency, label) => expect(rowLabel(row, currency)).toBe(label));
+});
+
+describe('printedMerchant', () => {
+  const header = ['PIZZERIA  VESUVIO', '18/10/2026  14:10'];
+  it("keeps the model's name when the header prints it", () => {
+    expect(printedMerchant('Pizzeria Vesuvio', header)).toBe('Pizzeria Vesuvio');
+  });
+  it('takes the whole row when the model gave part of it', () => {
+    expect(printedMerchant('VESUVIO', header)).toBe('PIZZERIA VESUVIO');
+  });
+  it('a name the header does not print (made up, or an item) is the first header row', () => {
+    expect(printedMerchant('Banh Mi Shop', ['QUAN  BUN  CHA', '07/10/2026  14:42'])).toBe(
+      'QUAN BUN CHA',
+    );
+  });
+  it('never takes the date row', () => {
+    expect(printedMerchant('Corner shop', ['07/10/2026  14:42', 'CORNER  GROCERY'])).toBe(
+      'CORNER GROCERY',
+    );
+  });
+});
+
+describe('toReceipt, text read from the rows', () => {
+  const rows = [
+    'CAFE  PHO  CO',
+    '30/10/2026  10:56',
+    'Ca  phe  den  24.000',
+    'Tra  da  2 X 7.000  14.000',
+    'TOTAL  VND  38.000',
+  ];
+  const answer = {
+    ...base,
+    merchant: 'Nuoc mia',
+    currency: 'VND',
+    totalRow: 4,
+    items: [
+      { row: 2, label: 'phe', quantity: 1 },
+      { row: 3, label: 'Tra da 14.000', quantity: 2 },
+    ],
+  };
+  it('a shortened label or one with prices is the name printed on the row', () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok && r.receipt.items.map((it) => it.label)).toEqual(['Ca phe den', 'Tra da']);
+  });
+  it('a merchant that is not printed above the items is the first header row', () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok && r.receipt.merchant).toBe('CAFE PHO CO');
   });
 });
