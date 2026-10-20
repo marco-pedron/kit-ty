@@ -138,3 +138,38 @@ export async function rln (path: string, body?: unknown, base = LSP_RLN): Promis
   if (!res.ok) throw new Error(`${path} ${res.status} ${text.slice(0, 400)}`)
   return data
 }
+
+// Give a node BTC and colored UTXOs big enough to fund channels (spike 2, trap 5).
+export async function fundNode (n: Node, btc = 3, utxos = 3, size = 1_100_000) {
+  const addr = await n.account.getAddress()
+  fund(typeof addr === 'string' ? addr : addr.address, btc)
+  mine(1)
+  await n.account.sync()
+  try {
+    await n.account.createUtxos({ up_to: false, num: utxos, size, fee_rate: 2, skip_sync: false })
+  } catch (e) { log('fund.createUtxos.error', { name: n.name, e: errMsg(e) }) }
+  mine(1)
+  await n.account.sync()
+}
+
+export async function usableChannel (n: Node, peer: string) {
+  const chans: any[] = await n.account.listChannels()
+  return chans.find(c => c.peer_pubkey === peer && c.is_usable)
+}
+
+export async function payAndWait (payer: Node, invoice: string, timeoutMs = 30000) {
+  const t0 = Date.now()
+  const sent = await payer.account.sendPayment({ invoice })
+  const hash = sent.payment_hash
+  let p: any
+  try {
+    p = await waitFor('payment', async () => {
+      const x = await payer.account.getPayment(hash, 'Outbound')
+      return ['Succeeded', 'Failed', 'Cancelled'].includes(x?.status) ? x : undefined
+    }, timeoutMs, 250)
+  } catch (e) {
+    p = await payer.account.getPayment(hash, 'Outbound').catch(() => null)
+    return { status: p?.status ?? 'timeout', hash, ms: Date.now() - t0, timeout: true }
+  }
+  return { status: p.status, hash, preimage: p.preimage, ms: Date.now() - t0, payee: p.payee_pubkey }
+}
