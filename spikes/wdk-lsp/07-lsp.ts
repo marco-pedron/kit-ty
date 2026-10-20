@@ -75,14 +75,16 @@ try {
     try {
       const r = await lspB.receiveAsset({ assetId, amountRgb: 100, amountSats: 3000 })
       log('E.bridge.receiveAsset', { rgbInvoice: r.rgbInvoice.slice(0, 50), payee: (await bob.account.decodeInvoice(r.lnInvoice)).payee_pubkey === bob.pubkey })
-      const sent = await alice.account.sendRgbAsset({ invoice: r.rgbInvoice, asset_id: assetId, amount: 100, fee_rate: 2, min_confirmations: 1, donation: false, skip_sync: false }).catch((e: unknown) => ({ error: errMsg(e) }))
+      const d = await alice.account.decodeRgbInvoice(r.rgbInvoice)
+      const sent = await alice.account.sendRgbAsset({ donation: false, fee_rate: 2, min_confirmations: 1, recipient_groups: [{ asset_id: assetId, recipients: [{ recipient_id: d.recipient_id, assignment_kind: 'Fungible', assignment_amount: 100, transport_endpoints: d.transport_endpoints }] }] }).catch((e: unknown) => ({ error: errMsg(e) }))
+      for (let i = 0; i < 6; i++) { await sleep(2000); await alice.account.refreshTransfers({ skip_sync: false }).catch(() => null); mine(1) }
       log('E.bridge.receiveAsset.aliceSendRgb', sent)
       const st = await lspB.awaitReceiveSettlement(r.lnInvoice, { timeoutMs: 120000, pollIntervalMs: 3000 }).catch((e: unknown) => errMsg(e))
       log('E.bridge.receiveAsset.settled', { status: st })
     } catch (e) { log('E.bridge.receiveAsset.error', errMsg(e)) }
     // E2: LN -> on-chain. bob makes an on-chain RGB invoice; alice pays the LSP's LN invoice.
     try {
-      const inv = await bob.account.createRgbInvoice({ min_confirmations: 1, witness: false, asset_id: assetId, duration_seconds: 3600 })
+      const inv = await bob.account.createRgbInvoice({ min_confirmations: 1, witness: false, asset_id: assetId, assignment_kind: 'Fungible', assignment_amount: 100, duration_seconds: 3600 })
       const r = await lspA.sendAsset({ rgbInvoice: inv.invoice, ln: { amtMsat: 3_000_000, assetId, assetAmount: 100 } })
       const dec = await alice.account.decodeInvoice(r.lnInvoice)
       log('E.bridge.sendAsset', { payeeIsLsp: dec.payee_pubkey === lspPubkey, payeeIsBob: dec.payee_pubkey === bob.pubkey, send: r.sendResult })
