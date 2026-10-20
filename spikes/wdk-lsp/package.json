@@ -1,0 +1,15 @@
+{
+  "name": "kitty-spike-wdk-lsp",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
+    "@utexo/rgb-lightning-node-nodejs": "0.2.0-beta.4",
+    "@utexo/wdk-rgb-lightning": "github:UTEXO-Protocol/wdk-rgb-lightning#a5d3439",
+    "bip39": "3.1.0"
+  }
+}

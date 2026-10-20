@@ -1,0 +1,58 @@
+# Spike 3 regtest stack, isolated from the project stack (project "kitty-lsp", other ports).
+# Regtest only. Test credentials only. All ports on 127.0.0.1.
+name: kitty-lsp
+services:
+  bitcoind:
+    image: registry.gitlab.com/hashbeam/docker/bitcoind:30.2
+    platform: linux/amd64
+    command: "-fallbackfee=0.0002"
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      # rpc user "user", password "password" (same as upstream RLN compose, regtest only)
+      RPCAUTH: "user:84c66d54d736d8b02aaa5b02e07e759b$$cc56c229b2a49ae2bfd5932cc8a6135d435bb9a7ac037ddd351d65936082c03d"
+    ports: ["127.0.0.1:28443:18443"]
+    volumes: ["bitcoind:/srv/app/.bitcoin"]
+  electrs:
+    image: registry.gitlab.com/hashbeam/docker/electrs:0.11.0
+    platform: linux/amd64
+    environment:
+      MYUID: 1000
+      MYGID: 1000
+      BTCPASS: "password"
+    volumes: ["electrs:/srv/app/db"]
+    depends_on: [bitcoind]
+    ports: ["127.0.0.1:50101:50001"]
+  proxy:
+    image: ghcr.io/rgb-tools/rgb-proxy-server:0.3.0
+    platform: linux/amd64
+    ports: ["127.0.0.1:3100:3000"]
+  # LSP node: UTEXO rgb-lightning-node v0.13.0-beta.3 (the commit utexo-lsp pins)
+  lsp-rln:
+    image: kitty-spike/rln-utexo:v0.13.0-beta.3
+    profiles: ["lsp"]
+    command: ["/RLNdata", "--network", "regtest", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--disable-authentication"]
+    ports: ["127.0.0.1:29301:3001", "127.0.0.1:29735:9735"]
+    volumes: ["lsp-rln:/RLNdata"]
+    depends_on: [bitcoind, electrs, proxy]
+  # Inside lsp-rln, 127.0.0.1:3100 / :50101 / :28443 reach the services, so RGB invoices carry
+  # the same proxy URL for host wallets and for the LSP node.
+  lsp-loopback:
+    image: alpine/socat:1.8.0.3
+    profiles: ["lsp"]
+    network_mode: service:lsp-rln
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["socat TCP-LISTEN:3100,fork,reuseaddr,bind=127.0.0.1 TCP:proxy:3000 & socat TCP-LISTEN:50101,fork,reuseaddr,bind=127.0.0.1 TCP:electrs:50001 & socat TCP-LISTEN:28443,fork,reuseaddr,bind=127.0.0.1 TCP:bitcoind:18443 & wait"]
+    depends_on: [lsp-rln]
+  lsp:
+    image: kitty-spike/utexo-lsp:b865c88
+    profiles: ["lsp"]
+    env_file: [../.env.lsp]
+    ports: ["127.0.0.1:29380:8080"]
+    volumes: ["lsp:/data"]
+    depends_on: [lsp-rln]
+volumes:
+  bitcoind:
+  electrs:
+  lsp-rln:
+  lsp:
