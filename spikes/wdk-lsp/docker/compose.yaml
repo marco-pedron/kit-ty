@@ -31,9 +31,9 @@ services:
   lsp-rln:
     image: kitty-spike/rln-utexo:v0.13.0-beta.3
     profiles: ["lsp"]
-    command: ["/RLNdata", "--network", "regtest", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--disable-authentication"]
+    command: ["/RLNdata", "--config", "/config/lsp-rln.toml", "--daemon-listening-port", "3001", "--ldk-peer-listening-port", "9735", "--lsp-base-url", "http://lsp:8080", "--lsp-bearer-token", "spike-local-apay-only"]
     ports: ["127.0.0.1:29301:3001", "127.0.0.1:29735:9735"]
-    volumes: ["lsp-rln:/RLNdata"]
+    volumes: ["lsp-rln:/RLNdata", "./lsp-rln.toml:/config/lsp-rln.toml:ro"]
     depends_on: [bitcoind, electrs, proxy]
   # Inside lsp-rln, 127.0.0.1:3100 / :50101 / :28443 reach the services, so RGB invoices carry
   # the same proxy URL for host wallets and for the LSP node.

@@ -1,0 +1,13 @@
+# LSP node config (regtest). Forward to private channels: WDK nodes cannot announce channels
+# (spike 2, trap 1), so every member channel is private.
+[node]
+network = "Regtest"
+reuse_addresses = true
+[auth]
+disable_authentication = true
+[rgb]
+fee_rate_sat_vb = 2
+min_channel_confirmations = 1
+[channels]
+accept_forwards_to_priv_channels = true
+forwarding_fee_base_msat = 0
