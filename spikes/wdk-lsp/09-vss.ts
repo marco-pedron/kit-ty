@@ -13,7 +13,8 @@ import { HERE, log, errMsg, openNode, closeNode, fundNode, mine, sleep, waitFor,
 const VSS = 'http://127.0.0.1:8091/vss'
 const phase = process.argv[2]
 const { assetId, lspPubkey } = loadState()
-const dataDir = join(HERE, 'data', 'charlie', 'ln')
+const NODE = (process.env.KITTY_VSS_NODE ?? 'charlie') as 'charlie' | 'dave'
+const dataDir = join(HERE, 'data', NODE, 'ln')
 const snapshot = async (n: any) => {
   await n.account.refreshTransfers({ skip_sync: false }).catch(() => null)
   return {
@@ -25,12 +26,21 @@ const snapshot = async (n: any) => {
 }
 
 if (phase === 'backup') {
-  const c = await openNode('charlie', { vssUrl: VSS })
+  const c = await openNode(NODE, { vssUrl: VSS })
   log('D.backup.vssStatus.start', await c.account.vssStatus())
-  await fundNode(c)
-  const inv = await c.account.createRgbInvoice({ min_confirmations: 1, witness: false, duration_seconds: 3600 })
-  execFileSync('node', [join(HERE, '04-issue.ts'), 'sendraw', inv.invoice, '5000'], { stdio: 'inherit' })
-  await waitFor('charlie dusd', async () => { await c.account.refreshTransfers({ skip_sync: false }).catch(() => null); mine(1); const b = await c.account.getAssetBalance(assetId).catch(() => null); return b?.settled >= 5000 ? b : undefined }, 90000, 2000)
+  const has = async () => { await c.account.refreshTransfers({ skip_sync: false }).catch(() => null); return c.account.getAssetBalance(assetId).catch(() => null) }
+  const b0: any = await has()
+  if (!b0 || (b0.settled < 5000 && b0.future < 5000)) {
+    await fundNode(c)
+    const inv = await c.account.createRgbInvoice({ min_confirmations: 1, witness: false, duration_seconds: 3600 })
+    execFileSync('node', [join(HERE, '04-issue.ts'), 'sendraw', inv.invoice, '5000'], { stdio: 'ignore' })
+  }
+  // blinded transfer: recipient ACK -> sender refresh broadcasts -> 1 block -> both refresh
+  await waitFor('charlie dusd', async () => {
+    const b: any = await has()
+    execFileSync('node', [join(HERE, '04-issue.ts'), 'refresh'], { stdio: 'ignore' })
+    return b?.settled >= 5000 ? b : undefined
+  }, 120000, 1000)
   await c.account.connectPeer(`${lspPubkey}@127.0.0.1:29735`); await sleep(1500)
   await c.account.openChannel({ peer_pubkey_and_opt_addr: `${lspPubkey}@127.0.0.1:29735`, capacity_sat: 1_000_000, push_msat: 0, asset_id: assetId, asset_amount: 3000, public: false, with_anchors: true })
   await sleep(4000); mine(6)
@@ -41,31 +51,46 @@ if (phase === 'backup') {
   const v = await c.account.vssBackup()
   log('D.backup.vssBackup', { ...v, ms: Date.now() - t0 })
   const snap = await snapshot(c)
-  saveState({ vssSnapshot: snap })
+  saveState({ [`vssSnapshot_${NODE}`]: snap })
   log('D.backup.snapshot', snap)
   await closeNode(c)
+} else if (phase === 'snap') {
+  // resume after an interrupted backup run: check the pending payment, back up again, snapshot
+  const c = await openNode(NODE, { vssUrl: VSS })
+  await c.account.connectPeer(`${lspPubkey}@127.0.0.1:29735`).catch(() => null)
+  await sleep(8000)
+  const pays = ((await c.account.listPayments()) as any[]).map(p => ({ hash: p.payment_hash.slice(0, 10), status: p.status, inbound: p.inbound, asset: p.asset_amount }))
+  log('D.snap.payments', pays)
+  const lspInv = await rln('/lninvoice', { amt_msat: 3_000_000, expiry_sec: 3600, asset_id: assetId, asset_amount: 250 })
+  log('D.snap.pay250', await payAndWait(c, lspInv.invoice))
+  const t0 = Date.now()
+  log('D.snap.vssBackup', { ...(await c.account.vssBackup()), ms: Date.now() - t0 })
+  const snap = await snapshot(c)
+  saveState({ [`vssSnapshot_${NODE}`]: snap })
+  log('D.snap.snapshot', snap)
+  await closeNode(c)
 } else if (phase === 'restore') {
-  const lost = join(HERE, 'data', `charlie-lost-${Date.now()}`)
-  renameSync(join(HERE, 'data', 'charlie'), lost)
-  log('D.restore.phoneLost', { movedTo: lost.split('/').pop() })
+  const lost = join(HERE, 'data', `${NODE}-lost-${Date.now()}`)
+  renameSync(join(HERE, 'data', NODE), lost)
+  log(`D.restore.${NODE}.phoneLost`, { movedTo: lost.split('/').pop() })
   const r = spawnSync('node', [join(HERE, '09-vss.ts'), '_restore'], { env: process.env, encoding: 'utf8', timeout: 300_000, killSignal: 'SIGKILL' })
   process.stdout.write(r.stdout ?? '')
-  if (r.error || r.signal) log('D.restore.child', { killed: r.signal, error: r.error ? errMsg(r.error) : null, note: 'restore did not finish within 5 minutes' })
-  log('D.restore.newDataDir', existsSync(dataDir) ? readdirSync(dataDir) : null)
+  if (r.error || r.signal) log(`D.restore.${NODE}.child`, { killed: r.signal, error: r.error ? errMsg(r.error) : null, note: 'restore did not finish within 5 minutes' })
+  log(`D.restore.${NODE}.newDataDir`, existsSync(dataDir) ? readdirSync(dataDir) : null)
 } else if (phase === '_restore') {
   const t0 = Date.now()
   try {
-    const c = await openNode('charlie', { vssUrl: VSS })
-    log('D.restore.unlocked', { secs: Math.round((Date.now() - t0) / 1000) })
+    const c = await openNode(NODE, { vssUrl: VSS })
+    log(`D.restore.${NODE}.unlocked`, { secs: Math.round((Date.now() - t0) / 1000) })
     await c.account.connectPeer(`${lspPubkey}@127.0.0.1:29735`).catch(() => null)
     await sleep(5000); await c.account.sync()
     const snap = await snapshot(c)
-    const before = loadState().vssSnapshot
-    log('D.restore.snapshot', { snap, samePubkey: snap.pubkey === before.pubkey, sameDusd: JSON.stringify(snap.dusd) === JSON.stringify(before.dusd), sameChannels: JSON.stringify(snap.channels) === JSON.stringify(before.channels) })
+    const before = loadState()[`vssSnapshot_${NODE}`]
+    log(`D.restore.${NODE}.snapshot`, { snap, samePubkey: snap.pubkey === before.pubkey, sameDusd: JSON.stringify(snap.dusd) === JSON.stringify(before.dusd), sameChannels: JSON.stringify([...snap.channels].sort((a: any, b: any) => a.id.localeCompare(b.id))) === JSON.stringify([...before.channels].sort((a: any, b: any) => a.id.localeCompare(b.id))) })
     const lspInv = await rln('/lninvoice', { amt_msat: 3_000_000, expiry_sec: 3600, asset_id: assetId, asset_amount: 100 })
-    log('D.restore.payAfterRestore', await payAndWait(c, lspInv.invoice))
+    log(`D.restore.${NODE}.payAfterRestore`, await payAndWait(c, lspInv.invoice))
     await closeNode(c)
-  } catch (e) { log('D.restore.error', { secs: Math.round((Date.now() - t0) / 1000), e: errMsg(e) }) }
+  } catch (e) { log(`D.restore.${NODE}.error`, { secs: Math.round((Date.now() - t0) / 1000), e: errMsg(e) }) }
   process.exit(0)
 }
 process.exit(0)

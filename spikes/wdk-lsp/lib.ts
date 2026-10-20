@@ -36,7 +36,7 @@ export function loadState (): Record<string, any> {
 }
 export function saveState (patch: Record<string, any>) {
   mkdirSync(dirname(STATE), { recursive: true })
-  writeFileSync(STATE, JSON.stringify({ ...loadState(), ...patch }, null, 2))
+  writeFileSync(STATE, JSON.stringify({ ...loadState(), ...patch }, (_k, v) => typeof v === "bigint" ? v.toString() : v, 2))
 }
 
 const json = (data: unknown) => JSON.stringify(data, (_k, v) => typeof v === 'bigint' ? v.toString() : v)

@@ -26,6 +26,8 @@ try {
     const asset = t.issueAssetNia({ ticker: 'DUSD', name: 'Demo Dollar', precision: 2, amounts: [1_000_000] })
     log('C.issue', { assetId: asset.assetId ?? asset.asset_id, raw: asset })
     saveState({ assetId: asset.assetId ?? asset.asset_id })
+  } else if (cmd === 'refresh') {
+    t.refreshWallet(); mine(1); await sleep(1000); t.refreshWallet()
   } else if (cmd === 'sendraw') {
     // send to an RGB invoice made elsewhere (the LSP node): node 04-issue.ts sendraw <invoice> <units>
     const res = await t.transfer({ recipient: who, token: loadState().assetId, amount: Number(units), feeRate: 2, minConfirmations: 1 })
