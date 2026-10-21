@@ -1,155 +1,245 @@
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
-import { DEFAULT_POLICY, DEMO_TRIP_PARAMS } from './domain.js';
+import { canonicalize, sha256Hex } from './canonical.js';
+import { nip44Encrypt, sealTripSecret, tripContentKey, tripTagOf } from './content.js';
 import {
-  EVENT_AUTHOR,
-  EVENT_TYPES,
-  EventInnerSchema,
-  GENESIS_HASH,
-  StoredEventSchema,
-  signingMessage,
-  storedEventHash,
-  type EventBody,
-  type EventInner,
-  type EventType,
+  buildRegistryEvent,
+  decodeContent,
+  DEFAULT_INVOICE_EXPIRY_SECONDS,
+  encodeContent,
+  proposalDigest,
+  ProposalSchema,
+  readRegistryEvent,
+  RegistryFormatError,
+  TripParamsSchema,
+  type Proposal,
+  type RegistryContent,
 } from './events.js';
-import { AT, HASH, NODE, dinner } from './test/samples.js';
+import { KIND_REGISTRY, nostrEventId, type NostrEvent } from './nostr.js';
+import { dinner } from './test/samples.js';
 
-const BOLT11 = 'lnbcrt30u1pexample';
-const ref = { expenseEventHash: HASH('e') };
+const tripId = 'vietnam-2026';
+const secret = '5e'.repeat(32);
+const trip = { tripId, tripTag: tripTagOf(secret), tripKey: tripContentKey(secret) };
+const sk = (n: number) => n.toString(16).padStart(64, '0');
+const pk = (n: number) => bytesToHex(schnorr.getPublicKey(hexToBytes(sk(n))));
+const [alice, bob, charlie] = [pk(1), pk(2), pk(3)];
+const P1 = '1'.repeat(64);
+const P2 = '2'.repeat(64);
 
-// One valid body per event type (SPEC §9.2).
-const bodies: { [T in EventType]: EventBody<T> } = {
-  TRIP_CREATED: {
-    name: 'Vietnam 2026',
-    assetId: 'rgb:dusd',
-    params: DEMO_TRIP_PARAMS,
-    coordinatorPubkey: HASH('d'),
-  },
-  RATE_SET: { asOf: '2026-10-17', source: 'infra/rates.json', rates: { VND: '26350' } },
-  MEMBER_JOINED: {
-    displayName: 'Bob',
-    memberId: 'bob',
-    appPubkey: HASH('b'),
-    nodePubkey: NODE('b'),
-    bindInvoice: BOLT11,
-    policy: DEFAULT_POLICY,
-  },
-  MEMBER_ADMITTED: { memberPubkey: HASH('b') },
-  POLICY_UPDATED: { policy: { ...DEFAULT_POLICY, payUpheldDisputes: true } },
-  CHANNELS_READY: { memberPubkey: HASH('b'), tripChannelId: 'c1', liquidityChannelId: 'c2' },
-  EXPENSE_SUBMITTED: {
-    expenseId: 'e1',
-    receipt: dinner,
-    receiptImageSha256: HASH('f'),
-    rateEventHash: HASH('9'),
-    rate: '26350',
-    totalUsdCents: 968n,
-    payerCents: 309n,
-    payerItemIndexes: [0, 2],
-    lines: [
-      { debtorPubkey: HASH('b'), cents: 309n, itemIndexes: [0, 2], bolt11: BOLT11 },
-      { debtorPubkey: HASH('c'), cents: 350n, itemIndexes: [1, 2], bolt11: BOLT11 },
-    ],
-    fingerprint: HASH('8'),
-  },
-  LINE_SEEN: ref,
-  LINE_DECIDED: { ...ref, decision: 'contest', cents: 350n, reason: 'I only had water' },
-  PAYMENT_MADE: {
-    ...ref,
-    creditorPubkey: HASH('a'),
-    cents: 309n,
-    rail: 'ln',
-    paymentHash: HASH('1'),
-    preimage: HASH('2'),
-  },
-  EXPENSE_VOIDED: ref,
-  DISPUTE_RESOLVED: { ...ref, debtorPubkey: HASH('c'), outcome: 'upheld', note: 'photo seen' },
-  INVOICE_REISSUED: { ...ref, debtorPubkey: HASH('c'), bolt11: BOLT11 },
-  GUARANTEE_PAID: {
-    ...ref,
-    debtorPubkey: HASH('c'),
-    creditorPubkey: HASH('a'),
-    cents: 350n,
-    paymentHash: HASH('3'),
-    preimage: HASH('4'),
-  },
-  MEMBER_EXCLUDED: { memberPubkey: HASH('c'), reason: 'did not pay', closingTxids: [HASH('5')] },
-  CHECKPOINT: { seq: 12, headHash: HASH('6') },
-  TRIP_CLOSED: { summary: 'all settled' },
-};
-
-function inner<T extends EventType>(type: T, author = HASH('a')): EventInner {
-  return {
-    v: 1,
-    tripId: 'vietnam-2026',
-    type,
-    author,
-    nonce: '0123456789abcdef0123456789abcdef',
-    createdAt: AT,
-    body: bodies[type],
-  } as EventInner;
+function sign(e: ReturnType<typeof buildRegistryEvent>, n: number): NostrEvent {
+  const id = nostrEventId(e);
+  return { ...e, id, sig: bytesToHex(schnorr.sign(hexToBytes(id), hexToBytes(sk(n)))) };
 }
 
-describe('event schemas', () => {
-  it('cover every type of SPEC §9.2 and give each an author rule', () => {
-    expect([...EVENT_TYPES].sort()).toEqual(Object.keys(bodies).sort());
-    expect(Object.keys(EVENT_AUTHOR).sort()).toEqual([...EVENT_TYPES].sort());
+const params = {
+  assetId: 'rgb:dusd',
+  assetDecimals: 2,
+  displayDecimals: 2,
+  silentAssentSeconds: 45,
+  invoiceExpirySeconds: DEFAULT_INVOICE_EXPIRY_SECONDS,
+  rateMaxAgeSeconds: 86_400,
+  oracles: [],
+};
+
+const proposal: Proposal = {
+  tripId,
+  expenseId: 'e1',
+  payer: alice,
+  receipt: dinner,
+  rate: { pair: 'USD/VND', value: '26350', asOf: '2026-10-17T08:00:00.000Z', source: 'table' },
+  assetId: 'rgb:dusd',
+  assetDecimals: 2,
+  total: 968n,
+  payerAmount: 309n,
+  payerItemIndexes: [0, 2],
+  lines: [
+    { debtor: bob, amount: 309n, itemIndexes: [0, 2] },
+    { debtor: charlie, amount: 350n, itemIndexes: [1, 2] },
+  ],
+};
+
+const expense: RegistryContent = {
+  v: 2,
+  tripId,
+  type: 'EXPENSE_SUBMITTED',
+  body: {
+    proposal,
+    tableSignatures: [{ signer: bob, sig: 'ab'.repeat(64) }],
+    invoices: [
+      { debtor: bob, bolt11: 'lnbcrt1bob' },
+      { debtor: charlie, bolt11: 'lnbcrt1charlie' },
+    ],
+    receiptImageSha256: 'c'.repeat(64),
+    fingerprint: 'd'.repeat(64),
+  },
+};
+
+describe('trip params', () => {
+  it('accepts the demo values', () => {
+    expect(TripParamsSchema.parse(params).assetDecimals).toBe(2);
   });
 
-  it.each(EVENT_TYPES)('%s survives encode → JSON → decode with bigint intact', (type) => {
-    const e = inner(type);
-    const wire = JSON.parse(JSON.stringify(z.encode(EventInnerSchema, e)));
-    expect(z.decode(EventInnerSchema, wire)).toEqual(e);
-  });
-
-  it('puts amounts on the wire as decimal strings', () => {
-    const wire = z.encode(EventInnerSchema, inner('EXPENSE_SUBMITTED')) as {
-      body: { totalUsdCents: unknown; lines: { cents: unknown }[] };
-    };
-    expect(wire.body.totalUsdCents).toBe('968');
-    expect(wire.body.lines[0]?.cents).toBe('309');
-  });
-
-  it('rejects an unknown type, a bad nonce and an ln payment without preimage', () => {
-    const wire = z.encode(EventInnerSchema, inner('PAYMENT_MADE')) as Record<string, unknown>;
-    expect(EventInnerSchema.safeParse({ ...wire, type: 'STEAL' }).success).toBe(false);
-    expect(EventInnerSchema.safeParse({ ...wire, nonce: 'abc' }).success).toBe(false);
-    const body = { ...(wire.body as Record<string, unknown>) };
-    delete body.preimage;
-    expect(EventInnerSchema.safeParse({ ...wire, body }).success).toBe(false);
-  });
-
-  it('rejects amounts written as JSON numbers', () => {
-    const wire = z.encode(EventInnerSchema, inner('LINE_DECIDED')) as Record<string, unknown>;
-    const body = { ...(wire.body as Record<string, unknown>), cents: 350 };
-    expect(EventInnerSchema.safeParse({ ...wire, body }).success).toBe(false);
-  });
-});
-
-describe('signing message and chain hash', () => {
-  it('is the same for the decoded event and its wire form', () => {
-    const e = inner('EXPENSE_SUBMITTED');
-    const decoded = z.decode(
-      EventInnerSchema,
-      JSON.parse(JSON.stringify(z.encode(EventInnerSchema, e))),
+  it('refuses invoices shorter than 24 h', () => {
+    expect(TripParamsSchema.safeParse({ ...params, invoiceExpirySeconds: 3600 }).success).toBe(
+      false,
     );
-    expect(signingMessage(decoded)).toBe(signingMessage(e));
-    expect(signingMessage(e)).toContain('"totalUsdCents":"968"');
   });
 
-  it('changes with any field, so a signature cannot be moved to another trip', () => {
-    const e = inner('LINE_SEEN');
-    expect(signingMessage({ ...e, tripId: 'other-trip' })).not.toBe(signingMessage(e));
-  });
-
-  it('chains: the hash depends on seq and prevHash', () => {
-    const signed = { inner: inner('LINE_SEEN'), sig: 'sig' };
-    const h1 = storedEventHash({ seq: 1, prevHash: GENESIS_HASH, signed });
-    expect(h1).toMatch(/^[0-9a-f]{64}$/);
-    expect(storedEventHash({ seq: 2, prevHash: GENESIS_HASH, signed })).not.toBe(h1);
-    expect(storedEventHash({ seq: 1, prevHash: HASH('1'), signed })).not.toBe(h1);
-    const stored = { seq: 1, prevHash: GENESIS_HASH, signed, receivedAt: AT, hash: h1 };
-    expect(StoredEventSchema.safeParse(z.encode(StoredEventSchema, stored)).success).toBe(true);
+  it('refuses more display decimals than the asset has', () => {
+    expect(
+      TripParamsSchema.safeParse({ ...params, assetDecimals: 2, displayDecimals: 6 }).success,
+    ).toBe(false);
   });
 });
+
+describe('registry events', () => {
+  it('round-trips through a signed Nostr event, encrypted', () => {
+    const e = sign(
+      buildRegistryEvent({
+        author: alice,
+        createdAt: 1_760_000_000,
+        tripTag: trip.tripTag,
+        parents: [P2, P1],
+        content: expense,
+        tripKey: trip.tripKey,
+      }),
+      1,
+    );
+    expect(e.kind).toBe(KIND_REGISTRY);
+    expect(e.content).not.toContain('vietnam');
+    expect(e.content).not.toContain(bob);
+    const read = readRegistryEvent(e, trip);
+    expect(read.parents).toEqual([P1, P2]);
+    expect(read.author).toBe(alice);
+    expect(read.content).toEqual(expense);
+  });
+
+  it('only TRIP_CREATED has no parents', () => {
+    const created: RegistryContent = {
+      v: 2,
+      tripId,
+      type: 'TRIP_CREATED',
+      body: { name: 'Vietnam 2026', params, relays: ['ws://127.0.0.1:7001'] },
+    };
+    const base = { author: alice, createdAt: 0, tripTag: trip.tripTag, tripKey: trip.tripKey };
+    expect(() => buildRegistryEvent({ ...base, parents: [], content: created })).not.toThrow();
+    expect(() => buildRegistryEvent({ ...base, parents: [P1], content: created })).toThrow(
+      RegistryFormatError,
+    );
+    expect(() => buildRegistryEvent({ ...base, parents: [], content: expense })).toThrow(
+      RegistryFormatError,
+    );
+  });
+
+  it('refuses events of another trip: tag or content', () => {
+    const e = sign(
+      buildRegistryEvent({
+        author: alice,
+        createdAt: 0,
+        tripTag: trip.tripTag,
+        parents: [P1],
+        content: expense,
+        tripKey: trip.tripKey,
+      }),
+      1,
+    );
+    expect(() => readRegistryEvent(e, { ...trip, tripTag: P2 })).toThrow(RegistryFormatError);
+    expect(() => readRegistryEvent(e, { ...trip, tripId: 'other' })).toThrow(RegistryFormatError);
+    expect(() =>
+      readRegistryEvent(e, { ...trip, tripKey: tripContentKey('77'.repeat(32)) }),
+    ).toThrow(RegistryFormatError);
+  });
+
+  it('refuses non-canonical JSON inside the encryption', () => {
+    const json = JSON.stringify({ type: 'LINE_SEEN', v: 2, tripId, body: { expenseRef: P1 } });
+    expect(() => decodeContent(nip44Encrypt(json, trip.tripKey), trip.tripKey, tripId)).toThrow(
+      /canonical/,
+    );
+  });
+
+  it.each([
+    ['in an empty body', { v: 2, tripId, type: 'MEMBER_LEFT', body: { note: 'bye' } }],
+    ['in a body', { v: 2, tripId, type: 'LINE_SEEN', body: { expenseRef: P1, extra: 1 } }],
+    ['next to the body', { v: 2, tripId, type: 'LINE_SEEN', body: { expenseRef: P1 }, x: 1 }],
+  ])('refuses unknown fields %s', (_name, content) => {
+    const payload = nip44Encrypt(canonicalize(content), trip.tripKey);
+    expect(() => decodeContent(payload, trip.tripKey, tripId)).toThrow(RegistryFormatError);
+  });
+
+  it('refuses a hidden field in the proposal, which the debtor would not have signed', () => {
+    const w = wire(expense) as { body: { proposal: Record<string, unknown> } };
+    w.body.proposal.bolt11 = 'lnbcrt1hidden';
+    const payload = nip44Encrypt(canonicalize(w), trip.tripKey);
+    expect(() => decodeContent(payload, trip.tripKey, tripId)).toThrow(/unknown fields/);
+  });
+
+  it('only TRIP_SECRET_SHARED travels in clear, without the trip id', () => {
+    const shared: RegistryContent = {
+      v: 2,
+      tripId,
+      type: 'TRIP_SECRET_SHARED',
+      body: { recipients: [{ pubkey: alice, ciphertext: sealTripSecret(secret, sk(1), alice) }] },
+    };
+    const content = encodeContent(shared, trip.tripKey);
+    expect(content.startsWith('{')).toBe(true);
+    expect(content).not.toContain(tripId);
+    expect(decodeContent(content, trip.tripKey, tripId)).toEqual(shared);
+
+    const clearSeen = canonicalize({ v: 2, type: 'LINE_SEEN', body: { expenseRef: P1 } });
+    expect(() => decodeContent(clearSeen, trip.tripKey, tripId)).toThrow(/in clear/);
+    const encryptedShare = nip44Encrypt(canonicalize(wire(shared)), trip.tripKey);
+    expect(() => decodeContent(encryptedShare, trip.tripKey, tripId)).toThrow(/in clear/);
+    const withTripId = canonicalize({ ...wire(shared) });
+    expect(() => decodeContent(withTripId, trip.tripKey, tripId)).toThrow(/unknown fields/);
+  });
+
+  it('refuses a duplicate recipient', () => {
+    const shared = {
+      v: 2,
+      type: 'TRIP_SECRET_SHARED',
+      body: {
+        recipients: [
+          { pubkey: alice, ciphertext: 'x' },
+          { pubkey: alice, ciphertext: 'y' },
+        ],
+      },
+    };
+    expect(() => decodeContent(canonicalize(shared), trip.tripKey, tripId)).toThrow(
+      RegistryFormatError,
+    );
+  });
+});
+
+describe('table signatures (D2)', () => {
+  it('sign the proposal, which has no invoice', () => {
+    expect(Object.keys(ProposalSchema.shape)).not.toContain('bolt11');
+    expect(Object.keys(ProposalSchema.shape.lines.element.shape)).not.toContain('bolt11');
+  });
+
+  it('stay valid when the payer reissues an invoice', () => {
+    const before = proposalDigest(proposal);
+    const reissued = { ...expense.body, invoices: [{ debtor: bob, bolt11: 'lnbcrt1new' }] };
+    expect(reissued.proposal).toBe(proposal);
+    expect(proposalDigest(reissued.proposal)).toBe(before);
+  });
+
+  it('change with any amount, line or rate', () => {
+    const d = proposalDigest(proposal);
+    expect(proposalDigest({ ...proposal, payerAmount: 310n })).not.toBe(d);
+    expect(proposalDigest({ ...proposal, rate: { ...proposal.rate, value: '26351' } })).not.toBe(d);
+    expect(proposalDigest({ ...proposal, lines: proposal.lines.slice(0, 1) })).not.toBe(d);
+  });
+
+  it('is domain-separated from a plain hash of the proposal', () => {
+    const wireProposal = canonicalize(wire(proposal));
+    expect(proposalDigest(proposal)).toBe(sha256Hex(`kitty:share:v1${wireProposal}`));
+    expect(proposalDigest(proposal)).not.toBe(sha256Hex(wireProposal));
+  });
+});
+
+// The wire form (bigint → decimal string), as encodeContent writes it.
+function wire(c: unknown): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(c, (_k, v: unknown) => (typeof v === 'bigint' ? `${v}` : v)));
+}
