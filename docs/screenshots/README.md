@@ -35,3 +35,10 @@ Ogni nome esiste in due versioni, `<nome>-light.png` e `<nome>-dark.png`.
 
 **styleguide**: componenti e token dell'interfaccia, nella viewport e a pagina intera.
 `styleguide`, `styleguide-full`
+
+## Teste dei gatti
+
+La cartella `cat-heads/` contiene le 8 teste del gattino in SVG, su sfondo bianco, per le slide del pitch. Sono gli SVG dell'app (`apps/web/src/assets/heads/`, main al commit `127adf3`) con tre sole modifiche: un rettangolo bianco su tutto il riquadro, i colori scritti in chiaro (`#FFFFFF` per il muso, `#F25481` per il contorno) al posto delle variabili CSS, che molti programmi di grafica non leggono, e una dimensione predefinita di 520×520. Sono vettoriali e pixel art (`shape-rendering="crispEdges"`), quindi restano nitide a qualsiasi dimensione.
+
+- Una per membro: `kitty-head-alice`, `kitty-head-bob`, `kitty-head-charlie`, `kitty-head-dave`.
+- Una per stato d'animo: `kitty-head-happy`, `kitty-head-angry`, `kitty-head-worried`, `kitty-head-out` (membro escluso).
