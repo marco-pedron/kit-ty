@@ -191,5 +191,5 @@ Da decidere: per kit+ty deve restare segreto solo il contenuto, o anche chi paga
 ## Pitch: Lugano Cypher Tank 2026
 
 - 3 minuti, in inglese, massimo 3 slide in PDF, sfondo scuro. Consegna entro il 22/10/2026.
-- Giudice ospite: Chris Hutchinson, co-fondatore e CMO di Utexo. Può aprire una conversazione su grant, investimento o partnership.
+- Giudice ospite: un rappresentante di Utexo. Può aprire una conversazione su grant, investimento o partnership.
 - I testi delle slide per il grafico sono in un documento separato ("kit+ty pitch: testi per le slide"). Mancano i contatti del team e la scelta tra "common fund" e "kitty" nella frase sotto il logo.
