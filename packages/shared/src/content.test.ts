@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { v2 as nostrToolsNip44 } from 'nostr-tools/nip44';
@@ -17,10 +16,33 @@ import {
   tripTagOf,
 } from './content.js';
 
-// Official NIP-44 vectors: https://github.com/paulmillr/nip44/blob/main/nip44.vectors.json,
-// the file whose sha256 is published in NIP-44 (44.md, "Tests and code").
-const raw = readFileSync(new URL('./test/vectors/nip44.vectors.json', import.meta.url), 'utf8');
-const VECTORS_SHA256 = '269ed0f69e4c192512cc779e78c555090cebc7c785b609e338a62afc3ce25040';
+// Official NIP-44 vectors, downloaded at every run (not kept in the repo): the file
+// https://github.com/paulmillr/nip44/blob/main/nip44.vectors.json, accepted only if its sha256
+// is the one published in NIP-44 itself (44.md, "Tests and code"). These tests need network.
+const NIP44_SPEC_URL = 'https://raw.githubusercontent.com/nostr-protocol/nips/master/44.md';
+const NIP44_VECTORS_URL =
+  'https://raw.githubusercontent.com/paulmillr/nip44/main/nip44.vectors.json';
+
+async function download(url: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  } catch (e) {
+    throw new Error(`cannot download ${url} (the NIP-44 vector tests need network)`, {
+      cause: e,
+    });
+  }
+  if (!res.ok) throw new Error(`cannot download ${url}: HTTP ${res.status}`);
+  return res.text();
+}
+
+const [spec, raw] = await Promise.all([download(NIP44_SPEC_URL), download(NIP44_VECTORS_URL)]);
+const PUBLISHED_SHA256 = /\b([0-9a-f]{64})\s+nip44\.vectors\.json\b/.exec(spec)?.[1];
+if (PUBLISHED_SHA256 === undefined)
+  throw new Error(`no vectors checksum found in ${NIP44_SPEC_URL}`);
+// Nothing below runs on vectors NIP-44 does not vouch for.
+if (sha256Hex(raw) !== PUBLISHED_SHA256)
+  throw new Error(`${NIP44_VECTORS_URL} does not match the sha256 published in NIP-44`);
 
 interface Vectors {
   v2: {
@@ -54,8 +76,8 @@ interface Vectors {
 const { valid, invalid } = (JSON.parse(raw) as Vectors).v2;
 
 describe('NIP-44 v2 on the official vectors', () => {
-  it('uses the file NIP-44 publishes', () => {
-    expect(sha256Hex(raw)).toBe(VECTORS_SHA256);
+  it('uses the file whose sha256 NIP-44 publishes', () => {
+    expect(sha256Hex(raw)).toBe(PUBLISHED_SHA256);
   });
 
   it.each(valid.get_conversation_key)('conversation key $conversation_key', (v) => {
