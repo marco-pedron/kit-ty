@@ -274,7 +274,7 @@ describe('toReceipt, quantities', () => {
     'YOGURT  GRECO  0 , 89  2 ,67',
     'Nem  ran  1 X  45 .000  45 .000',
     'ACQUA  NAT . 6X1 , 5L  2,34',
-    '0,412 X 3,20 EUR/kg  1,32',
+    'PANE  COMUNE  0,412 kg X 3,20 EUR/kg  1,32',
     'Birra  media  5,50',
     'TOTALE  31,00',
   ];
@@ -379,5 +379,145 @@ describe('toReceipt, text read from the rows', () => {
   it('a merchant that is not printed above the items is the first header row', () => {
     const r = toReceipt(answer, rows);
     expect(r.ok && r.receipt.merchant).toBe('CAFE PHO CO');
+  });
+});
+
+describe('toReceipt, which rows are items', () => {
+  // A cluttered fast-food receipt as the OCR reads it photographed: the model lists the order
+  // number, the payment and the change as items, and takes the cash given as the total.
+  const rows = [
+    'BURGER  STATION',
+    '17-10-2026  13:27',
+    '247',
+    'MENU  CLASSIC  8 , 90  17,80',
+    'X NUGGETS  9PZ  5,20',
+    'x GELATO CARAMELLO  1,90  3,80',
+    '0,734 kg  2 ,49  EUR/kg',
+    'TOTALE COMPLESSIVO  26 ,80',
+    'di  cui IVA  108  2 ,44',
+    'Pagamento contante  30,00',
+    'Resto  3 ,20',
+  ];
+  const item = (row: number, label: string) => ({ row, label, quantity: 1 });
+  const answer = {
+    ...base,
+    totalRow: 9,
+    items: [
+      item(2, '247'),
+      item(3, 'MENU CLASSIC'),
+      item(4, 'NUGGETS'),
+      item(5, 'GELATO CARAMELLO'),
+      item(6, 'Banane'),
+      item(10, 'Resto'),
+    ],
+  };
+
+  it('keeps the products, drops what names no product and what is after the total', () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.receipt.items).toEqual([
+      { label: 'MENU CLASSIC', quantity: 2, unitPrice: 890n, total: 1780n },
+      { label: 'NUGGETS 9PZ', quantity: 1, unitPrice: 520n, total: 520n },
+      { label: 'GELATO CARAMELLO', quantity: 2, unitPrice: 190n, total: 380n },
+    ]);
+    expect(r.receipt.warnings).toEqual([
+      'Row "247" names no product, not an item.',
+      'Row "0,734 kg  2 ,49  EUR/kg" names no product, not an item.',
+      'Row "Resto  3 ,20" is after the total, not an item.',
+      'Row "TOTALE COMPLESSIVO  26 ,80" adds up to the items: read as the total.',
+    ]);
+  });
+
+  it("the total is the first row below the items that adds up, when the model's does not", () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok && r.receipt.total).toBe(2680n);
+  });
+
+  it('a "subtotal" above an item is not one, and stays an item when the model listed it', () => {
+    const r = toReceipt({ ...answer, totalRow: 7, subtotalRow: 3 }, rows);
+    expect(r.ok && r.receipt.subtotal).toBeUndefined();
+    expect(r.ok && r.receipt.items.map((it) => it.total)).toEqual([1780n, 520n, 380n]);
+    expect(r.ok && r.receipt.warnings).toContain(
+      'Row "MENU  CLASSIC  8 , 90  17,80" is above an item: not the subtotal.',
+    );
+  });
+
+  it('a tax printed after the total is VAT already included, not added', () => {
+    const r = toReceipt({ ...answer, totalRow: 7, taxRow: 8 }, rows);
+    expect(r.ok && r.receipt.tax).toBeUndefined();
+    expect(r.ok && r.receipt.total).toBe(2680n);
+    expect(r.ok && r.receipt.warnings).toContain(
+      'Row "di  cui IVA  108  2 ,44" is after the total: not added as the tax.',
+    );
+  });
+});
+
+describe('toReceipt, subtotal and tax the model listed as items', () => {
+  // A Vietnamese bill: "Tam tinh" (subtotal) and "Thue VAT 8%" listed as items.
+  const rows = [
+    'NHA  HANG  PHO  36',
+    'Ngay:  17/10/2026',
+    'Pho  bo tai  2 x 65.000  130 . 000',
+    'Bia  Sai  Gon  3 x 25.000  75.000',
+    'Tra  da  3 x 5.000  15.000',
+    'Nem  ran  1 X  45 .000  45 .000',
+    'Tam  tinh  265 . 000',
+    'Thue  VAT  88  21.200',
+    'TONG  CONG  (VND)  286 .200',
+    'Tien  khach  dua  300 . 000',
+  ];
+  const answer = {
+    ...base,
+    currency: 'VND',
+    totalRow: 8,
+    items: [2, 3, 4, 5, 6, 7, 9].map((row) => ({ row, label: rows[row] ?? '', quantity: 1 })),
+  };
+
+  it('reads the tax by its name and the subtotal as the sum of the items above it', () => {
+    const r = toReceipt(answer, rows);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.receipt.items.map((it) => [it.label, it.quantity, it.unitPrice, it.total])).toEqual([
+      ['Pho bo tai', 2, 65_000n, 130_000n],
+      ['Bia Sai Gon', 3, 25_000n, 75_000n],
+      ['Tra da', 3, 5_000n, 15_000n],
+      ['Nem ran', 1, 45_000n, 45_000n],
+    ]);
+    expect(r.receipt).toMatchObject({ subtotal: 265_000n, tax: 21_200n, total: 286_200n });
+    expect(r.receipt.warnings).toEqual([
+      'Row "Thue  VAT  88  21.200" read as the tax.',
+      'Row "Tien  khach  dua  300 . 000" is after the total, not an item.',
+      'Row "Tam  tinh  265 . 000" is the sum of the items above it: read as the subtotal.',
+    ]);
+  });
+
+  it('an item equal to the sum of the ones above is still an item when the total says so', () => {
+    const r = toReceipt(
+      {
+        ...base,
+        totalRow: 4,
+        items: [1, 2, 3].map((row) => ({ row, label: `Item ${row}`, quantity: 1 })),
+      },
+      ['SHOP', 'Pane  5,00', 'Latte  5,00', 'Vino  10,00', 'TOTALE  20,00'],
+    );
+    expect(r.ok && r.receipt.items.map((it) => it.total)).toEqual([500n, 500n, 1000n]);
+    expect(r.ok && r.receipt.subtotal).toBeUndefined();
+  });
+
+  it('a tax the total already includes is not added', () => {
+    const r = toReceipt(
+      {
+        ...base,
+        totalRow: 3,
+        taxRow: 2,
+        items: [{ row: 1, label: 'Pasta', quantity: 1 }],
+      },
+      ['SHOP', 'Pasta  10,00', 'VAT included  1,82', 'TOTAL  10,00'],
+    );
+    expect(r.ok && r.receipt.tax).toBeUndefined();
+    expect(r.ok && r.receipt.warnings).toContain(
+      'Row "VAT included  1,82" is already in the total: not added as the tax.',
+    );
   });
 });

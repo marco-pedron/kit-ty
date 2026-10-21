@@ -53,7 +53,31 @@ export function llmReceiptJsonSchema(rowCount: number) {
 // An amount as printed: grouped thousands ("255.000", "1,234.56") or plain ("2.50", "38,50").
 const AMOUNT = /\d{1,3}(?:[.,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/gu;
 const TIP_LABEL = /^\s*(tip|tips|mancia|trinkgeld|pourboire|propina|service|servizio)\b/iu;
-const TAX_LABEL = /^\s*(tax|sales tax|vat|iva|mwst|tva)\b/iu;
+// A tax named anywhere on the row: "Sales tax", "Thue VAT 8%", "MwSt 19%".
+const TAX_WORD = /(?<!\p{L})(tax|vat|iva|mwst|tva|gst|thue)(?!\p{L})/iu;
+const TOTAL_LABEL = /^\s*(total|totale|tong\s+cong|summe|gesamt|amount\s+due)(?!\p{L})/iu;
+const SUBTOTAL_LABEL =
+  /(?<!\p{L})(sub\s*-?\s*total|subtot|tam\s+tinh|totale\s+parziale|zwischensumme)(?!\p{L})/iu;
+// Words of a row that are not a product: units, currencies, a count sign.
+const NOT_PRODUCT = new Set([
+  'kg',
+  'gr',
+  'lt',
+  'ml',
+  'cl',
+  'pz',
+  'pc',
+  'pcs',
+  'lb',
+  'oz',
+  'eur',
+  'usd',
+  'vnd',
+]);
+
+/** Whether a label names something: a word of 2 or more letters that is not a unit or currency. */
+const namesProduct = (label: string) =>
+  (label.toLowerCase().match(/\p{L}{2,}/gu) ?? []).some((w) => !NOT_PRODUCT.has(w));
 // "2 x 65.000", "3 X 0.90", "2×1.25", "2*1,50": a count times a unit price. Not a weight
 // ("0,412 x 3,20 EUR/kg": the count is a decimal) and not a pack size ("6X1,5L": the "unit"
 // is a measure).
@@ -95,7 +119,7 @@ export function cleanNumbers(row: string, currency: CurrencyCode): string {
   );
   // without decimals, a lost thousands dot leaves "10  000" at the end of the row
   if (CURRENCY_EXPONENTS[currency] === 0)
-    text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{3})\s*$/u, '$1$2');
+    text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{3})\s*$/u, '$1.$2');
   // with decimals, a lost decimal mark leaves "0  80" at the end of the row
   else text = text.replace(/(?<![\d.,])(\d{1,3})\s+(\d{2})\s*$/u, '$1,$2');
   return text;
@@ -254,7 +278,8 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
   };
 
   // Structure, not money: an "item" on the total, subtotal, tax or tip row is dropped (and
-  // said in the warnings); items are kept in printed order.
+  // said in the warnings); items are kept in printed order. Every rule below only says which
+  // row is what, never changes an amount, and says what it did in the warnings.
   const special = new Map<number, string>();
   const claim = (what: string, i: number | null) => {
     if (i === null) return;
@@ -263,12 +288,16 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     special.set(i, what);
   };
   const dropped: string[] = [];
-  // A tip or tax line the model listed as an item, when it gave no tip or tax row.
-  const byLabel = (re: RegExp) => r.items.find((it) => re.test(it.label))?.row ?? null;
+  const totalRow = r.totalRow;
+  // A tip or tax line the model listed as an item, when it gave no tip or tax row: above the
+  // total ("di cui IVA 2,44" below it is VAT already in the total).
+  const byLabel = (re: RegExp) =>
+    r.items.find((it) => it.row < totalRow && (re.test(it.label) || re.test(rows[it.row] ?? '')))
+      ?.row ?? null;
   let { tipRow, taxRow } = r;
   if (tipRow === null && (tipRow = byLabel(TIP_LABEL)) !== null)
     dropped.push(`Row "${rows[tipRow]}" read as the tip.`);
-  if (taxRow === null && (taxRow = byLabel(TAX_LABEL)) !== null)
+  if (taxRow === null && (taxRow = byLabel(TAX_WORD)) !== null)
     dropped.push(`Row "${rows[taxRow]}" read as the tax.`);
   // Optional rows with no amount ("IVA inclusa" given as the tax) are not read as that row.
   const withAmount = (what: string, i: number | null) => {
@@ -276,30 +305,78 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     dropped.push(`Row "${rows[i]}" has no amount: not read as ${what}.`);
     return null;
   };
-  const subtotalRow = withAmount('the subtotal', r.subtotalRow);
+  let subtotalRow = withAmount('the subtotal', r.subtotalRow);
   taxRow = withAmount('the tax', taxRow);
   tipRow = withAmount('the tip', tipRow);
-  claim('the total', r.totalRow);
-  claim('the subtotal', subtotalRow);
-  claim('the tax', taxRow);
-  claim('the tip', tipRow);
+
+  // The items the model listed, on the row their label is on; never the date row (its time
+  // would read as a price), nothing printed after the total (payment, change, VAT summary,
+  // loyalty points), never a row that names no product ("247", "0,734 kg x 2,49 EUR/kg").
   const seen = new Set<number>();
-  const llmItems = r.items
+  const listed = r.items
     .map((it) => ({ ...it, row: anchorRow(it.label, it.row, rows) }))
     .filter((it) => {
-      const what = special.get(it.row);
-      if (what !== undefined && it.row !== tipRow && it.row !== taxRow)
-        dropped.push(`Row "${rows[it.row]}" is ${what}, not an item.`);
-      if (what !== undefined || seen.has(it.row)) return false;
-      // the date row ("17/10/2026 20:41") is never an item: its time would read as a price
-      if (printedDate([rows[it.row] ?? ''], r.currency) !== null) {
-        dropped.push(`Row "${rows[it.row]}" is the date, not an item.`);
-        return false;
-      }
+      if (seen.has(it.row)) return false;
       seen.add(it.row);
       return true;
     })
-    .sort((a, b) => a.row - b.row);
+    .sort((a, b) => a.row - b.row)
+    .filter((it) => {
+      const row = rows[it.row] ?? '';
+      if (it.row === totalRow) return true; // said below, as before
+      if (printedDate([row], r.currency) !== null) {
+        dropped.push(`Row "${row}" is the date, not an item.`);
+        return false;
+      }
+      if (it.row > totalRow) {
+        dropped.push(`Row "${row}" is after the total, not an item.`);
+        return false;
+      }
+      if (TOTAL_LABEL.test(row) && !SUBTOTAL_LABEL.test(row)) {
+        dropped.push(`Row "${row}" is a total, not an item.`);
+        return false;
+      }
+      if (!namesProduct(rowLabel(row, r.currency))) {
+        dropped.push(`Row "${row}" names no product, not an item.`);
+        return false;
+      }
+      return true;
+    });
+
+  // A subtotal, tax or tip is printed between the items and the total: one above an item is
+  // not one (then the item the model also listed it as stays), one below the total is not
+  // added to it ("di cui IVA": VAT included).
+  const lastItem = Math.max(
+    -1,
+    ...listed
+      .map((it) => it.row)
+      .filter((i) => i !== totalRow && i !== subtotalRow && i !== taxRow && i !== tipRow),
+  );
+  const between = (what: string, i: number | null) => {
+    if (i === null) return null;
+    if (i > totalRow) {
+      dropped.push(`Row "${rows[i]}" is after the total: not added as ${what}.`);
+      return null;
+    }
+    if (i < lastItem) {
+      dropped.push(`Row "${rows[i]}" is above an item: not ${what}.`);
+      return null;
+    }
+    return i;
+  };
+  subtotalRow = between('the subtotal', subtotalRow);
+  taxRow = between('the tax', taxRow);
+  tipRow = between('the tip', tipRow);
+  claim('the total', totalRow);
+  claim('the subtotal', subtotalRow);
+  claim('the tax', taxRow);
+  claim('the tip', tipRow);
+  const llmItems = listed.filter((it) => {
+    const what = special.get(it.row);
+    if (what !== undefined && it.row !== tipRow && it.row !== taxRow)
+      dropped.push(`Row "${rows[it.row]}" is ${what}, not an item.`);
+    return what === undefined;
+  });
   if (llmItems.length === 0) errors.push('items: no row is an item');
 
   // A row without a price (a menu component "+ Fries", a freebie) is part of the item above:
@@ -343,17 +420,63 @@ export function toReceipt(value: unknown, rows: readonly string[]): Conversion {
     };
   });
 
+  let total = amountOf('the total', totalRow);
+  let subtotal = subtotalRow === null ? null : amountOf('the subtotal', subtotalRow);
+  let tax = taxRow === null ? 0n : amountOf('the tax', taxRow);
+  const tip = tipRow === null ? 0n : amountOf('the tip', tipRow);
+  const sum = () => items.reduce((a, it) => a + it.total, 0n);
+
+  // The last "item" is the subtotal when it is the sum of the items above it and only then
+  // the receipt adds up ("Tam tinh 265.000" listed as an item).
+  const last = items.at(-1);
+  const lastRow = priced.at(-1)?.row;
+  if (subtotal === null && last !== undefined && lastRow !== undefined && items.length >= 3) {
+    const above = sum() - last.total;
+    if (last.total === above && above + tax + tip === total && sum() + tax + tip !== total) {
+      items.pop();
+      priced.pop();
+      subtotal = above;
+      dropped.push(
+        `Row "${rows[lastRow]}" is the sum of the items above it: read as the subtotal.`,
+      );
+    }
+  }
+  // A tax the total already includes ("VAT included 2,44") is not added to it.
+  if (tax > 0n && sum() + tip === total && sum() + tax + tip !== total) {
+    dropped.push(`Row "${rows[taxRow ?? 0]}" is already in the total: not added as the tax.`);
+    tax = 0n;
+  }
+  // When the total the model chose does not add up (it took the cash given, "Pagamento
+  // contante 30,00"), the total is the first row below the items that does.
+  const due = sum() + tax + tip;
+  if (due !== total && priced.length > 0) {
+    const from = Math.max(
+      ...priced.map((p) => p.row),
+      subtotalRow ?? -1,
+      taxRow ?? -1,
+      tipRow ?? -1,
+    );
+    for (let i = from + 1; i < rows.length; i++) {
+      const row = rows[i] ?? '';
+      if (special.has(i) || SUBTOTAL_LABEL.test(row) || printedDate([row], r.currency) !== null)
+        continue;
+      if (rowAmount(row, r.currency) === due) {
+        dropped.push(`Row "${row}" adds up to the items: read as the total.`);
+        total = due;
+        break;
+      }
+    }
+  }
+
   const receipt: Receipt = {
     merchant: printedMerchant(r.merchant, rows.slice(0, llmItems[0]?.row ?? rows.length)),
     date: printedDate(rows, r.currency) ?? r.date,
     currency: r.currency,
     items,
-    total: amountOf('the total', r.totalRow),
+    total,
     warnings: [],
   };
-  if (subtotalRow !== null) receipt.subtotal = amountOf('the subtotal', subtotalRow);
-  const tax = taxRow === null ? 0n : amountOf('the tax', taxRow);
-  const tip = tipRow === null ? 0n : amountOf('the tip', tipRow);
+  if (subtotal !== null) receipt.subtotal = subtotal;
   if (tax > 0n) receipt.tax = tax;
   if (tip > 0n) receipt.tip = tip;
   if (!z.iso.date().safeParse(receipt.date).success)
