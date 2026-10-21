@@ -24,7 +24,7 @@ Ogni sessione lavora per uno stream (A, B o C, vedi `docs/PLAN.md` §2) e scrive
 5. **Le regole stanno nel ledger** (`deriveTrip`, `validateEvent`, `decideAutoPay`), come funzioni pure con test. Relay e agente le chiamano, non le riscrivono.
 6. **Ogni evento è firmato** dal suo autore e verificato da chi lo riceve. Nessun componente si fida del relay.
 7. **Terminologia RGB corretta:** solo RGB Protocol v0.11.1 (`docs.rgb.info`, `github.com/RGB-Tools`), mai `rgb.tech`, RGB-WG, v0.12 o RGB++. Schema **NIA**, non "RGB20". "Private contract", non "smart contract".
-8. **Nomi:** viaggiatori `alice`, `bob`, `charlie`; coordinatore `dave`. Nessun nome di persone o aziende reali nel codice, nella UI o nei dati. Nei documenti (`docs/`, README, prompt, file di stato) nessun nome di persone reali al di fuori del team, né di giudici, mentori, speaker o organizzatori: si scrive il ruolo ("la giuria", "un mentore", "un rappresentante di Utexo").
+8. **Nomi:** viaggiatori `alice`, `bob`, `charlie`; coordinatore `dave`. Nessun nome di persone o aziende reali nel codice, nella UI o nei dati; nessun nome di persone reali al di fuori del team, nemmeno nei documenti.
 9. **Solo regtest.** Mai mainnet, mai fondi reali. Mai committare `.env`, mnemoniche, password, modelli, volumi Docker, backup.
 10. **Lingua:** documentazione in italiano; codice, commenti, commit e testi della UI in inglese.
 
