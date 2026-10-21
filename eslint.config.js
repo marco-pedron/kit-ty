@@ -61,6 +61,7 @@ export default tseslint.config(
     files: [
       'packages/shared/src/domain.ts',
       'packages/shared/src/events.ts',
+      'packages/shared/src/legacy-events.ts',
       'packages/shared/src/views.ts',
       'packages/shared/src/api.ts',
     ],

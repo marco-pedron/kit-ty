@@ -12,7 +12,7 @@ import {
   type EventBody,
   type EventInner,
   type EventType,
-} from './events.js';
+} from './legacy-events.js';
 import { AT, HASH, NODE, dinner } from './test/samples.js';
 
 const BOLT11 = 'lnbcrt30u1pexample';

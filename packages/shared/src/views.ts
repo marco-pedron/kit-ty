@@ -7,7 +7,7 @@ import {
   TripParamsSchema,
 } from './domain.js';
 import { ApiErrorSchema } from './errors.js';
-import { EventTypeSchema } from './events.js';
+import { EventTypeSchema } from './legacy-events.js';
 import {
   ActorIdSchema,
   ExpenseIdSchema,
