@@ -14,11 +14,48 @@
 - [x] Robustezza dell'estrazione (dom 18/10 10:30, branch `a/receipt-robustness`)
 - [x] Scontrini semplici (dom 18/10 12:00, branch `a/simple-receipts`, PR in bozza)
 - [x] A8 Speech to text on-device, solo la funzione (mar 20/10, branch `a/A8-speech-to-text`); il bottone resta "soon" finché C non collega rotta e UI
+- [x] **S1 Stack A, passo 1: formato degli eventi** (mer 21/10, branch `a/S1-nostr-envelope`; firme Schnorr in `b/S1-schnorr`, stream B). Dettagli sotto.
+- [ ] S2 Stack A, passo 2 ridotto (giorno 3 del calendario, `docs/piano-migrazione-stack-a.md` §0bis.7): **non iniziato**, in attesa del via
+
+## Demo di riserva `demo-finale-v1` (non si modifica più)
+- Tag `demo-finale-v1` = commit `d963464` del ramo principale (21/10), pubblicato su origin.
+- Verificata il 21/10 alle 18:35: `pnpm demo:reset` (seed in 67 s) e `pnpm e2e:demo` **12/12 verdi in 155 s** (log `infra/.out/logs/20261021-183458-e2e-demo.log`).
+- Come rilanciarla, da una copia pulita:
+  ```sh
+  git fetch --tags && git switch --detach demo-finale-v1
+  pnpm install --frozen-lockfile
+  pnpm demo:reset          # Docker acceso; Node 22; nessun KITTY_FAKES
+  pnpm e2e:demo            # la demo senza UI, con asserzioni (circa 3 minuti)
+  pnpm dev                 # la demo dal vivo: tre finestre ?as=alice|charlie|dave, Bob a parte
+  ```
+  `infra/.env` e `infra/.secrets/` non sono nel repo: copiali dalla macchina della demo.
+- **Regola:** da qui in poi una PR entra nel ramo principale solo se `pnpm demo:reset && pnpm e2e:demo` passa ancora dall'inizio alla fine.
+
+## S1: formato degli eventi (Stack A, passo 1)
+- **Cosa funziona** (tutto in `packages/shared` e `packages/ledger`; le app non cambiano, la demo gira ancora sul formato vecchio):
+  - `shared/nostr.ts`: serializzazione e `id` NIP-01, tag del registro (`T` + genitori `e`, rigidi), `verifyNostrEvent` con il verificatore iniettato.
+  - `shared/content.ts`: NIP-44 v2 (vettori ufficiali), chiavi del viaggio (`tripTagOf`, `tripContentKey`), segreto del viaggio sigillato verso un membro (`sealTripSecret`, `openTripSecret`).
+  - `shared/events.ts` (namespace `registry`): schemi zod v2, importi `amount` in unità base, `TripParams` con `assetId` e decimali, fattura fuori dalla `proposal` firmata (D2), `TRIP_SECRET_SHARED` (D1), `buildRegistryEvent` / `readRegistryEvent`, `proposalDigest`.
+  - `shared/legacy-events.ts`: gli schemi di oggi, invariati (stessi nomi esportati).
+  - `ledger/order.ts`: `fixedOrder` (chiusura causale, genesi unica, Kahn con spareggio sull'id, `stateHash`, `frontier`, mancanti), `Causality` (`precedes`, `concurrent`, `ancestorsOf`, `maxima`).
+  - `ledger/conflicts.ts`: C1-C7, C10-C13, C15 come funzioni pure; C8, C9, C14 TODO del passo 2.
+  - `shared/crypto.ts` (PR separata `b/S1-schnorr`): `schnorrVerifier`, `schnorrSign`, `schnorrPublicKeyHex`, provati sui vettori BIP-340.
+  - Formato: `docs/ADR-001-formato-eventi.md`. Diff di SPEC §9 per il PM: `docs/piano-migrazione-stack-a.md` §9.
+- **Come si prova:** `pnpm typecheck && pnpm lint && pnpm test` (829 test verdi + 3 `todo` su `a/S1-nostr-envelope`; 659 su `b/S1-schnorr`). Le proprietà dell'ordine girano su 1.000 grafi casuali (in media 20 eventi, fino a 41): `pnpm exec vitest run packages/ledger/src/order.test.ts`.
+- **Dipendenze nuove** (in `packages/shared`): `@noble/ciphers` (ChaCha20 per NIP-44), `nostr-tools` `2.25.2` solo nei test, come oracolo.
+- **Problemi noti:**
+  - NIP-44 limitato a 1-65.535 byte: i vettori ufficiali trattano ancora come invalidi i testi più lunghi (ADR §3).
+  - I vettori NIP-44 vengono dal repo `paulmillr/nip44`, che non dichiara una licenza: sono il file con lo sha256 pubblicato in NIP-44.
+  - `nostr.test.ts` usa un verificatore Schnorr locale finché `b/S1-schnorr` non è mergiato.
 
 ## Bloccato da
-- niente
+- `docs/stack-a-decisioni.md`: il documento del team non è nel repo e non era allegato al messaggio del 21/10; il piano punta già a quel percorso.
 
 ## Prossimo passo
+- **S2 (passo 2 ridotto), dopo il via:** `deriveTrip` e `validateEvent` sugli eventi v2 sopra `fixedOrder`; invito, ingresso, blocco, sblocco, uscita; Dave fuori dal registro; quote firmate al tavolo; regola della fattura (D2); righe da pagare a mano; C8, C9, C14; TODO con test segnaposto per D3, D5, D6, D10, D11.
+- **Per il PM:** diff di SPEC §9 in `docs/piano-migrazione-stack-a.md` §9; riga del registro decisioni §20 proposta nello stesso file.
+
+## Prossimo passo (prima dello Stack A)
 - **Registrazioni vere (prossima PR di A, domani):** tracce in `infra/fixtures/audio/recorded/`, poi rivedere soglia e modello; verificare la catena trascrizione → `proposeSplit`.
 - **Per C (dettatura):** handler di `transcribe` (`POST /api/:as/expenses/transcribe`, già in `routes` di `@kitty/shared`, oggi 404) con `deps.ai.transcribe(audio, { members: activeTravelers(agent), items: body.items })`, controllando `speechStatus() === 'ready'`; in UI registrazione e conversione a WAV PCM16 mono 16 kHz (≤ 30 s), testo trascritto messo nella textarea, poi "Split with AI" come oggi. Esporre `speechStatus()` in `/state` (serve un campo in `TripView`: chiedilo ad A).
 - **Per il PM:** SPEC §11 (quarto compito "dettatura della frase", input non fidato come la frase scritta) e §14.3 (la rotta `transcribe`); l'ID A8 non è in PLAN.md.
