@@ -53,3 +53,28 @@ export {
   type ValidationDeps,
   type ValidationResult,
 } from './kitty.js';
+// Registry v2 (docs/ADR-001-formato-eventi.md): fixed order and conflict rules. deriveTrip
+// moves onto them in step 2.
+export {
+  Causality,
+  fixedOrder,
+  OrderError,
+  stateHash,
+  type DagEvent,
+  type FixedOrder,
+} from './order.js';
+export {
+  authorHeads,
+  duplicateFingerprints,
+  effectivePolicy,
+  expenseVoided,
+  forkedAuthors,
+  invoiceToPay,
+  isBlocked,
+  joinsByInvite,
+  latestCausal,
+  lineDecision,
+  overpaid,
+  paymentMatchesLine,
+  settleLine,
+} from './conflicts.js';
