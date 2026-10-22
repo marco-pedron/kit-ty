@@ -8,16 +8,16 @@ import type { Causality } from './order.js';
 // win a tie-break. The fixed order (Causality.position) decides only "first wins" cases
 // where winning gives nothing: duplicates, two devices of the same member.
 //
-// Inputs are already validated events of the closed set, filtered by the caller (step 2:
-// deriveTrip); the functions do not re-check authors or signatures.
+// Inputs are already validated events of the closed set, filtered by the caller
+// (registry/derive.ts); the functions do not re-check authors or signatures.
 //
 // All rules are decided (docs/proposte/regole-conflitto.md, 22/10/2026): [T] = from the team
 // document (docs/stack-a-decisioni.md), [D] = decided by the team on 22/10.
 //
-// Here: the rules that need only causality. With the member states of step 2 (deriveTrip,
-// validateEvent) come C7 (unblock), C8 (block between payer and debtor, D6), C9 (debt after
-// leaving), C13 (one invite, one join) and C14 (invite and concurrent leave).
-// TODO(step 2): C7, C8, C9, C13, C14; see the it.todo tests in conflicts.test.ts.
+// Here: the rules that need only causality. The ones that need the member states are in
+// registry/: C7 (unblock) and C13 (one invite, one join) in fold.ts, C8 (block between payer
+// and debtor, D6) in fold.ts and validate.ts, C9 (debt after leaving) in derive.ts, C14
+// (invite and concurrent leave) in validate.ts; their tests in registry/registry.test.ts.
 
 export interface Ref {
   readonly id: string;
@@ -166,7 +166,7 @@ export function forkedAuthors(
 /**
  * C15 [D], second half: the author's heads among the events known at `at` (its ancestors and
  * itself). A block counts as known to the author if it precedes at least one of them; the
- * rule that uses it is C8 (step 2).
+ * rule that uses it is C8 (registry/validate.ts).
  */
 export function authorHeads(
   c: Causality,

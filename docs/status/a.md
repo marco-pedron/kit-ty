@@ -15,7 +15,7 @@
 - [x] Scontrini semplici (dom 18/10 12:00, branch `a/simple-receipts`, PR in bozza)
 - [x] A8 Speech to text on-device, solo la funzione (mar 20/10, branch `a/A8-speech-to-text`); il bottone resta "soon" finché C non collega rotta e UI
 - [x] **S1 Stack A, passo 1: formato degli eventi** (mer 21/10, branch `a/S1-nostr-envelope`; firme Schnorr in `b/S1-schnorr`, stream B). Dettagli sotto.
-- [ ] S2 Stack A, passo 2 ridotto (giorno 3 del calendario, `docs/piano-migrazione-stack-a.md` §0bis.7): **non iniziato**, in attesa del via
+- [x] **S2 Stack A, passo 2: regole del registro v2** (gio 22/10, branch `a/S2-registry-rules`). Dettagli sotto.
 
 ## Demo di riserva `demo-finale-v1` (non si modifica più)
 - Tag `demo-finale-v1` = commit `d963464` del ramo principale (21/10), pubblicato su origin.
@@ -48,11 +48,26 @@
   - I vettori NIP-44 non sono più nel repo: `content.vectors.test.ts` li scarica e verifica lo sha256 pubblicato in NIP-44. Senza rete la suite salta con un avviso (`WARNING: NIP-44 vector tests skipped`); in CI gira.
   - `nostr.test.ts` usa un verificatore Schnorr locale finché `b/S1-schnorr` non è mergiato.
 
+## S2: regole del registro v2 (Stack A, passo 2)
+- **Fatto:** `packages/ledger/src/registry/`, esportato come `registry` da `@kitty/ledger`. Il registro vecchio (`kitty.ts`, `validate.ts`, `autopay.ts`) resta com'è: la demo gira ancora su quello finché il trasporto non passa a Nostr (passo 4). Il piano (§3.6) prevedeva di trasformare `deriveTrip`; farlo ora avrebbe rotto la demo.
+  - `fold.ts`: stato senza orologio (membri, inviti, blocchi, spese, righe). Contiene l'**unico punto della regola D6** (`pairBlockRefusal`), l'esclusione calcolata [T] e lo sblocco C7.
+  - `validate.ts`: `validateRegistryEvent(e, known, deps)`, dove `known` è lo stato dei soli antenati di `e` ("noto" = tra gli antenati). `expenseRefusal` è la funzione che l'app chiama prima di creare una spesa e restituisce il motivo del rifiuto.
+  - `derive.ts`: `deriveRegistry(events, deps, now)` valida ogni evento sui suoi antenati, nell'ordine fisso, poi calcola gli stati delle righe a `now` (silenzio-assenso da `LINE_SEEN.created_at` del debitore).
+  - `autopay.ts`: `decideRegistryAutoPay` e `invoiceRefusal` (D2, prima di ogni pagamento, automatico o a mano).
+- **Regole:** invito (con chiave dell'invitato e scadenza); ingresso con fattura di legame `kitty-bind:v2:<tripTag>:<pubkey>`; C13; C14; blocco per coppia D6/C8 (la spesa è invalida per intero, mentre un terzo può addebitare entrambi); sblocco C7; esclusione oltre la metà degli altri; uscita senza debiti noti (contestazioni comprese); C9 (riga segnata `afterLeaving`, niente silenzio-assenso, si approva o si contesta anche dopo l'uscita); `CHECKPOINT` solo da membro attivo; quote firmate al tavolo (`due` subito, valgono come approvazione esplicita); fatture fuori dalla firma (D2), con controllo all'aggancio (nodo, asset, importo, durata ≥ `invoiceExpirySeconds`) e prima del pagamento; righe `manual_only` verso chi è bloccato (in entrambi i versi) o escluso.
+- **Come si prova:** `pnpm exec vitest run packages/ledger/src/registry`: 28 test + 3 `todo`, compresa la proprietà "l'ordine di arrivo non cambia niente" (200 ordini casuali).
+- **TODO con test segnaposto:** D3 (Sybil sugli inviti), fazioni (D10), cambio nel weekend (D11). D4 (le quote del tavolo sotto il tetto giornaliero?) resta un TODO nel codice.
+- **Limiti:**
+  - le quote si ricalcolano solo con precisione 2 (DUSD); le altre precisioni arrivano dopo la finale;
+  - `created_at` è l'orologio di chi scrive: vale per la scadenza degli inviti, per il silenzio-assenso e per il tetto giornaliero;
+  - la validazione rifà lo stato degli antenati per ogni evento (O(n²)): va bene per un viaggio, si ottimizza se serve.
+
 ## Bloccato da
-- **S2 non parte finché la PR #60 (Schnorr in `crypto.ts`, stream B) non è mergiata** dopo la revisione dello stream B, **e finché il team non risponde sulle regole di conflitto** (`docs/proposte/regole-conflitto.md`).
+- Niente per lo stream A.
 
 ## Prossimo passo
-- **S2 (passo 2 ridotto), dopo il via:** `deriveTrip` e `validateEvent` sugli eventi v2 sopra `fixedOrder`; invito, ingresso, blocco, sblocco, uscita; Dave fuori dal registro; quote firmate al tavolo; regola della fattura (D2); righe da pagare a mano; C8, C9, C14; TODO con test segnaposto per D3, D5, D6, D10, D11.
+- **Passo 3** (chiave del registro, NIP-06) e **passo 4** (trasporto Nostr): lì le app passano al registro v2, `expenseRefusal` entra nel flusso "Ho pagato" e il registro vecchio esce.
+- **Per lo stream B:** PR #67 (vettori BIP-340 scaricati, licenza).
 - **Per il PM:** diff di SPEC §9 in `docs/proposte/spec-9-registro.md`; riga del registro decisioni §20 proposta in `docs/piano-migrazione-stack-a.md` §9.
 - **Documento del team:** aggiornato il 22/10 con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md` (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`, uscita, inviti, blocco).
 

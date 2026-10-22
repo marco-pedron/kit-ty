@@ -76,3 +76,4 @@ export {
   voidedLines,
   type PolicyLimits,
 } from './conflicts.js';
+export * as registry from './registry/index.js';
