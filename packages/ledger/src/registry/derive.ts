@@ -11,6 +11,7 @@ import { fixedOrder } from '../order.js';
 import {
   blockersOf,
   blocks,
+  exclusionsConcurrentWith,
   fold,
   isExcluded,
   isOpen,
@@ -44,13 +45,15 @@ export interface RegistryLine {
   amount: bigint;
   itemIndexes: readonly number[];
   state: RegistryLineState;
-  /** Why the line is manual_only: the pair is blocked, or the creditor is excluded [T]. */
-  manualOnly: 'blocked' | 'creditor_excluded' | null;
+  /** Why the line is manual_only: the pair is blocked, or creditor or debtor is excluded [T]. */
+  manualOnly: 'blocked' | 'creditor_excluded' | 'debtor_excluded' | null;
   /** Signed at the table or approved by the debtor: not an automatic payment (decideAutoPay). */
   approvedExplicitly: boolean;
   signedAtTable: boolean;
   /** C9: the expense is concurrent with the debtor's MEMBER_LEFT; no silent assent. */
   afterLeaving: boolean;
+  /** The expense is concurrent with the exclusion of its payer or debtor: no silent assent. */
+  afterExclusion: boolean;
   seenAt: number | null;
   /** End of silent assent, while awaiting_decision. */
   deadlineAt: number | null;
@@ -209,6 +212,11 @@ function lineAt(
   // C9: the expense did not know the debtor's leave (if it had, it would be invalid).
   const afterLeaving =
     debtor?.leftId != null && expense !== undefined && f.c.concurrent(expense.id, debtor.leftId);
+  // The same for an exclusion of either party that the expense did not know [22/10].
+  const afterExclusion =
+    expense !== undefined &&
+    (exclusionsConcurrentWith(f, l.debtor, expense.id).length > 0 ||
+      exclusionsConcurrentWith(f, l.payer, expense.id).length > 0);
   const policy = members.get(l.debtor)?.policy;
   const latestContest = l.decisions.filter((d) => d.decision === 'contest').at(-1);
 
@@ -219,7 +227,7 @@ function lineAt(
   else if (decision === 'contest') state = 'contested';
   else if (decision === 'approve' || l.signedAtTable) state = 'due';
   else if (l.seen === null) state = 'submitted';
-  else if (afterLeaving) state = 'awaiting_explicit';
+  else if (afterLeaving || afterExclusion) state = 'awaiting_explicit';
   else {
     deadlineAt = l.seen.createdAt + f.created.params.silentAssentSeconds;
     if (now < deadlineAt) state = 'awaiting_decision';
@@ -234,6 +242,7 @@ function lineAt(
   let manualOnly: RegistryLine['manualOnly'] = null;
   if (blocks(f, l.debtor, l.payer) || blocks(f, l.payer, l.debtor)) manualOnly = 'blocked';
   else if (isExcluded(f, l.payer)) manualOnly = 'creditor_excluded';
+  else if (isExcluded(f, l.debtor)) manualOnly = 'debtor_excluded';
   if (state === 'due' && manualOnly !== null) state = 'manual_only';
 
   const expiries = l.invoices.map((i) => {
@@ -258,6 +267,7 @@ function lineAt(
     approvedExplicitly: l.signedAtTable || decision === 'approve',
     signedAtTable: l.signedAtTable,
     afterLeaving,
+    afterExclusion,
     seenAt: l.seen?.createdAt ?? null,
     deadlineAt,
     contestReason: state === 'contested' ? (latestContest?.reason ?? null) : null,

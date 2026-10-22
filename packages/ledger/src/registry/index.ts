@@ -15,6 +15,8 @@ export {
   type RegistryTrip,
 } from './derive.js';
 export {
+  blockWarning,
+  blockersMajority,
   blockersOf,
   blocks,
   fold,

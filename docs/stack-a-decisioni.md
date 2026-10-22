@@ -16,11 +16,11 @@ Nessun membro ha poteri speciali: ognuno firma solo per sé, e le regole valgono
 | Contestazioni | Da decidere. Nel frattempo la riga contestata resta bloccata: nessuno la paga in automatico |
 | Ingresso | Basta l'invito di un membro. Ogni invito vale per un solo ingresso. *(aggiornato il 22/10)* |
 | Cambio valuta | L'app scarica il cambio dall'oracolo quando c'è rete e lo salva. Alla spesa usa l'ultimo salvato, scritto con la sua data. Avviso se è vecchio |
-| Blocco | Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)* |
-| Esclusione | Automatica quando i blocchi superano la metà degli altri membri. Decade se tornano sotto |
+| Blocco | Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)* Il blocco è visibile a tutti; lo toglie solo chi l'ha messo, quando vuole. *(aggiornato il 22/10)* |
+| Esclusione | Automatica quando più della metà degli altri membri attivi blocca qualcuno. Definitiva: resta anche se poi qualcuno sblocca; per rientrare serve un nuovo invito. Una spesa resta valida se l'esclusione non era nota a chi l'ha scritta, come per il blocco. Quando qualcuno blocca, l'app avvisa che il blocco conta anche per l'esclusione. Limite dichiarato: la regola dipende da D3 (Sybil), ancora aperta: con membri finti una persona sola può raggiungere la maggioranza. *(aggiornato il 22/10)* |
 | Debiti verso chi è bloccato o escluso | Restano. Niente pagamento automatico: si paga a mano |
-| Debiti di chi è bloccato o escluso | Può sempre saldarli |
-| Uscita | Un messaggio firmato "esco", quando non hai più debiti noti. *(aggiornato il 22/10)* Si può uscire anche con crediti da incassare. I soldi non si muovono |
+| Debiti di chi è bloccato o escluso | Può sempre saldarli. I debiti dell'escluso restano e si pagano a mano; sulle righe arrivate dopo l'esclusione il silenzio-assenso non vale, come dopo l'uscita. *(aggiornato il 22/10)* |
+| Uscita | Un messaggio firmato "esco", quando non hai più debiti noti. *(aggiornato il 22/10)* Si può uscire anche con crediti da incassare. I soldi non si muovono. Conseguenza dichiarata: anche una riga contestata è un debito noto, quindi finché la contestazione resta aperta non si esce. *(aggiornato il 22/10)* |
 | Fine del viaggio | Quando sono usciti tutti |
 
 ## Come funziona
@@ -67,6 +67,7 @@ Bob firma la proposta di Alice (righe, importi, cambio). La fattura non è firma
 
 - Alice non può cambiare niente senza rendere invalida la firma di Bob.
 - Le quote firmate al tavolo sono subito "da pagare". Chi non c'era riceve la spesa e decide dopo, come oggi.
+- Le quote firmate al tavolo sono un consenso esplicito: non contano nel tetto giornaliero dei pagamenti automatici. *(aggiornato il 22/10)*
 - Le fatture devono durare almeno 24 ore, perché Bob può pagare molto dopo. Se scadono, Alice ne emette una nuova.
 
 ### 4. Il cambio valuta
@@ -84,6 +85,7 @@ Sono tre messaggi firmati: "blocco", "sblocco", "esco". L'esclusione non è un m
 - Una spesa che include un membro bloccato è valida solo se è stata scritta prima che il blocco fosse noto.
 - Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)*
 - Uno sblocco toglie tutti i blocchi che chi sblocca aveva messo su quella persona. Per bloccarla di nuovo serve un nuovo blocco. *(aggiornato il 22/10)*
+- L'esclusione scatta quando più della metà degli altri membri attivi blocca qualcuno, ed è definitiva: per rientrare serve un nuovo invito. I debiti dell'escluso restano e si pagano a mano; sulle righe arrivate dopo l'esclusione il silenzio-assenso non vale. Dipende da D3 (Sybil), ancora aperta. *(aggiornato il 22/10)*
 - Si esce quando non si hanno più debiti noti. Se nel frattempo arriva una spesa registrata da qualcuno che non sapeva dell'uscita, il debito resta: chi è uscito lo vede, può contestarlo se non era presente, e lo paga a mano. L'app non può garantire che venga pagato. Sulle righe arrivate dopo l'uscita il silenzio-assenso non vale: restano da decidere finché chi è uscito non le approva o le contesta. *(aggiornato il 22/10)*
 - Chi esce o è escluso continua a incassare i suoi crediti e a poter saldare i suoi debiti.
 

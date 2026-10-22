@@ -11,12 +11,15 @@ export interface ShareInput {
   receipt: Receipt;
   /** Units of the receipt currency per 1 USD, as in EXPENSE_SUBMITTED.rate. */
   rate: string;
+  /** Base units per dollar of the asset are 10^assetDecimals (TripParams); default 2 (cents). */
+  assetDecimals?: number;
   payer: string;
   payerItemIndexes: readonly number[];
   debtors: readonly { id: string; itemIndexes: readonly number[] }[];
 }
 
 export interface ShareResult {
+  /** In base units of the asset: cents with the default 2 decimals. */
   totalUsdCents: bigint;
   payerCents: bigint;
   /** Same order as `input.debtors`. */
@@ -89,7 +92,7 @@ export function expenseShares(input: ShareInput): ShareResult {
     source: 'table',
     lockedAt: `${receipt.date}T00:00:00.000Z`,
   };
-  const { usdTotalCents, usdShares } = allocateExpense(draft, rate);
+  const { usdTotalCents, usdShares } = allocateExpense(draft, rate, input.assetDecimals ?? 2);
   const cents = new Map(usdShares.map((s) => [s.participant, s.amount]));
   return {
     totalUsdCents: usdTotalCents,

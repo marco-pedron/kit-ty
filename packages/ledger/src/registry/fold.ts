@@ -23,6 +23,10 @@ export interface MemberRecord {
   /** MEMBER_JOINED's policy first, then every POLICY_UPDATED (C12). */
   policyUpdates: { id: string; policy: PolicyLimits }[];
   leftId: string | null;
+  /** The MEMBER_BLOCKED events that excluded this member (definitive, see isExcluded). */
+  exclusions: string[];
+  /** MEMBER_JOINED with a new invite after an exclusion: back in the trip. */
+  readmissions: string[];
 }
 
 export interface LineRecord {
@@ -73,6 +77,8 @@ export interface Fold {
   invites: Map<string, InviteRecord>;
   /** blocker → target → ids of its blocks still in force (C7). */
   blocks: Map<string, Map<string, Set<string>>>;
+  /** Every block and unblock, for the blocks in force in the past of an event (exclusion). */
+  blockLog: { id: string; author: string; target: string; unblock: boolean }[];
   expenses: Map<string, ExpenseRecord>;
   lines: Map<string, LineRecord>;
   checkpoints: string[];
@@ -97,6 +103,7 @@ export function fold(c: Causality, events: readonly RegistryEvent[]): Fold | nul
     members: new Map(),
     invites: new Map(),
     blocks: new Map(),
+    blockLog: [],
     expenses: new Map(),
     lines: new Map(),
     checkpoints: [],
@@ -126,6 +133,9 @@ function apply(f: Fold, e: RegistryEvent): void {
       const byAuthor = f.blocks.get(e.author) ?? new Map<string, Set<string>>();
       byAuthor.set(content.body.target, (byAuthor.get(content.body.target) ?? new Set()).add(e.id));
       f.blocks.set(e.author, byAuthor);
+      f.blockLog.push({ id: e.id, author: e.author, target: content.body.target, unblock: false });
+      const target = f.members.get(content.body.target);
+      if (target && excludedAt(f, target.pubkey, e.id)) target.exclusions.push(e.id);
       return;
     }
     case 'MEMBER_UNBLOCKED': {
@@ -133,6 +143,7 @@ function apply(f: Fold, e: RegistryEvent): void {
       // concurrent block stays.
       const ids = f.blocks.get(e.author)?.get(content.body.target);
       if (ids) for (const b of [...ids]) if (f.c.precedes(b, e.id)) ids.delete(b);
+      f.blockLog.push({ id: e.id, author: e.author, target: content.body.target, unblock: true });
       return;
     }
     case 'MEMBER_LEFT': {
@@ -212,7 +223,15 @@ function apply(f: Fold, e: RegistryEvent): void {
 }
 
 function join(f: Fold, id: string, author: string, b: Body<'MEMBER_JOINED'>): void {
-  if (f.members.has(author)) return;
+  const existing = f.members.get(author);
+  if (existing !== undefined) {
+    // Back after an exclusion, with a new invite (validated on what the joiner knew).
+    const invite = b.inviteRef === null ? undefined : f.invites.get(b.inviteRef);
+    if (existing.exclusions.length === 0 || invite === undefined || invite.usedBy !== null) return;
+    invite.usedBy = author;
+    existing.readmissions.push(id);
+    return;
+  }
   if ([...f.members.values()].some((m) => m.nodePubkey === b.nodePubkey)) return;
   let invitedBy: string | null = null;
   if (b.inviteRef !== null) {
@@ -231,6 +250,8 @@ function join(f: Fold, id: string, author: string, b: Body<'MEMBER_JOINED'>): vo
     invitedBy,
     policyUpdates: [{ id, policy: b.policy }],
     leftId: null,
+    exclusions: [],
+    readmissions: [],
   });
 }
 
@@ -270,18 +291,88 @@ export function inTrip(f: Fold, pk: string): boolean {
   return m !== undefined && m.leftId === null;
 }
 
+const atOrBefore = (f: Fold, x: string, y: string) => x === y || f.c.precedes(x, y);
+
+/** An exclusion of `m` known at `at` and not followed by a readmission known at `at`. */
+function excludedIn(f: Fold, m: MemberRecord, at: string | null): boolean {
+  const known = (x: string) => at === null || atOrBefore(f, x, at);
+  return m.exclusions.some(
+    (x) => known(x) && !m.readmissions.some((r) => known(r) && f.c.precedes(x, r)),
+  );
+}
+
+/** In the trip and not excluded in the past of `at` (the whole fold when null). */
+function activeAt(f: Fold, pk: string, at: string | null): boolean {
+  const m = f.members.get(pk);
+  if (m === undefined) return false;
+  if (at !== null && !atOrBefore(f, m.joinId, at)) return false;
+  if (m.leftId !== null && (at === null || atOrBefore(f, m.leftId, at))) return false;
+  return !excludedIn(f, m, at);
+}
+
+/** `blocker` keeps a block on `target` in force in the past of `at` (C7: an unblock removes the blocks it knows). */
+function blockInForceAt(f: Fold, blocker: string, target: string, at: string): boolean {
+  const mine = f.blockLog.filter(
+    (x) => x.author === blocker && x.target === target && atOrBefore(f, x.id, at),
+  );
+  return mine.some((b) => !b.unblock && !mine.some((u) => u.unblock && f.c.precedes(b.id, u.id)));
+}
+
 /**
- * Excluded: blocked by more than half of the other members still in the trip [T]. Blocks of
- * every member in the trip count, excluded or not, so exclusion is not circular (plan §3.1).
- * Computed, never an event; it lapses when blocks drop below the threshold [T].
+ * The majority rule [T], on the past of `at` only, so concurrent events and the fixed order
+ * never change it: the other active members, and how many of them keep a block on `pk`.
+ */
+export function blockersMajority(
+  f: Fold,
+  pk: string,
+  at: string | null,
+): { against: number; others: number } {
+  const others = [...f.members.keys()].filter((x) => x !== pk && activeAt(f, x, at));
+  const against = others.filter((a) =>
+    at === null ? blocks(f, a, pk) : blockInForceAt(f, a, pk, at),
+  ).length;
+  return { against, others: others.length };
+}
+
+/** On applying a block at `at`: does it bring `pk` over the majority? */
+function excludedAt(f: Fold, pk: string, at: string): boolean {
+  if (!activeAt(f, pk, at)) return false;
+  const { against, others } = blockersMajority(f, pk, at);
+  return 2 * against > others;
+}
+
+/**
+ * Excluded: a block brought the members blocking `pk` to more than half of the other active
+ * members, in the past of that block [T, 22/10]. Definitive: later unblocks do not lift it;
+ * only a MEMBER_JOINED with a new invite that knows the exclusion brings the member back.
+ * Blocks of excluded members do not count. An event that does not know the exclusion
+ * (concurrent with the block) does not see it, as for C8.
+ * Limit: depends on D3 (Sybil): with fake members one person can reach the majority.
  * TODO(factions): two halves blocking each other exclude each other; deterministic, to be
  * shown in the UI, open question (plan §11 D10).
  */
 export function isExcluded(f: Fold, pk: string): boolean {
-  if (!inTrip(f, pk)) return false;
-  const others = [...f.members.keys()].filter((x) => x !== pk && inTrip(f, x));
-  const against = others.filter((a) => blocks(f, a, pk)).length;
-  return 2 * against > others.length;
+  const m = f.members.get(pk);
+  return m !== undefined && m.leftId === null && excludedIn(f, m, null);
+}
+
+/** The exclusions of `pk` concurrent with `id`: what `id` did not know. */
+export function exclusionsConcurrentWith(f: Fold, pk: string, id: string): string[] {
+  return (f.members.get(pk)?.exclusions ?? []).filter((x) => f.c.concurrent(x, id));
+}
+
+/**
+ * What the app tells whoever is about to block `target`: the block counts for the exclusion.
+ */
+export function blockWarning(f: Fold, blocker: string, target: string): string {
+  const name = f.members.get(target)?.displayName ?? `${target.slice(0, 8)}…`;
+  const { against, others } = blockersMajority(f, target, null);
+  const after = against + (blocks(f, blocker, target) ? 0 : 1);
+  return (
+    `Your block also counts towards excluding ${name}: with it, ${after} of the ${others} other ` +
+    `active members block ${name}. Over half excludes ${name} from the trip for good; ` +
+    `unblocking later does not undo it, only a new invite does.`
+  );
 }
 
 /** In the trip and not excluded: may submit expenses, invite, block, leave, checkpoint. */

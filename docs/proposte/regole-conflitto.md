@@ -36,7 +36,28 @@ Il blocco vale **per coppia** e serve a non avere debiti o crediti con una perso
 
 Nel codice la regola deve stare in un solo punto.
 
+## Esclusione: decisa il 22/10 *(aggiornato il 22/10)*
+
+Un membro è **escluso** quando più della metà degli altri membri attivi lo blocca. Si conta sul passato del blocco che fa scattare la maggioranza: blocchi e sblocchi concorrenti con quel blocco non contano, e l'ordine fisso non cambia l'esito.
+
+- **Definitiva.** Una volta scattata, l'esclusione resta anche se poi qualcuno sblocca. Per rientrare serve un nuovo invito: un `MEMBER_JOINED` con un invito nuovo, che conosce l'esclusione, con la stessa chiave e lo stesso nodo.
+- **Concorrenza.** Una spesa è valida se l'esclusione non è tra i suoi antenati, come per il blocco (C8).
+- **Debiti dell'escluso.** Restano e si pagano a mano. Sulle righe arrivate dopo l'esclusione (spese concorrenti con l'esclusione del pagatore o del debitore) il **silenzio-assenso non vale**, come per C9.
+- **Interfaccia.** Quando qualcuno blocca, l'app avvisa che il blocco conta anche per l'esclusione, con quanti membri bloccano già.
+- **Chi conta.** Votano solo i membri attivi: chi è uscito o escluso non conta, né tra chi blocca né tra gli altri membri.
+- **Limite dichiarato.** La regola dipende da D3 (Sybil), ancora aperta: con membri finti una persona sola può raggiungere la maggioranza.
+
+Codice: `isExcluded`, `blockersMajority`, `blockWarning` in `packages/ledger/src/registry/fold.ts`; `afterExclusion` in `derive.ts`.
+
+## D4, quote firmate al tavolo e tetto giornaliero: decisa il 22/10 *(aggiornato il 22/10)*
+
+Le quote firmate al tavolo **non contano nel tetto giornaliero**, perché sono un consenso esplicito, come un'approvazione: si pagano anche oltre il limite automatico e non consumano il tetto. Codice: `decideRegistryAutoPay` e `autoPayments` di `deriveRegistry`.
+
+## Uscita e righe contestate *(aggiornato il 22/10)*
+
+Confermato: anche una riga contestata è un debito noto, quindi blocca l'uscita finché la contestazione è aperta. È una conseguenza dichiarata della regola "si esce senza debiti noti".
+
 ## Domande ancora aperte
 
-- **D3, Sybil sugli inviti:** si decide insieme alla politica di esclusione.
+- **D3, Sybil sugli inviti:** si decide insieme alla politica di esclusione. Finché resta aperta, l'esclusione ha il limite dichiarato sopra.
 - **Fazioni** e **cambio nel weekend:** invariati.

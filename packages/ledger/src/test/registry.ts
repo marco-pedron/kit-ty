@@ -68,12 +68,15 @@ export class TestTrip {
 
   readonly genesis: Ev;
 
-  constructor(creator: Name = 'alice') {
+  constructor(
+    creator: Name = 'alice',
+    readonly params: registry.TripParams = PARAMS,
+  ) {
     this.genesis = this.raw(creator, [], {
       v: 2,
       tripId: TRIP_ID,
       type: 'TRIP_CREATED',
-      body: { name: 'Vietnam 2026', params: PARAMS, relays: ['wss://relay.test'] },
+      body: { name: 'Vietnam 2026', params, relays: ['wss://relay.test'] },
     });
   }
 
@@ -184,8 +187,8 @@ export class TestTrip {
 
   /** alice creates the trip and invites the others (by default bob and charlie). Dave is not
    * in the registry: he only routes payments (LSP). */
-  static withMembers(others: Name[] = ['bob', 'charlie']): TestTrip {
-    const t = new TestTrip();
+  static withMembers(others: Name[] = ['bob', 'charlie'], params = PARAMS): TestTrip {
+    const t = new TestTrip('alice', params);
     t.join('alice', null);
     for (const who of others) t.join(who, t.invite('alice'));
     return t;
@@ -198,11 +201,19 @@ export class TestTrip {
   expenseBody(
     payer: Name,
     debtors: Name[],
-    opts: { unit?: bigint; signed?: Name[]; expenseId?: string; merchant?: string } = {},
+    opts: {
+      unit?: bigint;
+      total?: bigint;
+      signed?: Name[];
+      expenseId?: string;
+      merchant?: string;
+      /** Shares computed with this precision instead of the trip's (a wrong proposal). */
+      sharesDecimals?: number;
+    } = {},
   ): registry.EventBody<'EXPENSE_SUBMITTED'> {
     this.n += 1;
     const unit = opts.unit ?? 300n;
-    const total = unit * BigInt(debtors.length + 1);
+    const total = opts.total ?? unit * BigInt(debtors.length + 1);
     const receipt = {
       merchant: opts.merchant ?? 'Pho 24',
       date: '2026-10-20',
@@ -214,6 +225,7 @@ export class TestTrip {
     const shares = expenseShares({
       receipt,
       rate: '1',
+      assetDecimals: opts.sharesDecimals ?? this.params.assetDecimals,
       payer: PK[payer],
       payerItemIndexes: [0],
       debtors: debtors.map((d) => ({ id: PK[d], itemIndexes: [0] })),
@@ -225,7 +237,7 @@ export class TestTrip {
       receipt,
       rate: { pair: 'USD/USD', value: '1', asOf: '2026-10-20T08:00:00.000Z', source: 'test' },
       assetId: ASSET,
-      assetDecimals: 2,
+      assetDecimals: this.params.assetDecimals,
       total: shares.totalUsdCents,
       payerAmount: shares.payerCents,
       payerItemIndexes: [0],

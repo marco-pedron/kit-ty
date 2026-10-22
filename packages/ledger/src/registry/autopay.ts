@@ -41,8 +41,8 @@ export type RegistryAutoPay = { pay: boolean; reason: string };
 /**
  * Pays only a `due` line with a payable invoice (D2). A line signed at the table or approved
  * counts as an explicit approval and is paid regardless of the limits; otherwise it must stay
- * within autoPayLimit and the 24 h dailyCap. TODO(D4): whether table signatures stay under
- * the daily cap is an open proposal (plan §11).
+ * within autoPayLimit and the 24 h dailyCap. D4 [22/10]: table shares are an explicit consent,
+ * so they neither need room under the daily cap nor use it (deriveRegistry's autoPayments).
  */
 export function decideRegistryAutoPay(
   policy: PolicyLimits,
@@ -72,13 +72,17 @@ export function decideRegistryAutoPay(
       return no(
         line.afterLeaving
           ? `This expense arrived after you left: approve it or contest it, nothing is paid automatically.`
-          : `Not paid: ${line.amount} is above your automatic limit of ${policy.autoPayLimit}. Approve it yourself.`,
+          : line.afterExclusion
+            ? `This expense arrived after an exclusion: approve it or contest it, nothing is paid automatically.`
+            : `Not paid: ${line.amount} is above your automatic limit of ${policy.autoPayLimit}. Approve it yourself.`,
       );
     case 'manual_only':
       return no(
         line.manualOnly === 'blocked'
           ? `${to} and you are blocked: pay ${line.amount} by hand.`
-          : `${to} is excluded from the trip: pay ${line.amount} by hand.`,
+          : line.manualOnly === 'debtor_excluded'
+            ? `You are excluded from the trip: pay ${line.amount} to ${to} by hand.`
+            : `${to} is excluded from the trip: pay ${line.amount} by hand.`,
       );
     case 'due':
       break;

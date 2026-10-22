@@ -184,9 +184,16 @@ function checkJoin(
   f: Fold,
   deps: RegistryDeps,
 ): void {
-  ensure(!f.members.has(e.author), 'already joined');
+  // Back after an exclusion: only with a new invite [22/10].
+  const back = f.members.has(e.author);
+  ensure(!back || isExcluded(f, e.author), 'already joined');
+  ensure(!back || b.inviteRef !== null, 'an excluded member comes back only with a new invite');
   ensure(
-    ![...f.members.values()].some((m) => m.nodePubkey === b.nodePubkey),
+    !back || f.members.get(e.author)?.nodePubkey === b.nodePubkey,
+    'an excluded member comes back with the same node',
+  );
+  ensure(
+    ![...f.members.values()].some((m) => m.pubkey !== e.author && m.nodePubkey === b.nodePubkey),
     'node already bound to a member',
   );
   if (b.inviteRef === null) {
@@ -256,8 +263,6 @@ function checkExpense(
 
   ensure(p.assetId === params.assetId, 'not the trip asset');
   ensure(p.assetDecimals === params.assetDecimals, 'not the precision of the trip asset');
-  // Shares are computed in cents (DUSD, 2 decimals). Other precisions come after the final.
-  ensure(p.assetDecimals === 2, `precision ${p.assetDecimals} is not supported yet`);
 
   const { receipt } = p;
   const itemsSum = receipt.items.reduce((a, it) => a + it.total, 0n);
@@ -279,6 +284,7 @@ function checkExpense(
   const shares = expenseShares({
     receipt,
     rate: p.rate.value,
+    assetDecimals: params.assetDecimals,
     payer: e.author,
     payerItemIndexes: p.payerItemIndexes,
     debtors: p.lines.map((l) => ({ id: l.debtor, itemIndexes: l.itemIndexes })),

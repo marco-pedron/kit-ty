@@ -1,7 +1,7 @@
 import type { Expense, ExpenseAllocation, ExpenseDraft, LockedRate, Share } from '@kitty/shared';
 import { allocateByWeight, splitEqually } from './allocate.js';
 import { LedgerError, assertNonNegative, assertUniqueIds, compareIds } from './errors.js';
-import { convertToUsdCents } from './fx.js';
+import { convertToUsdUnits } from './fx.js';
 import { assertCurrency } from './money.js';
 
 function extrasTotal(draft: ExpenseDraft): bigint {
@@ -98,9 +98,14 @@ export function splitOriginal(draft: ExpenseDraft): Share[] {
 // Pipeline steps 3–4: convert the TOTAL once with the locked rate, then allocate those USD
 // cents proportionally to the original-currency shares (largest remainder), so the USD
 // shares sum exactly to the converted total.
-export function allocateExpense(draft: ExpenseDraft, rate: LockedRate): ExpenseAllocation {
+// `assetDecimals`: the USD amounts are in units of 10^-assetDecimals dollars (2 = cents).
+export function allocateExpense(
+  draft: ExpenseDraft,
+  rate: LockedRate,
+  assetDecimals = 2,
+): ExpenseAllocation {
   const originalShares = splitOriginal(draft);
-  const usdTotalCents = convertToUsdCents(draft.total, draft.currency, rate);
+  const usdTotalCents = convertToUsdUnits(draft.total, draft.currency, rate, assetDecimals);
   const usd = allocateByWeight(
     usdTotalCents,
     originalShares.map((s) => ({ id: s.participant, weight: s.amount })),
