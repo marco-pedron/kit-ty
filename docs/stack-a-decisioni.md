@@ -16,11 +16,11 @@ Nessun membro ha poteri speciali: ognuno firma solo per sé, e le regole valgono
 | Contestazioni | Da decidere. Nel frattempo la riga contestata resta bloccata: nessuno la paga in automatico |
 | Ingresso | Basta l'invito di un membro. Ogni invito vale per un solo ingresso. *(aggiornato il 22/10)* |
 | Cambio valuta | L'app scarica il cambio dall'oracolo quando c'è rete e lo salva. Alla spesa usa l'ultimo salvato, scritto con la sua data. Avviso se è vecchio |
-| Blocco | Ognuno può bloccare un membro, in modo visibile a tutti, e sbloccarlo quando vuole. Il bloccato non entra nelle sue nuove spese e non gli addebita niente |
+| Blocco | Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)* |
 | Esclusione | Automatica quando i blocchi superano la metà degli altri membri. Decade se tornano sotto |
 | Debiti verso chi è bloccato o escluso | Restano. Niente pagamento automatico: si paga a mano |
 | Debiti di chi è bloccato o escluso | Può sempre saldarli |
-| Uscita | Un messaggio firmato "esco", quando non hai più debiti. Si può uscire anche con crediti da incassare. I soldi non si muovono |
+| Uscita | Un messaggio firmato "esco", quando non hai più debiti noti. *(aggiornato il 22/10)* Si può uscire anche con crediti da incassare. I soldi non si muovono |
 | Fine del viaggio | Quando sono usciti tutti |
 
 ## Come funziona
@@ -84,7 +84,7 @@ Sono tre messaggi firmati: "blocco", "sblocco", "esco". L'esclusione non è un m
 - Una spesa che include un membro bloccato è valida solo se è stata scritta prima che il blocco fosse noto.
 - Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)*
 - Uno sblocco toglie tutti i blocchi che chi sblocca aveva messo su quella persona. Per bloccarla di nuovo serve un nuovo blocco. *(aggiornato il 22/10)*
-- Si esce quando non si hanno più debiti noti. Se nel frattempo arriva una spesa registrata da qualcuno che non sapeva dell'uscita, il debito resta: chi è uscito lo vede, può contestarlo se non era presente, e lo paga a mano. L'app non può garantire che venga pagato. *(aggiornato il 22/10)*
+- Si esce quando non si hanno più debiti noti. Se nel frattempo arriva una spesa registrata da qualcuno che non sapeva dell'uscita, il debito resta: chi è uscito lo vede, può contestarlo se non era presente, e lo paga a mano. L'app non può garantire che venga pagato. Sulle righe arrivate dopo l'uscita il silenzio-assenso non vale: restano da decidere finché chi è uscito non le approva o le contesta. *(aggiornato il 22/10)*
 - Chi esce o è escluso continua a incassare i suoi crediti e a poter saldare i suoi debiti.
 
 ### 6. Il pagamento che riparte
@@ -114,7 +114,7 @@ Ogni evento lo firma solo la persona che agisce per sé. Nessun evento richiede 
 | `INVOICE_REISSUED` | chi ha pagato | Resta |
 | `MEMBER_BLOCKED` | un membro qualsiasi | Nuovo. Il blocco conta anche come voto per l'esclusione |
 | `MEMBER_UNBLOCKED` | chi aveva bloccato | Nuovo |
-| `MEMBER_LEFT` | chi esce | Nuovo. Solo senza debiti |
+| `MEMBER_LEFT` | chi esce | Nuovo. Solo senza debiti noti *(aggiornato il 22/10)* |
 | `CHECKPOINT` | un membro attivo (non uscito e non escluso) *(aggiornato il 22/10)* | Resta. Riporta gli ultimi eventi noti, così due telefoni confrontano i registri |
 
 Limite dichiarato: chi esce o viene escluso conserva il segreto e può leggere gli eventi successivi. La rotazione del segreto è in roadmap. *(aggiornato il 22/10)*
