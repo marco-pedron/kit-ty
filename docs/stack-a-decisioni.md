@@ -1,6 +1,8 @@
 # kit+ty Stack A: decisioni e piano
 
 > **Documento di passaggio per una nuova chat.** Riassume le decisioni prese dal team il 21 ottobre 2026 sullo Stack A (nodo WDK sul telefono, LSP Utexo, registro su Nostr, nessun operatore centrale). Sostituisce le parti dello SPEC (repository `kit-ty`, `docs/SPEC.md`) che descrivono Dave come nodo centrale: quelle sono superate e vanno ignorate.
+>
+> **Aggiornato il 22/10/2026** con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md`; ogni punto è segnato con "aggiornato il 22/10".
 
 Lo Stack A si può costruire: le regole del gruppo sono decise, la parte che manca dipende da Utexo.
 
@@ -12,7 +14,7 @@ Nessun membro ha poteri speciali: ognuno firma solo per sé, e le regole valgono
 | --- | --- |
 | Telefono spento | Il pagamento riparte da solo quando entrambi hanno l'app aperta. Il pagamento in attesa sull'LSP va in roadmap, quando Utexo lo renderà possibile |
 | Contestazioni | Da decidere. Nel frattempo la riga contestata resta bloccata: nessuno la paga in automatico |
-| Ingresso | Basta l'invito di un membro |
+| Ingresso | Basta l'invito di un membro. Ogni invito vale per un solo ingresso. *(aggiornato il 22/10)* |
 | Cambio valuta | L'app scarica il cambio dall'oracolo quando c'è rete e lo salva. Alla spesa usa l'ultimo salvato, scritto con la sua data. Avviso se è vecchio |
 | Blocco | Ognuno può bloccare un membro, in modo visibile a tutti, e sbloccarlo quando vuole. Il bloccato non entra nelle sue nuove spese e non gli addebita niente |
 | Esclusione | Automatica quando i blocchi superano la metà degli altri membri. Decade se tornano sotto |
@@ -61,7 +63,7 @@ Ogni evento è firmato da chi lo scrive e dice quali eventi precedenti conosceva
 
 ### 3. La quota firmata al tavolo
 
-Bob firma la proposta di Alice (righe, importi, cambio, fattura) e la firma finisce dentro la spesa che Alice pubblica.
+Bob firma la proposta di Alice (righe, importi, cambio). La fattura non è firmata da Bob: Alice la aggancia alla spesa e può riemetterla se scade. Prima di pagare, l'app di Bob controlla che la fattura paghi il nodo di Alice per l'importo e l'asset della quota firmata; altrimenti non paga. *(aggiornato il 22/10)*
 
 - Alice non può cambiare niente senza rendere invalida la firma di Bob.
 - Le quote firmate al tavolo sono subito "da pagare". Chi non c'era riceve la spesa e decide dopo, come oggi.
@@ -80,6 +82,9 @@ L'app scarica il cambio dall'oracolo ogni volta che c'è rete e salva l'ultimo.
 Sono tre messaggi firmati: "blocco", "sblocco", "esco". L'esclusione non è un messaggio: ogni telefono la calcola contando i blocchi.
 
 - Una spesa che include un membro bloccato è valida solo se è stata scritta prima che il blocco fosse noto.
+- Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)*
+- Uno sblocco toglie tutti i blocchi che chi sblocca aveva messo su quella persona. Per bloccarla di nuovo serve un nuovo blocco. *(aggiornato il 22/10)*
+- Si esce quando non si hanno più debiti noti. Se nel frattempo arriva una spesa registrata da qualcuno che non sapeva dell'uscita, il debito resta: chi è uscito lo vede, può contestarlo se non era presente, e lo paga a mano. L'app non può garantire che venga pagato. *(aggiornato il 22/10)*
 - Chi esce o è escluso continua a incassare i suoi crediti e a poter saldare i suoi debiti.
 
 ### 6. Il pagamento che riparte
@@ -99,6 +104,7 @@ Ogni evento lo firma solo la persona che agisce per sé. Nessun evento richiede 
 | `TRIP_CREATED` | chi crea il gruppo | Resta. I parametri non cambiano più dopo la creazione |
 | `MEMBER_INVITED` | un membro qualsiasi | Nuovo. Sostituisce l'ammissione |
 | `MEMBER_JOINED` | chi entra | Resta. Porta la chiave del registro e la fattura di prova del nodo |
+| `TRIP_SECRET_SHARED` | un membro | Porta il segreto del viaggio cifrato per ciascun destinatario; chi entra ne scrive uno per sé, per ritrovarlo dalla seed *(aggiornato il 22/10)* |
 | `POLICY_UPDATED` | il membro | Resta |
 | `EXPENSE_SUBMITTED` | chi ha pagato | Resta. In più: le firme delle quote prese al tavolo, il cambio con la sua data e, se c'è, la firma dell'oracolo |
 | `LINE_SEEN` | il debitore | Resta, solo per chi non ha firmato al tavolo |
@@ -109,7 +115,9 @@ Ogni evento lo firma solo la persona che agisce per sé. Nessun evento richiede 
 | `MEMBER_BLOCKED` | un membro qualsiasi | Nuovo. Il blocco conta anche come voto per l'esclusione |
 | `MEMBER_UNBLOCKED` | chi aveva bloccato | Nuovo |
 | `MEMBER_LEFT` | chi esce | Nuovo. Solo senza debiti |
-| `CHECKPOINT` | chiunque | Resta. Riporta gli ultimi eventi noti, così due telefoni confrontano i registri |
+| `CHECKPOINT` | un membro attivo (non uscito e non escluso) *(aggiornato il 22/10)* | Resta. Riporta gli ultimi eventi noti, così due telefoni confrontano i registri |
+
+Limite dichiarato: chi esce o viene escluso conserva il segreto e può leggere gli eventi successivi. La rotazione del segreto è in roadmap. *(aggiornato il 22/10)*
 
 **Spariscono:** `RATE_SET` (il cambio sta nella spesa), `MEMBER_ADMITTED` (basta l'invito), `CHANNELS_READY` (ognuno vede da solo il suo canale), `DISPUTE_RESOLVED` (contestazioni da decidere), `GUARANTEE_PAID` (niente garanzia), `MEMBER_EXCLUDED` e `TRIP_CLOSED` (li calcola ogni telefono).
 

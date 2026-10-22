@@ -54,7 +54,7 @@
 ## Prossimo passo
 - **S2 (passo 2 ridotto), dopo il via:** `deriveTrip` e `validateEvent` sugli eventi v2 sopra `fixedOrder`; invito, ingresso, blocco, sblocco, uscita; Dave fuori dal registro; quote firmate al tavolo; regola della fattura (D2); righe da pagare a mano; C8, C9, C14; TODO con test segnaposto per D3, D5, D6, D10, D11.
 - **Per il PM:** diff di SPEC §9 in `docs/proposte/spec-9-registro.md`; riga del registro decisioni §20 proposta in `docs/piano-migrazione-stack-a.md` §9.
-- **Per il team:** discrepanze col documento del team (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`) in `docs/proposte/aggiornamenti-documento-team.md`.
+- **Documento del team:** aggiornato il 22/10 con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md` (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`, uscita, inviti, blocco).
 
 ## Prossimo passo (prima dello Stack A)
 - **Registrazioni vere (prossima PR di A, domani):** tracce in `infra/fixtures/audio/recorded/`, poi rivedere soglia e modello; verificare la catena trascrizione → `proposeSplit`.
