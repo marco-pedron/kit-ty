@@ -55,10 +55,14 @@
   - `derive.ts`: `deriveRegistry(events, deps, now)` valida ogni evento sui suoi antenati, nell'ordine fisso, poi calcola gli stati delle righe a `now` (silenzio-assenso da `LINE_SEEN.created_at` del debitore).
   - `autopay.ts`: `decideRegistryAutoPay` e `invoiceRefusal` (D2, prima di ogni pagamento, automatico o a mano).
 - **Regole:** invito (con chiave dell'invitato e scadenza); ingresso con fattura di legame `kitty-bind:v2:<tripTag>:<pubkey>`; C13; C14; blocco per coppia D6/C8 (la spesa è invalida per intero, mentre un terzo può addebitare entrambi); sblocco C7; esclusione oltre la metà degli altri; uscita senza debiti noti (contestazioni comprese); C9 (riga segnata `afterLeaving`, niente silenzio-assenso, si approva o si contesta anche dopo l'uscita); `CHECKPOINT` solo da membro attivo; quote firmate al tavolo (`due` subito, valgono come approvazione esplicita); fatture fuori dalla firma (D2), con controllo all'aggancio (nodo, asset, importo, durata ≥ `invoiceExpirySeconds`) e prima del pagamento; righe `manual_only` verso chi è bloccato (in entrambi i versi) o escluso.
-- **Come si prova:** `pnpm exec vitest run packages/ledger/src/registry`: 28 test + 3 `todo`, compresa la proprietà "l'ordine di arrivo non cambia niente" (200 ordini casuali).
-- **TODO con test segnaposto:** D3 (Sybil sugli inviti), fazioni (D10), cambio nel weekend (D11). D4 (le quote del tavolo sotto il tetto giornaliero?) resta un TODO nel codice.
+- **Come si prova:** `pnpm exec vitest run packages/ledger/src/registry`: 40 test + 3 `todo`, compresa la proprietà "l'ordine di arrivo non cambia niente" (200 ordini casuali).
+- **TODO con test segnaposto:** D3 (Sybil sugli inviti), fazioni (D10), cambio nel weekend (D11).
+- **Correzioni del 22/10** (branch `a/S2-esclusione-d4`):
+  - esclusione **definitiva** (contata sul passato del blocco che fa scattare la maggioranza; votano solo i membri attivi), rientro solo con un nuovo invito; spesa valida se l'esclusione non è tra i suoi antenati; righe `debtor_excluded` da pagare a mano; niente silenzio-assenso sulle righe concorrenti con l'esclusione (`afterExclusion`); avviso `blockWarning` per l'app;
+  - D4: le quote firmate al tavolo non contano nel tetto giornaliero (test, TODO tolto);
+  - quote ricalcolate nella precisione di `TripParams.assetDecimals` (test con 6 decimali);
+  - documenti: `regole-conflitto.md`, ADR-001 §4.2 (eccezione del silenzio-assenso) e §5, documento del team (esclusione, D4, uscita con righe contestate, riga "Blocco").
 - **Limiti:**
-  - le quote si ricalcolano solo con precisione 2 (DUSD); le altre precisioni arrivano dopo la finale;
   - `created_at` è l'orologio di chi scrive: vale per la scadenza degli inviti, per il silenzio-assenso e per il tetto giornaliero;
   - la validazione rifà lo stato degli antenati per ogni evento (O(n²)): va bene per un viaggio, si ottimizza se serve.
 

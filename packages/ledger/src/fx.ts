@@ -47,9 +47,20 @@ export function convertToUsdCents(
   currency: CurrencyCode,
   rate: LockedRate,
 ): bigint {
+  return convertToUsdUnits(amountMinor, currency, rate, 2);
+}
+
+// The same in units of 10^-decimals USD, the base units of a USD asset with that precision
+// (TripParams.assetDecimals: 2 for DUSD, 6 for USDT).
+export function convertToUsdUnits(
+  amountMinor: bigint,
+  currency: CurrencyCode,
+  rate: LockedRate,
+  decimals: number,
+): bigint {
   if (rate.currency !== currency) {
     throw new LedgerError('INVALID_RATE', `rate is for ${rate.currency}, amount is in ${currency}`);
   }
   const { num, den } = parseDecimal(rate.value);
-  return divRoundHalfUp(amountMinor * minorPerMajor('USD') * den, minorPerMajor(currency) * num);
+  return divRoundHalfUp(amountMinor * 10n ** BigInt(decimals) * den, minorPerMajor(currency) * num);
 }

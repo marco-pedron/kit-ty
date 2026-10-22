@@ -1,10 +1,11 @@
 import fc from 'fast-check';
 import type { registry as shared } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
-import { PK, T0, TestTrip, shuffled, type Name } from '../test/registry.js';
+import { expenseShares } from '../shares.js';
+import { PARAMS, PK, T0, TestTrip, shuffled, type Name } from '../test/registry.js';
 import { decideRegistryAutoPay, invoiceRefusal } from './autopay.js';
 import { deriveRegistry, type RegistryTrip } from './derive.js';
-import { lineKey } from './fold.js';
+import { blockWarning, lineKey } from './fold.js';
 import { expenseRefusal } from './validate.js';
 
 // Step 2: the registry v2 rules (docs/stack-a-decisioni.md, docs/proposte/regole-conflitto.md).
@@ -299,6 +300,91 @@ describe('exclusion: blocked by more than half of the others [T]', () => {
     });
   });
 
+  it('definitive: unblocking does not lift it; only a new invite brings the member back', () => {
+    const t = TestTrip.withMembers();
+    const owed = t.expense('bob', ['alice']);
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('bob', 'MEMBER_UNBLOCKED', { target: PK.alice });
+    t.add('charlie', 'MEMBER_UNBLOCKED', { target: PK.alice });
+    let trip = derive(t);
+    expect(trip.members.get(PK.alice)).toMatchObject({ excluded: true, blockedBy: [] });
+    // the debts of the excluded stay, paid by hand
+    expect(lineOf(trip, owed, 'alice')).toMatchObject({ manualOnly: 'debtor_excluded' });
+    const refused = t.expense('charlie', ['alice']);
+    expect(reasonOf(derive(t), refused)).toMatch(/alice is excluded/);
+    const again = t.join('alice', t.invite('bob'));
+    trip = derive(t);
+    expect(reasonOf(trip, again)).toBeUndefined();
+    expect(trip.members.get(PK.alice)?.excluded).toBe(false);
+    const ok = t.expense('charlie', ['alice']);
+    expect(reasonOf(derive(t), ok)).toBeUndefined();
+  });
+
+  it('back only with a new invite, never by joining again without one', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice });
+    const rejoin = t.join('alice', null);
+    expect(reasonOf(derive(t), rejoin)).toMatch(/new invite/);
+  });
+
+  it('concurrency: an expense that did not know the exclusion is valid, one that knew it is not', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const before = t.heads();
+    const tipping = t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: before });
+    const concurrent = t.expense('alice', ['charlie'], { parents: before });
+    let trip = derive(t);
+    expect(trip.members.get(PK.alice)?.excluded).toBe(true);
+    expect(reasonOf(trip, concurrent)).toBeUndefined();
+    expect(lineOf(trip, concurrent, 'charlie').afterExclusion).toBe(true);
+    const after = t.expense('alice', ['charlie'], { parents: [tipping, concurrent] });
+    trip = derive(t);
+    expect(reasonOf(trip, after)).toMatch(/excluded/);
+  });
+
+  it('no silent assent on a line that arrived after the exclusion', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const before = t.heads();
+    const tipping = t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: before });
+    const e = t.expense('alice', ['charlie'], { parents: before });
+    t.add(
+      'charlie',
+      'LINE_SEEN',
+      { expenseRef: e.id },
+      { parents: [tipping, e], createdAt: T0 + 100 },
+    );
+    const line = lineOf(derive(t, T0 + 10_000), e, 'charlie');
+    // without the rule: due after silent assent, then manual_only for the block
+    expect(line.state).toBe('awaiting_explicit');
+    const policy = { autoPayLimit: 2000n, dailyCap: 6000n };
+    expect(
+      decideRegistryAutoPay(policy, line, derive(t, T0 + 10_000), T0 + 10_000, null).reason,
+    ).toMatch(/after an exclusion/);
+  });
+
+  it('a block concurrent with an unblock: the past of the block decides, not the fixed order', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const base = t.heads();
+    t.add('bob', 'MEMBER_UNBLOCKED', { target: PK.alice }, { parents: base });
+    t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: base });
+    for (let seed = 1; seed <= 20; seed++) {
+      const trip = deriveRegistry(shuffled(t.events, seed), t.deps, LATER);
+      expect(trip?.members.get(PK.alice)?.excluded).toBe(true);
+    }
+  });
+
+  it('the app warns that a block also counts for the exclusion', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    expect(blockWarning(derive(t).fold, PK.charlie, PK.alice)).toMatch(
+      /counts towards excluding alice: with it, 2 of the 2 other active members/,
+    );
+  });
+
   it.todo('factions: two halves blocking each other exclude each other (plan §11 D10)');
 });
 
@@ -388,6 +474,59 @@ describe('CHECKPOINT: only an active member', () => {
     expect(reasonOf(trip, ok)).toBeUndefined();
     expect(reasonOf(trip, left)).toMatch(/active member/);
     expect(reasonOf(trip, excluded)).toMatch(/active member/);
+  });
+});
+
+describe('D4: table shares are an explicit consent, outside the daily cap', () => {
+  it('paid with the daily cap used up, and not counted in it', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob'], { signed: ['bob'], unit: 5000n });
+    let trip = derive(t);
+    const line = lineOf(trip, e, 'bob');
+    const inv = t.deps.decodeInvoice(line.invoice ?? '');
+    const none = { autoPayLimit: 0n, dailyCap: 0n };
+    expect(decideRegistryAutoPay(none, line, trip, LATER, inv)).toMatchObject({ pay: true });
+    t.pay('bob', e);
+    trip = derive(t);
+    expect(trip.autoPayments.get(PK.bob) ?? []).toEqual([]);
+  });
+});
+
+describe('shares in the precision of the trip asset', () => {
+  it('6 decimals: the dinner in VND gives 9.677419 USD', () => {
+    const receipt = {
+      merchant: 'Pho 24',
+      date: '2026-10-20',
+      currency: 'VND' as const,
+      items: [{ label: 'Pho', quantity: 2, unitPrice: 65_000n, total: 130_000n }],
+      tip: 125_000n,
+      total: 255_000n,
+      warnings: [],
+    };
+    const shares = (assetDecimals: number) =>
+      expenseShares({
+        receipt,
+        rate: '26350',
+        assetDecimals,
+        payer: PK.alice,
+        payerItemIndexes: [0],
+        debtors: [{ id: PK.bob, itemIndexes: [0] }],
+      });
+    expect(shares(2).totalUsdCents).toBe(968n);
+    const six = shares(6);
+    expect(six.totalUsdCents).toBe(9_677_419n);
+    expect(six.payerCents + (six.debtors[0]?.cents ?? 0n)).toBe(9_677_419n);
+  });
+
+  it('a 6-decimal trip validates shares in micro-dollars, not in cents', () => {
+    const t = TestTrip.withMembers(['bob', 'charlie'], { ...PARAMS, assetDecimals: 6 });
+    const ok = t.expense('alice', ['bob', 'charlie'], { total: 1000n });
+    const wrong = t.expense('alice', ['bob', 'charlie'], { total: 1000n, sharesDecimals: 2 });
+    const trip = derive(t);
+    expect(reasonOf(trip, ok)).toBeUndefined();
+    // items split in the receipt currency (334 + 333 + 333 cents), then allocated in micro-dollars
+    expect(lineOf(trip, ok, 'bob').amount).toBe(3_330_000n);
+    expect(reasonOf(trip, wrong)).toMatch(/total is not the converted receipt total/);
   });
 });
 

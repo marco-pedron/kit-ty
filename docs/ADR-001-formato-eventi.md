@@ -52,6 +52,7 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 - Il grafo non ha cicli: un genitore si cita con il suo `id`, che è l'hash del suo contenuto; citare un evento successivo richiederebbe una seconda preimmagine di sha256. Un ciclo tra `id` non verificati semplicemente non viene mai applicato.
 - `stateHash = sha256(id₁ ‖ … ‖ idₙ)` sui 32 byte di ogni `id`, nella sequenza fissa. Va in `CHECKPOINT { frontier, count, stateHash }`: stessa frontiera e `stateHash` diverso = bug da segnalare.
 - `created_at` non entra mai nell'ordine. Le finestre della policy (silenzio-assenso, tetto giornaliero) restano decisioni locali dell'agente che paga, con il suo orologio.
+- **Eccezione dichiarata** *(aggiornato il 22/10)*: il silenzio-assenso parte dal `created_at` del `LINE_SEEN`, cioè dall'orologio del debitore. È accettabile perché il `LINE_SEEN` lo firma solo il debitore: con il suo orologio può solo ritardare il proprio assenso (anticiparlo equivale ad approvare, cosa che può già fare). Nessun altro può spostare la scadenza.
 - Codice: `packages/ledger/src/order.ts` (`fixedOrder`, `Causality`, `stateHash`). Test di proprietà su 1.000 grafi casuali: stesso insieme in qualsiasi ordine → stessa sequenza e stesso `stateHash`; `created_at` falsi senza effetto; un evento con un antenato mancante mai applicato; confronto con un'implementazione di riferimento a forza bruta.
 
 ### 4.3 "X precede Y"
@@ -80,11 +81,15 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 | C14 | invito di un membro con un'uscita concorrente | valido (l'uscita non era nota) | `validateRegistryEvent` (sugli antenati) |
 | C15 | la catena personale di un autore si biforca | entrambi validi, autore segnato "registro biforcato"; un blocco è noto se precede almeno una delle sue teste | `forkedAuthors`, `authorHeads` |
 
+**Esclusione** *(aggiornato il 22/10)*: un membro è escluso quando più della metà degli altri membri attivi lo blocca, contati sul passato del blocco che fa scattare la maggioranza (`isExcluded`, `blockersMajority`). È **definitiva**: uno sblocco successivo non la toglie; per rientrare serve un `MEMBER_JOINED` con un nuovo invito che conosce l'esclusione. Una spesa è valida se l'esclusione non è tra i suoi antenati, come per C8. I debiti dell'escluso restano e si pagano a mano (`manual_only`, `debtor_excluded` o `creditor_excluded`); sulle righe di spese concorrenti con l'esclusione il silenzio-assenso non vale, come per C9 (`afterExclusion`). Quando qualcuno blocca, l'app avvisa che il blocco conta anche per l'esclusione (`blockWarning`). **Limite dichiarato:** dipende da D3 (Sybil), ancora aperta: con membri finti una persona sola può raggiungere la maggioranza.
+
+**D4** *(aggiornato il 22/10)*: le quote firmate al tavolo sono un consenso esplicito e non contano nel tetto giornaliero (`decideRegistryAutoPay`). **Uscita:** anche una riga contestata è un debito noto e blocca l'uscita (conseguenza dichiarata).
+
 Tutte le regole sono decise (`docs/proposte/regole-conflitto.md`, 22/10). Restano aperte D3 (Sybil sugli inviti), fazioni e cambio nel weekend.
 
 ## 6. Tipi e corpi
 
-Importi in **unità base dell'asset**, come stringhe decimali (`amount`). La precisione è un parametro del viaggio: in demo DUSD con `assetDecimals = 2`, dopo la finale USDT a 6, senza cambiare il formato. Ogni riferimento a un altro evento è il suo `id` Nostr (`expenseRef`, `inviteRef`). Nessun tipo è riservato a un coordinatore.
+Importi in **unità base dell'asset**, come stringhe decimali (`amount`). La precisione è un parametro del viaggio: in demo DUSD con `assetDecimals = 2`, dopo la finale USDT a 6, senza cambiare il formato. Il ledger ricalcola le quote nella precisione del viaggio (`assetDecimals` di `TripParams`, `expenseShares`), non in centesimi fissi *(aggiornato il 22/10)*. Ogni riferimento a un altro evento è il suo `id` Nostr (`expenseRef`, `inviteRef`). Nessun tipo è riservato a un coordinatore.
 
 | Tipo | Autore | `body` |
 |---|---|---|
