@@ -11,52 +11,49 @@ import type { Causality } from './order.js';
 // Inputs are already validated events of the closed set, filtered by the caller (step 2:
 // deriveTrip); the functions do not re-check authors or signatures.
 //
-// Source of each rule: [T] = the team document (docs/stack-a-decisioni.md), [I] = our
-// proposal, waiting for the team (docs/proposte/regole-conflitto.md).
+// All rules are decided (docs/proposte/regole-conflitto.md, 22/10/2026): [T] = from the team
+// document (docs/stack-a-decisioni.md), [D] = decided by the team on 22/10.
 //
-// Not implemented: [I] rules that touch an open question (plan §11) stay TODO until the team
-// answers, each with an it.todo test in conflicts.test.ts:
-// - TODO(D5)  C3  the same debtor decides twice in causal sequence (can a contest be withdrawn?);
-// - TODO(D6)  C7  MEMBER_BLOCKED and MEMBER_UNBLOCKED of one author on one member, concurrent;
-// - TODO(D6)  C8  EXPENSE_SUBMITTED concurrent with a MEMBER_BLOCKED that would invalidate it
-//             ([T] "valid only if written before the block was known"; scope and "known" [I]);
-// - TODO(D9)  C9  EXPENSE_SUBMITTED concurrent with the debtor's MEMBER_LEFT (our proposal keeps
-//             the debt; the team document allows leaving only without debts);
-// - TODO(D3)  C13 two MEMBER_JOINED with the same invite (Sybil on invites).
-// Not here until step 2, because it needs the member states it derives:
-// - TODO(step 2) C14 [I] MEMBER_INVITED by a member with a concurrent MEMBER_LEFT.
+// Here: the rules that need only causality. With the member states of step 2 (deriveTrip,
+// validateEvent) come C7 (unblock), C8 (block between payer and debtor, D6), C9 (debt after
+// leaving), C13 (one invite, one join) and C14 (invite and concurrent leave).
+// TODO(step 2): C7, C8, C9, C13, C14; see the it.todo tests in conflicts.test.ts.
 
 export interface Ref {
   readonly id: string;
 }
 
 /**
- * C1 [T]: the decision of one debtor on one line. A contest wins over an approve: "the
- * contested line stays blocked", nobody pays it automatically. Whether the debtor can withdraw
- * it by approving after having seen it (C3) is open: TODO(D5).
+ * C1 [T] + C3 [D]: the decision of one debtor on one line, from that debtor's decisions. The
+ * causally latest counts: an approve that has the debtor's contest among its ancestors
+ * withdraws it (C3). Between concurrent latest decisions the contest wins (C1).
  */
 export function lineDecision(
+  c: Causality,
   decisions: readonly (Ref & { readonly decision: 'approve' | 'contest' })[],
 ): 'approve' | 'contest' | null {
   if (decisions.length === 0) return null;
-  return decisions.some((d) => d.decision === 'contest') ? 'contest' : 'approve';
+  const latest = new Set(c.maxima(decisions.map((d) => d.id)));
+  return decisions.some((d) => latest.has(d.id) && d.decision === 'contest')
+    ? 'contest'
+    : 'approve';
 }
 
 /**
- * C2 [T] + C11 [I]: an expense is voided by any EXPENSE_VOIDED of its payer, wherever it
- * sits, unless a valid PAYMENT_MADE exists for any line of that expense, wherever it sits: the
- * payment wins (money moved). "Payment beats void" is [T]; extending it to every line of the
- * expense is [I]. Decisions on its lines never save it (C11).
+ * C2 [T] + C11 [D]: the lines of an expense voided by its payer's EXPENSE_VOIDED, wherever it
+ * sits. A line with a valid PAYMENT_MADE, wherever it sits, stays (due and settled): the
+ * payment wins only for the paid line (C2). Decisions on a line never save it (C11).
  */
-export function expenseVoided(
+export function voidedLines<L>(
   voids: readonly Ref[],
-  validPaymentsOfExpense: readonly Ref[],
-): boolean {
-  return voids.length > 0 && validPaymentsOfExpense.length === 0;
+  lines: readonly L[],
+  paidLines: ReadonlySet<L>,
+): Set<L> {
+  return new Set(voids.length === 0 ? [] : lines.filter((l) => !paidLines.has(l)));
 }
 
 /**
- * C4 [I]: two valid payments of the same line (original and reissued invoice, two devices). The
+ * C4 [D]: two valid payments of the same line (original and reissued invoice, two devices). The
  * first in the fixed order pays the line; every other one is a credit of the debtor towards
  * the creditor, to refund by hand. The money moved: nothing is ignored.
  */
@@ -74,7 +71,7 @@ export function overpaid(overpayments: readonly { readonly amount: bigint }[]): 
 }
 
 /**
- * C5 [I]: a payment matches a line if its payment hash is the one of ANY invoice issued for that
+ * C5 [D]: a payment matches a line if its payment hash is the one of ANY invoice issued for that
  * line (original or INVOICE_REISSUED), concurrent or not with the reissue.
  */
 export function paymentMatchesLine(
@@ -85,7 +82,7 @@ export function paymentMatchesLine(
 }
 
 /**
- * C6 [I]: concurrent INVOICE_REISSUED of the same line are all valid; the debtor pays the one
+ * C6 [D]: concurrent INVOICE_REISSUED of the same line are all valid; the debtor pays the one
  * not yet expired with the smallest event id. Any of them settles the line (C5), so the
  * choice moves no money.
  */
@@ -101,33 +98,57 @@ export function invoiceToPay<I extends { readonly eventId: string; readonly expi
 }
 
 /**
- * C10 [I]: EXPENSE_SUBMITTED with the same fingerprint. The first in the fixed order is valid,
- * every other one is invalid. `sameAuthor` false = someone else registered the receipt first,
- * shown to the loser as "receipt already registered".
+ * C10 [D]: EXPENSE_SUBMITTED with the same fingerprint are all valid, each marked "possible
+ * duplicate" of the others; the debtors contest the wrong one (C1). The fixed order invalidates
+ * none: the winner would become the creditor, so a tie-break would move money.
+ * Returns, for each marked expense, the ids of the others with its fingerprint.
  */
-export function duplicateFingerprints<
-  E extends Ref & { readonly author: string; readonly fingerprint: string },
->(c: Causality, expenses: readonly E[]): Map<string, { winner: string; sameAuthor: boolean }> {
-  const first = new Map<string, E>();
-  const losers = new Map<string, { winner: string; sameAuthor: boolean }>();
-  for (const e of [...expenses].sort((a, b) => c.position(a.id) - c.position(b.id))) {
-    const w = first.get(e.fingerprint);
-    if (w === undefined) first.set(e.fingerprint, e);
-    else losers.set(e.id, { winner: w.id, sameAuthor: w.author === e.author });
-  }
-  return losers;
+export function possibleDuplicates(
+  expenses: readonly (Ref & { readonly fingerprint: string })[],
+): Map<string, string[]> {
+  const byFingerprint = new Map<string, string[]>();
+  for (const e of expenses)
+    byFingerprint.set(e.fingerprint, [...(byFingerprint.get(e.fingerprint) ?? []), e.id]);
+  const marked = new Map<string, string[]>();
+  for (const ids of byFingerprint.values())
+    if (ids.length > 1)
+      for (const id of ids)
+        marked.set(
+          id,
+          ids.filter((x) => x !== id),
+        );
+  return marked;
+}
+
+export interface PolicyLimits {
+  readonly autoPayLimit: bigint;
+  readonly dailyCap: bigint;
 }
 
 /**
- * C12 [I]: POLICY_UPDATED of one member (two devices): the last in the fixed order. A policy is a
- * local preference of the member, so winning a tie-break gives nothing.
+ * C12 [D]: POLICY_UPDATED of one member. In causal sequence the later counts; between
+ * concurrent latest ones (two devices) the most prudent, field by field: the lowest
+ * autoPayLimit and the lowest dailyCap.
  */
-export function effectivePolicy<U extends Ref>(c: Causality, updates: readonly U[]): U | null {
-  return [...updates].sort((a, b) => c.position(b.id) - c.position(a.id))[0] ?? null;
+export function effectivePolicy(
+  c: Causality,
+  updates: readonly (Ref & { readonly policy: PolicyLimits })[],
+): PolicyLimits | null {
+  const latest = new Set(c.maxima(updates.map((u) => u.id)));
+  const policies = updates.filter((u) => latest.has(u.id)).map((u) => u.policy);
+  const [first, ...rest] = policies;
+  if (first === undefined) return null;
+  return rest.reduce<PolicyLimits>(
+    (p, q) => ({
+      autoPayLimit: q.autoPayLimit < p.autoPayLimit ? q.autoPayLimit : p.autoPayLimit,
+      dailyCap: q.dailyCap < p.dailyCap ? q.dailyCap : p.dailyCap,
+    }),
+    first,
+  );
 }
 
 /**
- * C15 [I]: authors whose personal chain forks (two own events, neither preceding the other: two
+ * C15 [D]: authors whose personal chain forks (two own events, neither preceding the other: two
  * devices, or an attempt to "forget" something). Both events stay valid; the UI marks the
  * author with "forked registry".
  */
@@ -143,9 +164,9 @@ export function forkedAuthors(
 }
 
 /**
- * C15 [I], second half: the author's heads among the events known at `at` (its ancestors and
+ * C15 [D], second half: the author's heads among the events known at `at` (its ancestors and
  * itself). A block counts as known to the author if it precedes at least one of them; the
- * rule that uses it is C8, TODO(D6).
+ * rule that uses it is C8 (step 2).
  */
 export function authorHeads(
   c: Causality,

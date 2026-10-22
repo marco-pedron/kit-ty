@@ -65,13 +65,14 @@ export {
 } from './order.js';
 export {
   authorHeads,
-  duplicateFingerprints,
   effectivePolicy,
-  expenseVoided,
   forkedAuthors,
   invoiceToPay,
   lineDecision,
   overpaid,
   paymentMatchesLine,
+  possibleDuplicates,
   settleLine,
+  voidedLines,
+  type PolicyLimits,
 } from './conflicts.js';
