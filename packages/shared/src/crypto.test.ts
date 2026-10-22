@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sha256Hex } from './canonical.js';
@@ -8,6 +10,9 @@ import {
   ed25519Sign,
   fakeSign,
   fakeVerify,
+  schnorrPublicKeyHex,
+  schnorrSign,
+  schnorrVerifier,
   signatureVerifier,
 } from './crypto.js';
 import type { DecodedInvoice } from './domain.js';
@@ -187,3 +192,82 @@ describe('dev fakes', () => {
     expect(fakeVerify('alice', 'hello!', sig)).toBe(false);
   });
 });
+
+// BIP-340 official vectors: https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
+// (BSD-2-Clause). Columns: index, secret key, public key, aux_rand, message, signature,
+// verification result, comment.
+const bip340 = readFileSync(new URL('./test/vectors/bip340.csv', import.meta.url), 'utf8')
+  .trim()
+  .split('\n')
+  .slice(1)
+  .map((line) => {
+    const [index, secret, pub, aux, msg, sig, ok, comment] = line.split(',');
+    return {
+      index: Number(index),
+      secret: (secret ?? '').toLowerCase(),
+      pub: (pub ?? '').toLowerCase(),
+      aux: (aux ?? '').toLowerCase(),
+      msg: (msg ?? '').toLowerCase(),
+      sig: (sig ?? '').toLowerCase(),
+      ok: ok === 'TRUE',
+      comment: comment ?? '',
+    };
+  });
+const digestVectors = bip340.filter((v) => v.msg.length === 64);
+
+describe('schnorrVerifier (BIP-340, registry v2)', () => {
+  it.each(digestVectors)('vector $index: $ok $comment', (v) => {
+    expect(schnorrVerifier.verify(v.pub, v.msg, v.sig)).toBe(v.ok);
+  });
+
+  it.each(digestVectors.filter((v) => v.secret !== ''))(
+    'vector $index: key and signature from the secret',
+    (v) => {
+      expect(schnorrPublicKeyHex(v.secret)).toBe(v.pub);
+      // The vectors fix aux_rand; schnorrSign draws it, so check the result verifies instead.
+      expect(
+        bytesToHex(schnorr.sign(hexToBytes(v.msg), hexToBytes(v.secret), hexToBytes(v.aux))),
+      ).toBe(v.sig);
+      expect(schnorrVerifier.verify(v.pub, v.msg, schnorrSign(v.secret, v.msg))).toBe(true);
+    },
+  );
+
+  it('refuses messages that are not 32-byte digests (vectors 15-18 sign other lengths)', () => {
+    const others = bip340.filter((v) => v.msg.length !== 64);
+    expect(others.map((v) => v.index)).toEqual([15, 16, 17, 18]);
+    for (const v of others) expect(schnorrVerifier.verify(v.pub, v.msg, v.sig)).toBe(false);
+  });
+
+  const secret = '03'.padStart(64, '0');
+  const pub = schnorrPublicKeyHex(secret);
+  const digest = sha256Hex('kitty registry event');
+
+  it('refuses another key, a changed digest, a changed signature', () => {
+    const sig = schnorrSign(secret, digest);
+    expect(schnorrVerifier.verify(pub, digest, sig)).toBe(true);
+    expect(schnorrVerifier.verify(schnorrPublicKeyHex('04'.padStart(64, '0')), digest, sig)).toBe(
+      false,
+    );
+    expect(schnorrVerifier.verify(pub, sha256Hex('another event'), sig)).toBe(false);
+    const flipped = `${sig.slice(0, -1)}${sig.endsWith('0') ? '1' : '0'}`;
+    expect(schnorrVerifier.verify(pub, digest, flipped)).toBe(false);
+  });
+
+  it('never throws on malformed input', () => {
+    const sig = schnorrSign(secret, digest);
+    expect(schnorrVerifier.verify(pub.toUpperCase(), digest, sig)).toBe(false);
+    expect(schnorrVerifier.verify(`02${pub}`, digest, sig)).toBe(false);
+    expect(schnorrVerifier.verify(pub, digest, sig.slice(2))).toBe(false);
+    expect(verifyAny(schnorrVerifier, null, digest, sig)).toBe(false);
+    expect(verifyAny(schnorrVerifier, pub, 42, sig)).toBe(false);
+  });
+
+  it('is not the ed25519 verifier: a signature of one never passes the other', () => {
+    const sig = schnorrSign(secret, digest);
+    expect(signatureVerifier.verify(pub, digest, sig)).toBe(false);
+  });
+});
+
+function verifyAny(v: typeof schnorrVerifier, pub: unknown, msg: unknown, sig: unknown): boolean {
+  return v.verify(pub as string, msg as string, sig as string);
+}
