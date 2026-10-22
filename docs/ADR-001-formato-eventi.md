@@ -3,6 +3,7 @@
 > Stato: **accettato** il 21/10/2026 (revisione del team con i mentor, `docs/piano-migrazione-stack-a.md` §0bis). Fonte di verità: `docs/stack-a-decisioni.md`.
 > Implementato nel passo 1 (branch `a/S1-nostr-envelope`; firme in `b/S1-schnorr`). Il registro della demo (`legacy-events.ts`, ed25519, relay Fastify) resta in uso fino al passo 2; `demo-finale-v1` è la demo di riserva.
 > Le modifiche corrispondenti a `docs/SPEC.md` §9 sono proposte come diff in `docs/proposte/spec-9-registro.md`: vanno al PM.
+> Passo 3 e app sul registro v2 (`KITTY_REGISTRY`): §10 e §11, aggiornati il 22/10.
 
 ## 1. Contesto
 
@@ -130,5 +131,25 @@ Codice: `packages/shared/src/events.ts`, esportato come namespace `registry` fin
 ## 9. Conseguenze
 
 - Passo 2: `deriveTrip` e `validateEvent` passano agli eventi v2 sopra `fixedOrder` e `conflicts.ts`; C8, C9, C14; regola della fattura (D2); `legacy-events.ts` sparisce.
-- Passo 3: chiave NIP-06 per viaggio e `kitty-bind:v2`.
+- Passo 3: chiave NIP-06 per viaggio e `kitty-bind:v2` (§10), dietro `KITTY_REGISTRY=v2` (§11).
 - Passo 4: `Transport` (`publish`, `subscribe`, `fetchMissing`) con Nostr come prima implementazione; il relay Fastify sparisce.
+
+## 10. Chiave del registro per viaggio e `kitty-bind:v2` (passo 3) *(aggiornato il 22/10)*
+
+- **Derivazione.** La seed BIP-39 del membro (64 byte, passphrase vuota: la stessa del nodo) e il percorso **NIP-06 `m/44'/1237'/<i>'/0/0`**, con un indice `i` per viaggio. Funziona offline, senza il nodo. Gli account sono hardened: le chiavi di due viaggi non hanno niente in comune che un relay possa collegare. Codice: `registryKey`, `seedFromMnemonic` in `packages/shared/src/registry-key.ts` (su `@scure/bip32` e `@scure/bip39`).
+- **Indici.** `i` è un contatore locale: 0 per il primo viaggio, poi uno oltre il più alto in uso (`nextRegistryIndex`). Non deriva dal `tripId`: per ritrovare i viaggi basta la seed.
+- **Recupero dalla seed** (`recoverTrips`). Si derivano le chiavi `i = 0, 1, 2…` e per ciascuna si chiedono ai relay gli eventi di quell'autore (`{"authors":[pk_i],"kinds":[7345]}`). Ci si ferma dopo **5 indici di fila senza eventi** (limite di gap, come BIP-44). Per ogni indice in uso, il segreto del viaggio si ritrova dal `TRIP_SECRET_SHARED` che il membro ha scritto verso sé stesso entrando (`tripSecretsOf`): si accettano solo eventi con firma valida, dell'autore stesso, che si aprono con la sua chiave e danno il segreto del tag `T` dell'evento. La parte senza rete è implementata e provata con un trasporto in memoria; la richiesta ai relay veri arriva con il passo 4. Per non collegare le chiavi tra loro, il passo 4 deve fare una richiesta per connessione, distribuite tra i relay e nel tempo.
+- **Fattura di legame.** `bindInvoice` è una fattura del nodo del membro con `description = kitty-bind:v2:<tripTag>:<pubkey>`. Lega il nodo (`payee_pubkey`) alla chiave del registro di quel viaggio, quindi non si può riusare in un altro viaggio né per un'altra chiave. Non scade ai fini della prova e non si paga mai. Ogni telefono la verifica all'ingresso (`bindInvoiceRefusal`, chiamata da `validateRegistryEvent`). Da lì `nodePubkey` è il nodo che ogni fattura di quel membro deve pagare: `invoiceRefusal` lo controlla prima di ogni pagamento.
+- **Scadenza delle fatture.** `invoiceExpirySeconds` vale **48 ore se il viaggio non dice altro**, e mai meno di 24. L'app crea le fatture con un margine di un'ora, perché la regola conta la durata dall'evento che le aggancia.
+- **Test.** I vettori ufficiali di NIP-06 vengono scaricati da un commit fissato di `nostr-protocol/nips` e verificati con uno sha256 fissato nel test, perché NIP-06 non ne pubblica uno; senza rete la suite salta con un avviso (`registry-key.vectors.test.ts`). Gli altri test confrontano più account con `nostr-tools` e verificano che indici diversi diano chiavi diverse, che si recuperino più viaggi dalla stessa seed e che una fattura di legame con tripTag, chiave o nodo sbagliati venga rifiutata.
+
+## 11. Le app sul registro v2: `KITTY_REGISTRY` *(aggiornato il 22/10)*
+
+- **Flag.** `KITTY_REGISTRY=v1|v2`, predefinito `v1`. Con `v1` tutto resta com'era. Con `v2` ogni agente di un viaggiatore tiene anche il registro v2 (`apps/agent/src/flows/registry-v2.ts`), con la chiave del §10.
+- **Doppia scrittura** (scelta del 22/10). Il registro vecchio resta il trasporto e guida la storia della demo, compresi i passi di Dave (contestazione risolta, copertura ed esclusione), che nel v2 non esistono. Ogni evento che un viaggiatore scrive nel registro vecchio viene copiato nel v2, firmato con la sua chiave del viaggio: spese, `LINE_SEEN`, decisioni, pagamenti, annullamenti, fatture riemesse, policy, `CHECKPOINT`. Dave non è nel registro v2.
+- **Cosa decide il v2.** Prima di creare una spesa l'app chiama `expenseRefusal` (blocco per coppia, esclusione, uscita) e, se rifiuta, non crea nemmeno le fatture e spiega il motivo. Prima di ogni pagamento valgono `manual_only` e `invoiceRefusal`. Il blocco e lo sblocco esistono solo nel v2; bloccando, l'app riceve l'avviso che il blocco conta anche per l'esclusione (`blockWarning`).
+- **Ingresso nella demo.** Il primo viaggiatore crea il viaggio v2; gli altri entrano con un suo invito. Il pacchetto dell'invito (segreto del viaggio e riferimento all'invito), che nella realtà viaggia in un QR, qui passa dentro il processo.
+- **Trasporto provvisorio.** Fino al passo 4 gli eventi v2 viaggiano in un trasporto in memoria dentro il processo degli agenti (`registry-transport.ts`, interfaccia `publish`/`query`), e ogni agente li verifica uno per uno. Non c'è persistenza: a un riavvio il registro v2 riparte da zero, quindi le spese create prima del riavvio non si pagano più in automatico con v2. Il passo 4 mette i relay Nostr dietro la stessa interfaccia.
+- **Limiti.**
+  - La copia nel v2 ricalcola le quote con le chiavi v2. Se uno spareggio di centesimi cadesse diversamente rispetto alle chiavi v1, la spesa v2 verrebbe rifiutata e la riga non si pagherebbe in automatico. Con la cena della demo non succede.
+  - Il registro vecchio resta finché il passo 4 non è stabile; lo si toglie in una PR separata.

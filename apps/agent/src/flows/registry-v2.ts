@@ -378,6 +378,22 @@ export class RegistryV2 {
     if (e.rejected !== null) throw new Error(e.rejected);
   }
 
+  /**
+   * For the member list of the app: by node, whether I block that member and whether the
+   * registry has excluded them. Null before this member is in the registry.
+   */
+  standing(): Map<string, { blockedByMe: boolean; excluded: boolean }> | null {
+    const view = this.view();
+    const me = this.key?.pubkey;
+    if (view === null || me === undefined || !this.isMember(view)) return null;
+    return new Map(
+      [...view.members.values()].map((m) => [
+        m.nodePubkey,
+        { blockedByMe: m.blockedBy.includes(me), excluded: m.excluded },
+      ]),
+    );
+  }
+
   /** The warning shown before blocking, without blocking. */
   blockWarning(targetNode: string): string {
     const { me, target, view } = this.pair(targetNode);

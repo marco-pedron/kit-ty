@@ -100,6 +100,13 @@ describe('registry v2 next to the legacy log', () => {
     const { warning } = await bob.blockMember('alice');
     expect(warning).toMatch(/counts towards excluding alice: with it, 1 of the 2 other active/);
     await d.tickAll();
+    const aliceNode = alice.me()?.nodePubkey ?? '';
+    expect(reg(bob).standing()?.get(aliceNode)).toEqual({ blockedByMe: true, excluded: false });
+    expect(
+      reg(alice)
+        .standing()
+        ?.get(bob.me()?.nodePubkey ?? '')?.blockedByMe,
+    ).toBe(false);
 
     // the debt from before the block stays, but no automatic payment
     d.advance(20);
