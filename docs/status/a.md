@@ -45,15 +45,16 @@
 - **Dipendenze nuove** (in `packages/shared`): `@noble/ciphers` (ChaCha20 per NIP-44), `nostr-tools` `2.25.2` solo nei test, come oracolo.
 - **Problemi noti:**
   - NIP-44 limitato a 1-65.535 byte (confermato il 21/10, ADR §3).
-  - I vettori NIP-44 non sono più nel repo: `content.test.ts` li scarica e verifica lo sha256 pubblicato in NIP-44, quindi richiede la rete (anche in CI).
+  - I vettori NIP-44 non sono più nel repo: `content.vectors.test.ts` li scarica e verifica lo sha256 pubblicato in NIP-44. Senza rete la suite salta con un avviso (`WARNING: NIP-44 vector tests skipped`); in CI gira.
   - `nostr.test.ts` usa un verificatore Schnorr locale finché `b/S1-schnorr` non è mergiato.
 
 ## Bloccato da
-- **S2 non parte finché la PR #60 (Schnorr in `crypto.ts`, stream B) non è mergiata** dopo la revisione dello stream B.
+- **S2 non parte finché la PR #60 (Schnorr in `crypto.ts`, stream B) non è mergiata** dopo la revisione dello stream B, **e finché il team non risponde sulle regole di conflitto** (`docs/proposte/regole-conflitto.md`).
 
 ## Prossimo passo
 - **S2 (passo 2 ridotto), dopo il via:** `deriveTrip` e `validateEvent` sugli eventi v2 sopra `fixedOrder`; invito, ingresso, blocco, sblocco, uscita; Dave fuori dal registro; quote firmate al tavolo; regola della fattura (D2); righe da pagare a mano; C8, C9, C14; TODO con test segnaposto per D3, D5, D6, D10, D11.
 - **Per il PM:** diff di SPEC §9 in `docs/proposte/spec-9-registro.md`; riga del registro decisioni §20 proposta in `docs/piano-migrazione-stack-a.md` §9.
+- **Per il team:** discrepanze col documento del team (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`) in `docs/proposte/aggiornamenti-documento-team.md`.
 
 ## Prossimo passo (prima dello Stack A)
 - **Registrazioni vere (prossima PR di A, domani):** tracce in `infra/fixtures/audio/recorded/`, poi rivedere soglia e modello; verificare la catena trascrizione → `proposeSplit`.
