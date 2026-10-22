@@ -1,6 +1,6 @@
 # kit+ty Stack A: decisioni e piano
 
-> **Documento di passaggio per una nuova chat.** Riassume le decisioni prese dal team il 21 ottobre 2026 sullo Stack A (nodo WDK sul telefono, LSP Utexo, registro su Nostr, nessun operatore centrale). Sostituisce le parti dello SPEC (`marco-pedron/kit-ty`, `docs/SPEC.md`) che descrivono Dave come nodo centrale: quelle sono superate e vanno ignorate.
+> **Documento di passaggio per una nuova chat.** Riassume le decisioni prese dal team il 21 ottobre 2026 sullo Stack A (nodo WDK sul telefono, LSP Utexo, registro su Nostr, nessun operatore centrale). Sostituisce le parti dello SPEC (repository `kit-ty`, `docs/SPEC.md`) che descrivono Dave come nodo centrale: quelle sono superate e vanno ignorate.
 
 Lo Stack A si può costruire: le regole del gruppo sono decise, la parte che manca dipende da Utexo.
 
