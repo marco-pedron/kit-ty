@@ -38,7 +38,7 @@
   - `shared/events.ts` (namespace `registry`): schemi zod v2, importi `amount` in unità base, `TripParams` con `assetId` e decimali, fattura fuori dalla `proposal` firmata (D2), `TRIP_SECRET_SHARED` (D1), `buildRegistryEvent` / `readRegistryEvent`, `proposalDigest`.
   - `shared/legacy-events.ts`: gli schemi di oggi, invariati (stessi nomi esportati).
   - `ledger/order.ts`: `fixedOrder` (chiusura causale, genesi unica, Kahn con spareggio sull'id, `stateHash`, `frontier`, mancanti), `Causality` (`precedes`, `concurrent`, `ancestorsOf`, `maxima`).
-  - `ledger/conflicts.ts`: regole marcate [T] (documento del team) o [I] (nostra proposta). Implementate C1, C2, C4-C6, C10-C12, C15; TODO con test segnaposto C3 (D5), C7 e C8 (D6), C9 (D9), C13 (D3) in attesa del team, C14 per il passo 2. Proposte al team in `docs/proposte/regole-conflitto.md`.
+  - `ledger/conflicts.ts`: regole C1-C15 decise il 22/10 (`docs/proposte/regole-conflitto.md`). Le funzioni pure coprono C1-C6, C10-C12 e C15; C7, C8, C9, C13 e C14 arrivano con il passo 2.
   - `shared/crypto.ts` (PR separata `b/S1-schnorr`): `schnorrVerifier`, `schnorrSign`, `schnorrPublicKeyHex`, provati sui vettori BIP-340.
   - Formato: `docs/ADR-001-formato-eventi.md`. Diff di SPEC §9 per il PM: `docs/piano-migrazione-stack-a.md` §9.
 - **Come si prova:** `pnpm typecheck && pnpm lint && pnpm test` (829 test verdi + 3 `todo` su `a/S1-nostr-envelope`; 659 su `b/S1-schnorr`). Le proprietà dell'ordine girano su 1.000 grafi casuali (in media 20 eventi, fino a 41): `pnpm exec vitest run packages/ledger/src/order.test.ts`.
