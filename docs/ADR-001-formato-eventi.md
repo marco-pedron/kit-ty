@@ -62,25 +62,25 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 
 **Lo spareggio sull'`id` si può minare.** Per questo le regole che muovono soldi guardano solo la causalità e il tipo di evento, mai l'ordine tra eventi concorrenti. L'ordine fisso decide solo i casi "primo vince" in cui vincere non porta vantaggi (duplicati, due dispositivi dello stesso membro). Ogni regola è una funzione pura in `packages/ledger/src/conflicts.ts`, con il suo test.
 
-| # | Caso | Regola | Funzione |
-|---|---|---|---|
-| C1 | `approve` e `contest` concorrenti sulla stessa riga | vince `contest` | `lineDecision` |
-| C2 | pagamento ed `EXPENSE_VOIDED` sulla stessa spesa | vince il pagamento, ovunque stia | `expenseVoided` |
-| C3 | lo stesso debitore decide due volte in sequenza | vale la decisione successiva; la contestazione si ritira solo approvando dopo averla vista | `lineDecision` |
-| C4 | due pagamenti validi della stessa riga | paga il primo nell'ordine; gli altri sono un credito del debitore verso il creditore | `settleLine`, `overpaid` |
-| C5 | pagamento e `INVOICE_REISSUED` concorrenti | valido se la preimage corrisponde a una qualsiasi fattura della riga | `paymentMatchesLine` |
-| C6 | due `INVOICE_REISSUED` concorrenti | tutte valide; si paga quella non scaduta con `id` minore | `invoiceToPay` |
-| C7 | blocco e sblocco concorrenti dello stesso autore sullo stesso membro | vince il blocco; in sequenza vale l'ultimo | `isBlocked` |
-| C8 | spesa concorrente con un blocco che la invaliderebbe | valida (il blocco non era noto) | passo 2 (TODO) |
-| C9 | spesa concorrente con l'uscita del debitore | entrambe valide, il debito resta | passo 2 (TODO) |
-| C10 | due spese con lo stesso `fingerprint` | vale la prima nell'ordine; l'altra è invalida, con l'avviso "scontrino già registrato" se l'autore è diverso | `duplicateFingerprints` |
-| C11 | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento (salvo C2) | `expenseVoided` |
-| C12 | due `POLICY_UPDATED` concorrenti dello stesso membro | l'ultima nell'ordine | `effectivePolicy` |
-| C13 | due `MEMBER_JOINED` con lo stesso invito | il primo nell'ordine | `joinsByInvite` |
-| C14 | invito di un membro con un'uscita concorrente | valido (l'uscita non era nota) | passo 2 (TODO) |
-| C15 | la catena personale di un autore si biforca | entrambi validi, autore segnato "registro biforcato"; un blocco è noto se precede almeno una delle sue teste | `forkedAuthors`, `authorHeads` |
+| # | Fonte | Caso | Regola | Funzione |
+|---|---|---|---|---|
+| C1 | [T] | `approve` e `contest` concorrenti sulla stessa riga | vince `contest` | `lineDecision` |
+| C2 | [T] (ambito [I]) | pagamento ed `EXPENSE_VOIDED` sulla stessa spesa | vince il pagamento di qualsiasi riga, ovunque stia | `expenseVoided` |
+| C3 | [I] | lo stesso debitore decide due volte in sequenza | aperta (D5): oggi una contestazione resta | TODO |
+| C4 | [I] | due pagamenti validi della stessa riga | paga il primo nell'ordine; gli altri sono un credito del debitore verso il creditore | `settleLine`, `overpaid` |
+| C5 | [I] | pagamento e `INVOICE_REISSUED` concorrenti | valido se la preimage corrisponde a una qualsiasi fattura della riga | `paymentMatchesLine` |
+| C6 | [I] | due `INVOICE_REISSUED` concorrenti | tutte valide; si paga quella non scaduta con `id` minore | `invoiceToPay` |
+| C7 | [I] | blocco e sblocco concorrenti dello stesso autore sullo stesso membro | aperta (D6, ambito del blocco) | TODO |
+| C8 | [I] (base [T]) | spesa concorrente con un blocco che la invaliderebbe | aperta (D6): proposta "valida, il blocco non era noto" | TODO |
+| C9 | [I] | spesa concorrente con l'uscita del debitore | aperta (D9): la proposta "il debito resta" contraddice "esco solo senza debiti" | TODO |
+| C10 | [I] | due spese con lo stesso `fingerprint` | vale la prima nell'ordine; l'altra è invalida, con l'avviso "scontrino già registrato" se l'autore è diverso | `duplicateFingerprints` |
+| C11 | [I] | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento (salvo C2) | `expenseVoided` |
+| C12 | [I] | due `POLICY_UPDATED` concorrenti dello stesso membro | l'ultima nell'ordine | `effectivePolicy` |
+| C13 | [I] | due `MEMBER_JOINED` con lo stesso invito | aperta (D3, Sybil sugli inviti) | TODO |
+| C14 | [I] | invito di un membro con un'uscita concorrente | valido (l'uscita non era nota) | passo 2 (TODO) |
+| C15 | [I] | la catena personale di un autore si biforca | entrambi validi, autore segnato "registro biforcato"; un blocco è noto se precede almeno una delle sue teste | `forkedAuthors`, `authorHeads` |
 
-C8, C9 e C14 dipendono dagli stati dei membri, che arrivano con il passo 2: oggi sono test `todo`.
+[T] = dal documento del team, [I] = nostra proposta. C3, C7, C8, C9 e C13 toccano domande aperte (piano §11) e restano TODO con test segnaposto finché il team non risponde; C14 aspetta gli stati dei membri del passo 2. Le altre [I] sono implementate ma da confermare: tabella con le alternative in `docs/proposte/regole-conflitto.md`.
 
 ## 6. Tipi e corpi
 
