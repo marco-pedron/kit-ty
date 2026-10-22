@@ -1,8 +1,13 @@
 // OWNED BY STREAM B (PLAN.md §2). Stream A wrote only the interface and the dev fakes.
-// Format chosen at gate 2 (SPEC §9.1, §20): ed25519 signatures of the app key, bound to the
-// node by an invoice. Never RLN /signmessage (it signs the empty string in d4762ac).
+// Two formats while the registry migrates (docs/ADR-001-formato-eventi.md):
+// - the demo registry (gate 2, SPEC §9.1, §20): ed25519 signatures of the app key, bound to
+//   the node by an invoice;
+// - registry v2 on Nostr: BIP-340 Schnorr on secp256k1 over 32-byte digests (event ids,
+//   table-signature digests), the per-trip registry key as author.
+// Never RLN /signmessage (it signs the empty string in d4762ac).
 // Re-exported by index.ts and bundled into the web app: no node:crypto, no Buffer.
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { sha256Hex } from './canonical.js';
 import type { DecodedInvoice } from './domain.js';
@@ -52,6 +57,47 @@ export function ed25519PublicKeyHex(secretHex: string): string {
 export function ed25519Sign(secretHex: string, message: string): string {
   if (!PUBKEY_HEX.test(secretHex)) throw new Error('ed25519 secret must be 64 lowercase hex chars');
   return bytesToHex(ed25519.sign(utf8ToBytes(message), hexToBytes(secretHex)));
+}
+
+// ---------- registry v2: BIP-340 Schnorr (Nostr, NIP-01) ----------
+
+const SCHNORR_SIG_HEX = /^[0-9a-f]{128}$/;
+const DIGEST_HEX = /^[0-9a-f]{64}$/;
+
+/**
+ * Schnorr verifier of registry v2. Wire format: `authorPubkey` = 32-byte x-only key,
+ * `message` = a 32-byte digest as 64 lowercase hex (the NIP-01 event id, or the digest of a
+ * proposal signed at the table), `signature` = 64 bytes; all lowercase hex. The signed bytes
+ * are the 32 raw bytes of the digest, as BIP-340 and NIP-01 specify. Other message lengths are
+ * refused: we only ever sign digests. Never throws.
+ */
+export const schnorrVerifier: SignatureVerifier = {
+  verify(authorPubkey: string, message: string, signature: string): boolean {
+    try {
+      if (typeof authorPubkey !== 'string' || typeof message !== 'string') return false;
+      if (typeof signature !== 'string') return false;
+      if (!PUBKEY_HEX.test(authorPubkey) || !DIGEST_HEX.test(message)) return false;
+      if (!SCHNORR_SIG_HEX.test(signature)) return false;
+      return schnorr.verify(hexToBytes(signature), hexToBytes(message), hexToBytes(authorPubkey));
+    } catch {
+      return false;
+    }
+  },
+};
+
+/** The x-only Schnorr public key (lowercase hex) of a 32-byte secp256k1 secret key in hex. */
+export function schnorrPublicKeyHex(secretHex: string): string {
+  if (!PUBKEY_HEX.test(secretHex))
+    throw new Error('secp256k1 secret must be 64 lowercase hex chars');
+  return bytesToHex(schnorr.getPublicKey(hexToBytes(secretHex)));
+}
+
+/** Signs a 32-byte digest given as hex (fresh aux randomness); schnorrVerifier accepts it. */
+export function schnorrSign(secretHex: string, digestHex: string): string {
+  if (!PUBKEY_HEX.test(secretHex))
+    throw new Error('secp256k1 secret must be 64 lowercase hex chars');
+  if (!DIGEST_HEX.test(digestHex)) throw new Error('digest must be 64 lowercase hex chars');
+  return bytesToHex(schnorr.sign(hexToBytes(digestHex), hexToBytes(secretHex)));
 }
 
 /**

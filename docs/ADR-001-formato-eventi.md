@@ -2,7 +2,7 @@
 
 > Stato: **accettato** il 21/10/2026 (revisione del team con i mentor, `docs/piano-migrazione-stack-a.md` §0bis). Fonte di verità: `docs/stack-a-decisioni.md`.
 > Implementato nel passo 1 (branch `a/S1-nostr-envelope`; firme in `b/S1-schnorr`). Il registro della demo (`legacy-events.ts`, ed25519, relay Fastify) resta in uso fino al passo 2; `demo-finale-v1` è la demo di riserva.
-> Le modifiche corrispondenti a `docs/SPEC.md` §9 sono proposte come diff in `docs/piano-migrazione-stack-a.md` §9: vanno al PM.
+> Le modifiche corrispondenti a `docs/SPEC.md` §9 sono proposte come diff in `docs/proposte/spec-9-registro.md`: vanno al PM.
 
 ## 1. Contesto
 
@@ -38,8 +38,8 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 - **Il segreto nel registro:** `TRIP_SECRET_SHARED { recipients: [{ pubkey, ciphertext }] }`, dove `ciphertext` = NIP-44 del segreto con la chiave di conversazione **ECDH standard** tra autore e destinatario. Ogni membro, entrando, ne scrive uno verso **sé stesso**: chi recupera la seed (passo 3) ritrova le chiavi del registro, i propri eventi e quindi il segreto. È l'unico tipo il cui `content` viaggia in chiaro (il destinatario non ha ancora la chiave del viaggio), senza `tripId`; base64 non comincia mai con `{`, quindi i due casi non si confondono. Chi lo apre controlla che `tripTagOf(segreto)` sia il tag del viaggio.
 - **Limite dichiarato:** chi esce o viene escluso conserva il segreto e può leggere gli eventi successivi. La rotazione del segreto è in roadmap.
 - **Cosa resta visibile ai relay:** tag `T` ed `e`, `pubkey` (una per viaggio), dimensioni, tempi, e i destinatari di `TRIP_SECRET_SHARED` (chiavi dello stesso viaggio, già visibili come autori).
-- **Lunghezza:** NIP-44 oggi ammette testi fino a 2³² − 1 byte con un prefisso di 6 byte, ma i vettori pubblicati (il file con lo sha256 indicato in NIP-44) trattano ancora come invalidi i testi da 65.536 byte in su. Restiamo nell'intervallo classico, 1-65.535 byte, che ogni implementazione legge: gli eventi del registro pesano pochi KB.
-- Codice: `packages/shared/src/content.ts`, provato sui vettori ufficiali di NIP-44 e contro `nostr-tools` in entrambi i sensi.
+- **Lunghezza: da 1 a 65.535 byte di testo in chiaro** [decisione confermata il 21/10]. NIP-44 oggi ammette testi fino a 2³² − 1 byte con un prefisso di 6 byte, ma i vettori pubblicati (il file con lo sha256 indicato in NIP-44) trattano ancora come invalidi i testi da 65.536 byte in su. Restiamo nell'intervallo classico, che ogni implementazione legge: gli eventi del registro pesano pochi KB. In pratica `nip44Encrypt` rifiuta un testo più lungo e `nip44Decrypt` rifiuta il prefisso esteso e ogni payload oltre 87.472 caratteri base64.
+- Codice: `packages/shared/src/content.ts`, provato sui vettori ufficiali di NIP-44 e contro `nostr-tools` in entrambi i sensi. I vettori non stanno nel repo: il test li scarica a ogni esecuzione (`paulmillr/nip44`, `nip44.vectors.json`) e li usa solo se il loro sha256 è quello pubblicato nel testo di NIP-44 (`nostr-protocol/nips`, `44.md`). La suite sta in `content.vectors.test.ts`: senza rete salta con un avviso; un errore HTTP o uno sha256 diverso la fanno fallire.
 
 ## 4. Ordine fisso
 
@@ -72,7 +72,7 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 | C6 | due `INVOICE_REISSUED` concorrenti | tutte valide; si paga quella non scaduta con `id` minore | `invoiceToPay` |
 | C7 | blocco e sblocco dello stesso autore sullo stesso membro | concorrenti, vince il blocco; uno sblocco toglie tutti i blocchi dell'autore su quel membro che ha tra gli antenati; vale solo se firmato da chi ha bloccato | passo 2 |
 | C8 | spesa con un blocco tra pagatore e debitore (D6) | invalida per intero se il blocco è tra i suoi antenati; valida se è concorrente | passo 2 |
-| C9 | spesa concorrente con l'uscita del debitore | entrambe valide; il debito resta, segnato "debito arrivato dopo l'uscita"; l'uscito può contestarlo | passo 2 |
+| C9 | spesa concorrente con l'uscita del debitore | entrambe valide; il debito resta, segnato "debito arrivato dopo l'uscita"; l'uscito può approvarlo o contestarlo; il silenzio-assenso non vale | passo 2 |
 | C10 | due spese con lo stesso `fingerprint` | entrambe valide, segnate "possibile doppione" | `possibleDuplicates` |
 | C11 | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento, salvo le righe pagate (C2) | `voidedLines` |
 | C12 | due `POLICY_UPDATED` concorrenti dello stesso membro | la più prudente, campo per campo | `effectivePolicy` |

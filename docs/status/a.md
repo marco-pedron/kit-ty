@@ -40,20 +40,21 @@
   - `ledger/order.ts`: `fixedOrder` (chiusura causale, genesi unica, Kahn con spareggio sull'id, `stateHash`, `frontier`, mancanti), `Causality` (`precedes`, `concurrent`, `ancestorsOf`, `maxima`).
   - `ledger/conflicts.ts`: regole C1-C15 decise il 22/10 (`docs/proposte/regole-conflitto.md`). Le funzioni pure coprono C1-C6, C10-C12 e C15; C7, C8, C9, C13 e C14 arrivano con il passo 2.
   - `shared/crypto.ts` (PR separata `b/S1-schnorr`): `schnorrVerifier`, `schnorrSign`, `schnorrPublicKeyHex`, provati sui vettori BIP-340.
-  - Formato: `docs/ADR-001-formato-eventi.md`. Diff di SPEC §9 per il PM: `docs/piano-migrazione-stack-a.md` §9.
+  - Formato: `docs/ADR-001-formato-eventi.md`. Diff di SPEC §9 per il PM: `docs/proposte/spec-9-registro.md`.
 - **Come si prova:** `pnpm typecheck && pnpm lint && pnpm test` (829 test verdi + 3 `todo` su `a/S1-nostr-envelope`; 659 su `b/S1-schnorr`). Le proprietà dell'ordine girano su 1.000 grafi casuali (in media 20 eventi, fino a 41): `pnpm exec vitest run packages/ledger/src/order.test.ts`.
 - **Dipendenze nuove** (in `packages/shared`): `@noble/ciphers` (ChaCha20 per NIP-44), `nostr-tools` `2.25.2` solo nei test, come oracolo.
 - **Problemi noti:**
-  - NIP-44 limitato a 1-65.535 byte: i vettori ufficiali trattano ancora come invalidi i testi più lunghi (ADR §3).
-  - I vettori NIP-44 vengono dal repo `paulmillr/nip44`, che non dichiara una licenza: sono il file con lo sha256 pubblicato in NIP-44.
+  - NIP-44 limitato a 1-65.535 byte (confermato il 21/10, ADR §3).
+  - I vettori NIP-44 non sono più nel repo: `content.vectors.test.ts` li scarica e verifica lo sha256 pubblicato in NIP-44. Senza rete la suite salta con un avviso (`WARNING: NIP-44 vector tests skipped`); in CI gira.
   - `nostr.test.ts` usa un verificatore Schnorr locale finché `b/S1-schnorr` non è mergiato.
 
 ## Bloccato da
-- `docs/stack-a-decisioni.md`: il documento del team non è nel repo e non era allegato al messaggio del 21/10; il piano punta già a quel percorso.
+- **S2 non parte finché la PR #60 (Schnorr in `crypto.ts`, stream B) non è mergiata** dopo la revisione dello stream B, **e finché il team non risponde sulle regole di conflitto** (`docs/proposte/regole-conflitto.md`).
 
 ## Prossimo passo
 - **S2 (passo 2 ridotto), dopo il via:** `deriveTrip` e `validateEvent` sugli eventi v2 sopra `fixedOrder`; invito, ingresso, blocco, sblocco, uscita; Dave fuori dal registro; quote firmate al tavolo; regola della fattura (D2); righe da pagare a mano; C8, C9, C14; TODO con test segnaposto per D3, D5, D6, D10, D11.
-- **Per il PM:** diff di SPEC §9 in `docs/piano-migrazione-stack-a.md` §9; riga del registro decisioni §20 proposta nello stesso file.
+- **Per il PM:** diff di SPEC §9 in `docs/proposte/spec-9-registro.md`; riga del registro decisioni §20 proposta in `docs/piano-migrazione-stack-a.md` §9.
+- **Documento del team:** aggiornato il 22/10 con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md` (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`, uscita, inviti, blocco).
 
 ## Prossimo passo (prima dello Stack A)
 - **Registrazioni vere (prossima PR di A, domani):** tracce in `infra/fixtures/audio/recorded/`, poi rivedere soglia e modello; verificare la catena trascrizione → `proposeSplit`.
