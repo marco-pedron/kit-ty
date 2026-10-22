@@ -3,9 +3,10 @@ import { createQvacEngine } from './ai/qvac-engine.js';
 import { DEMO_TRIP_PARAMS } from '@kitty/shared';
 import { loadConfig } from './config.js';
 import { FakeLightningNetwork } from './dev-fakes/fake-wallet.js';
-import { realSetup, walletsOf } from './flows/real-setup.js';
+import { fakeRegistrySeeds, realRegistrySeeds, realSetup, walletsOf } from './flows/real-setup.js';
 import {
   fakeTripChannels,
+  registryVersion,
   seedTrip,
   startAgents,
   StaleRelayError,
@@ -45,7 +46,18 @@ function fakeSetup(): ReturnType<typeof realSetup> {
 }
 
 const { wallets, seed } = config.KITTY_FAKES ? fakeSetup() : realSetup(config);
-const rt = startAgents({ fakes: config.KITTY_FAKES, relay, wallets, log: app.log });
+// KITTY_REGISTRY=v2: the registry v2 next to the legacy log (double write, step 3); v1 default.
+const registry = registryVersion(process.env.KITTY_REGISTRY);
+const rt = startAgents({
+  fakes: config.KITTY_FAKES,
+  relay,
+  wallets,
+  log: app.log,
+  ...(registry === 'v2' && {
+    registry: { seeds: config.KITTY_FAKES ? fakeRegistrySeeds() : realRegistrySeeds() },
+  }),
+});
+app.log.info(`registry ${registry}`);
 runtime = rt;
 app.addHook('onClose', async () => rt.stop());
 // The timers of the trip come from the config (45/120/10 s for the live demo, SPEC §15); the

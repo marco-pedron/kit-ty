@@ -1,10 +1,13 @@
 import {
+  DEFAULT_POLICY,
   DEMO_TRIP_PARAMS,
   MEMBER_IDS,
   fakeVerifier,
+  registry as fmt,
   signatureVerifier,
   type ActorId,
   type EventBody,
+  type MemberId,
   type TripParams,
 } from '@kitty/shared';
 import { upheldDeadlineSeconds } from '@kitty/ledger';
@@ -13,6 +16,8 @@ import type { Wallet } from '../wallet/types.js';
 import { CoordinatorAgent } from './dave.js';
 import { apiErrorOf } from './errors.js';
 import { MemberAgent } from './member-agent.js';
+import { MemoryTransport, type RegistryTransport } from './registry-transport.js';
+import { RegistryV2 } from './registry-v2.js';
 import { loadRates, type TripChannels } from './seed-state.js';
 
 // The running agents of the process (SPEC §14): one per actor, each with ONLY its own wallet,
@@ -22,7 +27,16 @@ import { loadRates, type TripChannels } from './seed-state.js';
 export interface AgentRuntime {
   agents: Map<ActorId, MemberAgent>;
   dave: CoordinatorAgent;
+  /** KITTY_REGISTRY: v1 (or unset) = the legacy log only; v2 = also the registry v2 (double write). */
+  registry?: 'v1' | 'v2';
   stop(): void;
+}
+
+/** KITTY_REGISTRY, v1 by default. */
+export function registryVersion(value: string | undefined): 'v1' | 'v2' {
+  if (value === undefined || value === '' || value === 'v1') return 'v1';
+  if (value === 'v2') return 'v2';
+  throw new Error(`KITTY_REGISTRY must be v1 or v2, not "${value}"`);
 }
 
 interface Log {
@@ -43,6 +57,11 @@ export function startAgents(p: {
   now?: () => Date;
   /** B6: quiet time before a backup; default BACKUP_QUIET_MS. */
   backupQuietMs?: number;
+  /**
+   * KITTY_REGISTRY=v2: each traveler's BIP-39 seed (the registry keys are derived from it,
+   * NIP-06) and the transport of the registry (in-process until step 4). Unset: v1.
+   */
+  registry?: { seeds: Record<MemberId, Uint8Array>; transport?: RegistryTransport };
 }): AgentRuntime {
   // FakeWallet signs with fakeSign; the real wallet (B3) with ed25519 (B4).
   const verifier = p.fakes ? fakeVerifier : signatureVerifier;
@@ -53,8 +72,30 @@ export function startAgents(p: {
   const agents = new Map<ActorId, MemberAgent>([['dave', dave]]);
   // B6: each traveler's node is backed up 10 s after it changed (SPEC §12)
   const backupQuietMs = p.backupQuietMs ?? BACKUP_QUIET_MS;
-  for (const id of MEMBER_IDS)
-    agents.set(id, new MemberAgent({ ...common, actor: id, wallet: p.wallets[id], backupQuietMs }));
+  const transport = p.registry?.transport ?? new MemoryTransport();
+  for (const id of MEMBER_IDS) {
+    const wallet = p.wallets[id];
+    const registry =
+      p.registry === undefined
+        ? undefined
+        : new RegistryV2({
+            displayName: id,
+            seed: p.registry.seeds[id],
+            wallet,
+            transport,
+            now: p.now ?? (() => new Date()),
+          });
+    agents.set(
+      id,
+      new MemberAgent({
+        ...common,
+        actor: id,
+        wallet,
+        backupQuietMs,
+        ...(registry && { registry }),
+      }),
+    );
+  }
 
   const lastError = new Map<ActorId, string>();
   const timer = setInterval(() => {
@@ -73,7 +114,12 @@ export function startAgents(p: {
       );
     }
   }, p.tickMs ?? 1_000);
-  return { agents, dave, stop: () => clearInterval(timer) };
+  return {
+    agents,
+    dave,
+    registry: p.registry === undefined ? 'v1' : 'v2',
+    stop: () => clearInterval(timer),
+  };
 }
 
 /** The trip of SPEC §6.1-6.2 does not match this seed: retrying cannot fix it. */
@@ -125,6 +171,8 @@ export async function seedTrip(
         if (!member.channelsReady) await rt.dave.channelsReady(id, seed.channels[id]);
       }
       log.info(`trip "${trip.name}" ready on the relay (asset ${seed.assetId})`);
+      if (rt.registry === 'v2')
+        await seedRegistryV2(rt.agents, trip.tripId, trip.name, seed.assetId, params);
       return;
     } catch (err) {
       if (err instanceof StaleRelayError) throw err;
@@ -132,6 +180,49 @@ export async function seedTrip(
       log.warn(`trip setup: ${e.code} ${e.message}; retrying in 2 s`);
       await new Promise((r) => setTimeout(r, 2_000));
     }
+  }
+}
+
+/**
+ * KITTY_REGISTRY=v2: the same trip in the registry v2, with no coordinator (Dave only routes
+ * payments). The first traveler creates it; each other one joins with an invite of the
+ * creator, whose package (trip secret and invite) the QR would carry: here handed over in the
+ * process. After a restart each member first looks for its trip again from its seed alone.
+ */
+export async function seedRegistryV2(
+  agents: ReadonlyMap<ActorId, MemberAgent>,
+  tripId: string,
+  name: string,
+  assetId: string,
+  params: TripParams,
+): Promise<void> {
+  const [creatorId = 'alice', ...others] = MEMBER_IDS;
+  const creator = agents.get(creatorId)?.registry;
+  if (creator === null || creator === undefined) throw new Error('no registry v2 for the creator');
+  if (!(await creator.recover(tripId))) {
+    const v2Params: fmt.TripParams = {
+      assetId,
+      assetDecimals: 2,
+      displayDecimals: 2,
+      silentAssentSeconds: params.silentAssentSeconds,
+      invoiceExpirySeconds: fmt.DEFAULT_INVOICE_EXPIRY_SECONDS,
+      rateMaxAgeSeconds: 86_400,
+      oracles: [],
+    };
+    // No Nostr relay before step 4: the events travel inside the agent process.
+    await creator.createTrip({
+      tripId,
+      name,
+      params: v2Params,
+      relays: ['ws://localhost/in-process'],
+      policy: DEFAULT_POLICY,
+    });
+  }
+  for (const id of others) {
+    const member = agents.get(id)?.registry;
+    if (member === null || member === undefined) throw new Error(`no registry v2 for ${id}`);
+    if (await member.recover(tripId)) continue;
+    await member.join(await creator.invite(), DEFAULT_POLICY);
   }
 }
 
