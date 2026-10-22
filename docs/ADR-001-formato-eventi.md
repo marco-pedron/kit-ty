@@ -72,7 +72,7 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 | C6 | due `INVOICE_REISSUED` concorrenti | tutte valide; si paga quella non scaduta con `id` minore | `invoiceToPay` |
 | C7 | blocco e sblocco dello stesso autore sullo stesso membro | concorrenti, vince il blocco; uno sblocco toglie tutti i blocchi dell'autore su quel membro che ha tra gli antenati; vale solo se firmato da chi ha bloccato | passo 2 |
 | C8 | spesa con un blocco tra pagatore e debitore (D6) | invalida per intero se il blocco è tra i suoi antenati; valida se è concorrente | passo 2 |
-| C9 | spesa concorrente con l'uscita del debitore | entrambe valide; il debito resta, segnato "debito arrivato dopo l'uscita"; l'uscito può contestarlo | passo 2 |
+| C9 | spesa concorrente con l'uscita del debitore | entrambe valide; il debito resta, segnato "debito arrivato dopo l'uscita"; l'uscito può approvarlo o contestarlo; il silenzio-assenso non vale | passo 2 |
 | C10 | due spese con lo stesso `fingerprint` | entrambe valide, segnate "possibile doppione" | `possibleDuplicates` |
 | C11 | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento, salvo le righe pagate (C2) | `voidedLines` |
 | C12 | due `POLICY_UPDATED` concorrenti dello stesso membro | la più prudente, campo per campo | `effectivePolicy` |
