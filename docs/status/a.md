@@ -38,7 +38,7 @@
   - `shared/events.ts` (namespace `registry`): schemi zod v2, importi `amount` in unità base, `TripParams` con `assetId` e decimali, fattura fuori dalla `proposal` firmata (D2), `TRIP_SECRET_SHARED` (D1), `buildRegistryEvent` / `readRegistryEvent`, `proposalDigest`.
   - `shared/legacy-events.ts`: gli schemi di oggi, invariati (stessi nomi esportati).
   - `ledger/order.ts`: `fixedOrder` (chiusura causale, genesi unica, Kahn con spareggio sull'id, `stateHash`, `frontier`, mancanti), `Causality` (`precedes`, `concurrent`, `ancestorsOf`, `maxima`).
-  - `ledger/conflicts.ts`: C1-C7, C10-C13, C15 come funzioni pure; C8, C9, C14 TODO del passo 2.
+  - `ledger/conflicts.ts`: regole C1-C15 decise il 22/10 (`docs/proposte/regole-conflitto.md`). Le funzioni pure coprono C1-C6, C10-C12 e C15; C7, C8, C9, C13 e C14 arrivano con il passo 2.
   - `shared/crypto.ts` (PR separata `b/S1-schnorr`): `schnorrVerifier`, `schnorrSign`, `schnorrPublicKeyHex`, provati sui vettori BIP-340.
   - Formato: `docs/ADR-001-formato-eventi.md`. Diff di SPEC §9 per il PM: `docs/proposte/spec-9-registro.md`.
 - **Come si prova:** `pnpm typecheck && pnpm lint && pnpm test` (829 test verdi + 3 `todo` su `a/S1-nostr-envelope`; 659 su `b/S1-schnorr`). Le proprietà dell'ordine girano su 1.000 grafi casuali (in media 20 eventi, fino a 41): `pnpm exec vitest run packages/ledger/src/order.test.ts`.

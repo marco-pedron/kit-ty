@@ -62,25 +62,25 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 
 **Lo spareggio sull'`id` si può minare.** Per questo le regole che muovono soldi guardano solo la causalità e il tipo di evento, mai l'ordine tra eventi concorrenti. L'ordine fisso decide solo i casi "primo vince" in cui vincere non porta vantaggi (duplicati, due dispositivi dello stesso membro). Ogni regola è una funzione pura in `packages/ledger/src/conflicts.ts`, con il suo test.
 
-| # | Caso | Regola | Funzione |
+| # | Caso | Regola (decisa il 22/10, salvo C1 e C2 [T]) | Funzione |
 |---|---|---|---|
-| C1 | `approve` e `contest` concorrenti sulla stessa riga | vince `contest` | `lineDecision` |
-| C2 | pagamento ed `EXPENSE_VOIDED` sulla stessa spesa | vince il pagamento, ovunque stia | `expenseVoided` |
-| C3 | lo stesso debitore decide due volte in sequenza | vale la decisione successiva; la contestazione si ritira solo approvando dopo averla vista | `lineDecision` |
+| C1 | `approve` e `contest` concorrenti sulla stessa riga | vince `contest` [T] | `lineDecision` |
+| C2 | pagamento ed `EXPENSE_VOIDED` sulla stessa spesa | vince il pagamento [T], solo per la riga pagata: le altre righe si annullano | `voidedLines` |
+| C3 | lo stesso debitore decide due volte in sequenza | un'approvazione che ha tra gli antenati la contestazione dello stesso debitore la ritira; concorrenti, vince la contestazione | `lineDecision` |
 | C4 | due pagamenti validi della stessa riga | paga il primo nell'ordine; gli altri sono un credito del debitore verso il creditore | `settleLine`, `overpaid` |
 | C5 | pagamento e `INVOICE_REISSUED` concorrenti | valido se la preimage corrisponde a una qualsiasi fattura della riga | `paymentMatchesLine` |
 | C6 | due `INVOICE_REISSUED` concorrenti | tutte valide; si paga quella non scaduta con `id` minore | `invoiceToPay` |
-| C7 | blocco e sblocco concorrenti dello stesso autore sullo stesso membro | vince il blocco; in sequenza vale l'ultimo | `isBlocked` |
-| C8 | spesa concorrente con un blocco che la invaliderebbe | valida (il blocco non era noto) | passo 2 (TODO) |
-| C9 | spesa concorrente con l'uscita del debitore | entrambe valide, il debito resta | passo 2 (TODO) |
-| C10 | due spese con lo stesso `fingerprint` | vale la prima nell'ordine; l'altra è invalida, con l'avviso "scontrino già registrato" se l'autore è diverso | `duplicateFingerprints` |
-| C11 | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento (salvo C2) | `expenseVoided` |
-| C12 | due `POLICY_UPDATED` concorrenti dello stesso membro | l'ultima nell'ordine | `effectivePolicy` |
-| C13 | due `MEMBER_JOINED` con lo stesso invito | il primo nell'ordine | `joinsByInvite` |
-| C14 | invito di un membro con un'uscita concorrente | valido (l'uscita non era nota) | passo 2 (TODO) |
+| C7 | blocco e sblocco dello stesso autore sullo stesso membro | concorrenti, vince il blocco; uno sblocco toglie tutti i blocchi dell'autore su quel membro che ha tra gli antenati; vale solo se firmato da chi ha bloccato | passo 2 |
+| C8 | spesa con un blocco tra pagatore e debitore (D6) | invalida per intero se il blocco è tra i suoi antenati; valida se è concorrente | passo 2 |
+| C9 | spesa concorrente con l'uscita del debitore | entrambe valide; il debito resta, segnato "debito arrivato dopo l'uscita"; l'uscito può approvarlo o contestarlo; il silenzio-assenso non vale | passo 2 |
+| C10 | due spese con lo stesso `fingerprint` | entrambe valide, segnate "possibile doppione" | `possibleDuplicates` |
+| C11 | `EXPENSE_VOIDED` concorrente con `LINE_DECIDED` | vince l'annullamento, salvo le righe pagate (C2) | `voidedLines` |
+| C12 | due `POLICY_UPDATED` concorrenti dello stesso membro | la più prudente, campo per campo | `effectivePolicy` |
+| C13 | due `MEMBER_JOINED` con lo stesso invito | un invito, un ingresso: il primo nell'ordine | passo 2 |
+| C14 | invito di un membro con un'uscita concorrente | valido (l'uscita non era nota) | passo 2 |
 | C15 | la catena personale di un autore si biforca | entrambi validi, autore segnato "registro biforcato"; un blocco è noto se precede almeno una delle sue teste | `forkedAuthors`, `authorHeads` |
 
-C8, C9 e C14 dipendono dagli stati dei membri, che arrivano con il passo 2: oggi sono test `todo`.
+Tutte le regole sono decise (`docs/proposte/regole-conflitto.md`, 22/10). Restano aperte D3 (Sybil sugli inviti), fazioni e cambio nel weekend.
 
 ## 6. Tipi e corpi
 

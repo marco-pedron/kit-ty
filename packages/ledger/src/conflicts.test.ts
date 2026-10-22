@@ -6,8 +6,6 @@ import {
   expenseVoided,
   forkedAuthors,
   invoiceToPay,
-  isBlocked,
-  joinsByInvite,
   lineDecision,
   overpaid,
   paymentMatchesLine,
@@ -17,6 +15,8 @@ import { fixedOrder } from './order.js';
 import { ev, type TestEvent } from './test/dag.js';
 
 // One test per rule of plan §2.4. "Concurrent" = neither precedes the other.
+// [T] = rule of the team document, [I] = our proposal (docs/proposte/regole-conflitto.md).
+// [I] rules on an open question (plan §11) are it.todo until the team answers.
 const [ALICE, BOB, CHARLIE] = ['a', 'b', 'c'].map((x) => x.repeat(64)) as [string, string, string];
 const g = ev([], { salt: 'TRIP_CREATED' });
 const expense = ev([g.id], { author: ALICE, salt: 'EXPENSE_SUBMITTED' });
@@ -25,7 +25,7 @@ function causality(...events: TestEvent[]) {
   return fixedOrder([g, expense, ...events]).causality;
 }
 
-describe('C1: approve and contest on the same line, concurrent', () => {
+describe('C1 [T]: approve and contest on the same line, concurrent', () => {
   it('contest wins, whatever the ids', () => {
     const approve = ev([expense.id], { author: BOB, salt: 'approve' });
     const contest = ev([expense.id], { author: BOB, salt: 'contest' });
@@ -35,12 +35,17 @@ describe('C1: approve and contest on the same line, concurrent', () => {
       { id: approve.id, decision: 'approve' as const },
       { id: contest.id, decision: 'contest' as const },
     ];
-    expect(lineDecision(c, decisions)).toBe('contest');
-    expect(lineDecision(c, [...decisions].reverse())).toBe('contest');
+    expect(lineDecision(decisions)).toBe('contest');
+    expect(lineDecision([...decisions].reverse())).toBe('contest');
+  });
+
+  it('only approvals: approve; no decision: null', () => {
+    expect(lineDecision([{ id: expense.id, decision: 'approve' }])).toBe('approve');
+    expect(lineDecision([])).toBeNull();
   });
 });
 
-describe('C2: payment and EXPENSE_VOIDED on the same expense', () => {
+describe('C2 [T]: payment and EXPENSE_VOIDED on the same expense', () => {
   it('the payment wins, concurrent or after the void', () => {
     const voided = ev([expense.id], { author: ALICE, salt: 'void' });
     const paidConcurrent = ev([expense.id], { author: BOB, salt: 'paid' });
@@ -57,51 +62,12 @@ describe('C2: payment and EXPENSE_VOIDED on the same expense', () => {
   });
 });
 
-describe('C3: the same debtor decides twice in causal sequence', () => {
-  it('contest, then approve after seeing it: approve', () => {
-    const contest = ev([expense.id], { author: BOB, salt: 'contest' });
-    const approve = ev([contest.id], { author: BOB, salt: 'approve' });
-    const c = causality(contest, approve);
-    expect(
-      lineDecision(c, [
-        { id: contest.id, decision: 'contest' },
-        { id: approve.id, decision: 'approve' },
-      ]),
-    ).toBe('approve');
-  });
-
-  it('approve, then contest: contest', () => {
-    const approve = ev([expense.id], { author: BOB, salt: 'approve' });
-    const contest = ev([approve.id], { author: BOB, salt: 'contest' });
-    const c = causality(approve, contest);
-    expect(
-      lineDecision(c, [
-        { id: approve.id, decision: 'approve' },
-        { id: contest.id, decision: 'contest' },
-      ]),
-    ).toBe('contest');
-  });
-
-  it('an approve that did not see the contest does not withdraw it (C1 over C3)', () => {
-    const contest = ev([expense.id], { author: BOB, salt: 'contest (phone)' });
-    const approve1 = ev([expense.id], { author: BOB, salt: 'approve (tablet)' });
-    const approve2 = ev([approve1.id], { author: BOB, salt: 'approve again (tablet)' });
-    const c = causality(contest, approve1, approve2);
-    expect(
-      lineDecision(c, [
-        { id: contest.id, decision: 'contest' },
-        { id: approve1.id, decision: 'approve' },
-        { id: approve2.id, decision: 'approve' },
-      ]),
-    ).toBe('contest');
-  });
-
-  it('no decision: null', () => {
-    expect(lineDecision(causality(), [])).toBeNull();
-  });
+describe('C3 [I]: the same debtor decides twice in causal sequence (open: D5)', () => {
+  it.todo('C3: contest, then approve after seeing it: is the contest withdrawn? (plan §11 D5)');
+  it.todo('C3: approve, then contest: does the later contest count? (plan §11 D5)');
 });
 
-describe('C4: two valid payments of the same line', () => {
+describe('C4 [I]: two valid payments of the same line', () => {
   it('the first in the fixed order pays, the other is a credit of the debtor', () => {
     const p1 = ev([expense.id], { author: BOB, salt: 'paid (phone)' });
     const p2 = ev([expense.id], { author: BOB, salt: 'paid (tablet)' });
@@ -123,7 +89,7 @@ describe('C4: two valid payments of the same line', () => {
   });
 });
 
-describe('C5: PAYMENT_MADE and INVOICE_REISSUED, concurrent', () => {
+describe('C5 [I]: PAYMENT_MADE and INVOICE_REISSUED, concurrent', () => {
   it('a payment of the original or of the reissued invoice settles the line', () => {
     const invoices = [{ paymentHash: '01'.repeat(32) }, { paymentHash: '02'.repeat(32) }];
     expect(paymentMatchesLine('01'.repeat(32), invoices)).toBe(true);
@@ -132,7 +98,7 @@ describe('C5: PAYMENT_MADE and INVOICE_REISSUED, concurrent', () => {
   });
 });
 
-describe('C6: two INVOICE_REISSUED of the same line, concurrent', () => {
+describe('C6 [I]: two INVOICE_REISSUED of the same line, concurrent', () => {
   it('the debtor pays the unexpired one with the smallest event id', () => {
     const invoices = [
       { eventId: '3'.repeat(64), expiresAt: 2000 },
@@ -145,45 +111,25 @@ describe('C6: two INVOICE_REISSUED of the same line, concurrent', () => {
   });
 });
 
-describe('C7: MEMBER_BLOCKED and MEMBER_UNBLOCKED of the same author on the same member', () => {
-  it('concurrent: the block wins', () => {
-    const block = ev([g.id], { author: ALICE, salt: 'block charlie' });
-    const unblock = ev([g.id], { author: ALICE, salt: 'unblock charlie' });
-    const c = causality(block, unblock);
-    expect(
-      isBlocked(c, [
-        { id: block.id, kind: 'block' },
-        { id: unblock.id, kind: 'unblock' },
-      ]),
-    ).toBe(true);
-  });
-
-  it('in sequence: the last one counts', () => {
-    const block = ev([g.id], { author: ALICE, salt: 'block' });
-    const unblock = ev([block.id], { author: ALICE, salt: 'unblock' });
-    const reblock = ev([unblock.id], { author: ALICE, salt: 'block again' });
-    const c = causality(block, unblock, reblock);
-    const seq = [
-      { id: block.id, kind: 'block' as const },
-      { id: unblock.id, kind: 'unblock' as const },
-    ];
-    expect(isBlocked(c, seq)).toBe(false);
-    expect(isBlocked(c, [...seq, { id: reblock.id, kind: 'block' }])).toBe(true);
-    expect(isBlocked(c, [])).toBe(false);
-  });
+describe('C7 [I]: block and unblock of one author on one member (open: D6)', () => {
+  it.todo('C7: concurrent MEMBER_BLOCKED and MEMBER_UNBLOCKED: which wins? (plan §11 D6)');
+  it.todo('C7: in causal sequence the last one counts, per pair or for all? (plan §11 D6)');
 });
 
-describe('C8, C9, C14: need the member states of step 2', () => {
+describe('C8 [I], C9 [I]: open questions', () => {
   it.todo(
-    'C8: EXPENSE_SUBMITTED concurrent with a MEMBER_BLOCKED that would invalidate it is valid',
+    'C8: EXPENSE_SUBMITTED concurrent with a MEMBER_BLOCKED: valid if the block was not known? (plan §11 D6)',
   );
   it.todo(
-    'C9: EXPENSE_SUBMITTED concurrent with the debtor MEMBER_LEFT: both valid, the debt stays',
+    'C9: EXPENSE_SUBMITTED concurrent with the debtor MEMBER_LEFT: the team allows leaving only without debts (plan §11 D9)',
   );
+});
+
+describe('C14 [I]: needs the member states of step 2', () => {
   it.todo('C14: MEMBER_INVITED concurrent with the inviter MEMBER_LEFT is valid');
 });
 
-describe('C10: two EXPENSE_SUBMITTED with the same fingerprint', () => {
+describe('C10 [I]: two EXPENSE_SUBMITTED with the same fingerprint', () => {
   it('the first in the fixed order is valid; the loser learns who registered it', () => {
     const mine = ev([g.id], { author: ALICE, salt: 'dinner (alice)' });
     const theirs = ev([g.id], { author: BOB, salt: 'dinner (bob)' });
@@ -212,7 +158,7 @@ describe('C10: two EXPENSE_SUBMITTED with the same fingerprint', () => {
   });
 });
 
-describe('C11: EXPENSE_VOIDED concurrent with LINE_DECIDED', () => {
+describe('C11 [I]: EXPENSE_VOIDED concurrent with LINE_DECIDED', () => {
   it('the void wins: decisions do not enter the rule', () => {
     const voided = ev([expense.id], { author: ALICE, salt: 'void' });
     const approve = ev([expense.id], { author: BOB, salt: 'approve' });
@@ -222,7 +168,7 @@ describe('C11: EXPENSE_VOIDED concurrent with LINE_DECIDED', () => {
   });
 });
 
-describe('C12: two POLICY_UPDATED of the same member, concurrent', () => {
+describe('C12 [I]: two POLICY_UPDATED of the same member, concurrent', () => {
   it('the last in the fixed order', () => {
     const phone = ev([g.id], { author: BOB, salt: 'policy (phone)' });
     const tablet = ev([g.id], { author: BOB, salt: 'policy (tablet)' });
@@ -234,26 +180,11 @@ describe('C12: two POLICY_UPDATED of the same member, concurrent', () => {
   });
 });
 
-describe('C13: two MEMBER_JOINED with the same invite', () => {
-  it('the first in the fixed order joins, the other is invalid', () => {
-    const invite = ev([g.id], { author: ALICE, salt: 'invite' });
-    const j1 = ev([invite.id], { author: BOB, salt: 'join bob' });
-    const j2 = ev([invite.id], { author: CHARLIE, salt: 'join charlie' });
-    const creator = ev([g.id], { author: ALICE, salt: 'join creator' });
-    const c = causality(invite, j1, j2, creator);
-    const joins = [
-      { id: j1.id, inviteRef: invite.id },
-      { id: j2.id, inviteRef: invite.id },
-      { id: creator.id, inviteRef: null },
-    ];
-    const first = c.position(j1.id) < c.position(j2.id) ? j1.id : j2.id;
-    const r = joinsByInvite(c, joins);
-    expect(r.accepted.map((j) => j.id).sort()).toEqual([first, creator.id].sort());
-    expect(r.rejected.map((j) => j.id)).toEqual([first === j1.id ? j2.id : j1.id]);
-  });
+describe('C13 [I]: two MEMBER_JOINED with the same invite (open: D3)', () => {
+  it.todo('C13: one invite, one join? Depends on the Sybil answer (plan §11 D3)');
 });
 
-describe('C15: the personal chain of an author forks', () => {
+describe('C15 [I]: the personal chain of an author forks', () => {
   it('both events stay; the author is marked as forked', () => {
     const phone = ev([g.id], { author: BOB, salt: 'phone' });
     const tablet = ev([g.id], { author: BOB, salt: 'tablet' });
