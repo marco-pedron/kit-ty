@@ -27,4 +27,9 @@ export {
   pairBlockRefusal,
   type Fold,
 } from './fold.js';
-export { expenseRefusal, validateRegistryEvent, type RegistryDeps } from './validate.js';
+export {
+  expenseRefusal,
+  unixSeconds,
+  validateRegistryEvent,
+  type RegistryDeps,
+} from './validate.js';

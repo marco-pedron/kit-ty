@@ -16,6 +16,7 @@
 - [x] A8 Speech to text on-device, solo la funzione (mar 20/10, branch `a/A8-speech-to-text`); il bottone resta "soon" finché C non collega rotta e UI
 - [x] **S1 Stack A, passo 1: formato degli eventi** (mer 21/10, branch `a/S1-nostr-envelope`; firme Schnorr in `b/S1-schnorr`, stream B). Dettagli sotto.
 - [x] **S2 Stack A, passo 2: regole del registro v2** (gio 22/10, branch `a/S2-registry-rules`). Dettagli sotto.
+- [x] **S3 Stack A, passo 3: chiave del registro per viaggio, `kitty-bind:v2`, app sul registro v2 dietro `KITTY_REGISTRY`** (gio 22/10, branch `a/S3-registry-v2-flag`). Dettagli sotto.
 
 ## Demo di riserva `demo-finale-v1` (non si modifica più)
 - Tag `demo-finale-v1` = commit `d963464` del ramo principale (21/10), pubblicato su origin.
@@ -66,11 +67,18 @@
   - `created_at` è l'orologio di chi scrive: vale per la scadenza degli inviti, per il silenzio-assenso e per il tetto giornaliero;
   - la validazione rifà lo stato degli antenati per ogni evento (O(n²)): va bene per un viaggio, si ottimizza se serve.
 
+## S3: chiave del registro e app sul registro v2 (Stack A, passo 3)
+- **Chiave per viaggio** (`packages/shared/src/registry-key.ts`): NIP-06 `m/44'/1237'/<i>'/0/0` sulla seed BIP-39 del nodo, un indice per viaggio, offline. Recupero dalla seed con limite di gap 5 (`recoverTrips`) e segreto del viaggio dal `TRIP_SECRET_SHARED` verso sé stessi; la ricerca sui relay arriva con il passo 4. Fattura di legame `kitty-bind:v2:<tripTag>:<pubkey>` (`bindInvoiceRefusal`, usata dalla validazione dell'ingresso). Fatture da 48 ore per default.
+- **Flag `KITTY_REGISTRY=v1|v2`** (predefinito `v1`, letto in `apps/agent/src/index.ts`). Con `v2`, doppia scrittura (`apps/agent/src/flows/registry-v2.ts`): il registro vecchio guida la demo, Dave compreso; ogni evento di un viaggiatore viene copiato nel v2, firmato con la sua chiave del viaggio. `expenseRefusal` prima di una spesa (anche in "Ho pagato": l'errore dice il motivo), `manual_only` e `invoiceRefusal` prima di ogni pagamento, blocco e sblocco con l'avviso sull'esclusione. Trasporto v2 in memoria nel processo degli agenti fino al passo 4 (`registry-transport.ts`).
+- **Come si prova:** `pnpm exec vitest run packages/shared/src/registry-key apps/agent/src/flows/registry-v2.test.ts`; la demo con v2: `pnpm demo:reset && KITTY_REGISTRY=v2 pnpm e2e:demo`.
+- **Per gli altri stream (PR separate, non mergiate):** stream B, lo script `e2e:demo:v2` e un loader della mnemonica in `wallet/secrets.ts` (oggi la legge `flows/real-setup.ts`); stream C, rotte e UI per bloccare e sbloccare dalla lista membri.
+- **Limiti:** registro v2 senza persistenza fino al passo 4; spareggi dei centesimi ricalcolati con le chiavi v2 (con la cena della demo coincidono); il registro vecchio resta finché il passo 4 non è stabile.
+
 ## Bloccato da
 - Niente per lo stream A.
 
 ## Prossimo passo
-- **Passo 3** (chiave del registro, NIP-06) e **passo 4** (trasporto Nostr): lì le app passano al registro v2, `expenseRefusal` entra nel flusso "Ho pagato" e il registro vecchio esce.
+- **Passo 4** (trasporto Nostr): i relay al posto del trasporto in memoria, poi in una PR separata via il registro vecchio.
 - **Per lo stream B:** PR #67 (vettori BIP-340 scaricati, licenza).
 - **Per il PM:** diff di SPEC §9 in `docs/proposte/spec-9-registro.md`; riga del registro decisioni §20 proposta in `docs/piano-migrazione-stack-a.md` §9.
 - **Documento del team:** aggiornato il 22/10 con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md` (D2, `CHECKPOINT`, `TRIP_SECRET_SHARED`, `MEMBER_UNBLOCKED`, uscita, inviti, blocco).

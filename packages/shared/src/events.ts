@@ -54,7 +54,7 @@ export const TripParamsSchema = z
     displayDecimals: z.number().int().min(0).max(18),
     silentAssentSeconds: z.number().int().positive(),
     /** At least 24 h, default 48 h (§0bis.3 of the plan). */
-    invoiceExpirySeconds: z.number().int().min(86_400),
+    invoiceExpirySeconds: z.number().int().min(86_400).default(172_800),
     /** Older rates warn the payer (step 5). */
     rateMaxAgeSeconds: z.number().int().positive(),
     /** Accepted rate sources (step 5); empty = unsigned rates only. */
@@ -66,6 +66,7 @@ export const TripParamsSchema = z
   });
 export type TripParams = z.output<typeof TripParamsSchema>;
 
+/** The default of TripParams.invoiceExpirySeconds: 48 h. */
 export const DEFAULT_INVOICE_EXPIRY_SECONDS = 172_800;
 
 export const PolicySchema = z.object({

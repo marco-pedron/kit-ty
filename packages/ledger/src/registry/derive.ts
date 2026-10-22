@@ -100,6 +100,8 @@ export interface RegistryTrip {
   /** Events that wait for a missing parent (not applied yet). */
   waiting: readonly string[];
   frontier: readonly string[];
+  /** Events in the fixed order (CHECKPOINT.count). */
+  count: number;
   stateHash: string;
   /** Every member has left [T]. */
   finished: boolean;
@@ -192,6 +194,7 @@ export function deriveRegistry(
     rejected: [...rejected].map(([id, reason]) => ({ id, reason })),
     waiting: fo.waiting.map((e) => e.id),
     frontier: fo.frontier,
+    count: fo.order.length,
     stateHash: fo.stateHash,
     finished: members.size > 0 && [...members.values()].every((m) => m.left),
     fold: f,

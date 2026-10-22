@@ -144,17 +144,21 @@ export class TestTrip {
     return this.deps.decodeInvoice(bolt11).paymentHash;
   }
 
-  join(who: Name, invite: Ev | null, opts: { parents?: readonly Ev[] } = {}): Ev {
+  join(
+    who: Name,
+    invite: Ev | null,
+    opts: { parents?: readonly Ev[]; bindDescription?: string; bindNode?: string } = {},
+  ): Ev {
     this.n += 1;
     const bindInvoice = `lnbcrt${this.n}bind${who}`;
     this.invoices.set(bindInvoice, {
       bolt11: bindInvoice,
-      payeePubkey: NODE[who],
+      payeePubkey: opts.bindNode ?? NODE[who],
       paymentHash: '00'.repeat(32),
       assetId: null,
       cents: null,
       amtMsat: null,
-      description: `kitty-bind:v2:${TRIP_TAG}:${PK[who]}`,
+      description: opts.bindDescription ?? `kitty-bind:v2:${TRIP_TAG}:${PK[who]}`,
       expiresAt: new Date((T0 + 86_400) * 1000).toISOString(),
     });
     return this.add(
