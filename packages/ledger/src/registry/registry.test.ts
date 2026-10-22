@@ -55,6 +55,24 @@ describe('trip without a coordinator', () => {
   });
 });
 
+describe('kitty-bind:v2: the join ties the node to the registry key of this trip', () => {
+  it('a bind invoice with another trip tag, another key or from another node is refused', () => {
+    const t = TestTrip.withMembers(['bob']);
+    const tag = t.join('charlie', t.invite('alice'), {
+      bindDescription: `kitty-bind:v2:${'f'.repeat(64)}:${PK.charlie}`,
+    });
+    const key = t.join('charlie', t.invite('alice'), {
+      bindDescription: `kitty-bind:v2:${'e'.repeat(64)}:${PK.bob}`,
+    });
+    const node = t.join('charlie', t.invite('alice'), { bindNode: `02${'dd'.repeat(32)}` });
+    const trip = derive(t);
+    expect(reasonOf(trip, tag)).toMatch(/does not commit to this trip and key/);
+    expect(reasonOf(trip, key)).toMatch(/does not commit to this trip and key/);
+    expect(reasonOf(trip, node)).toMatch(/another node/);
+    expect(trip.members.has(PK.charlie)).toBe(false);
+  });
+});
+
 describe('C13: one invite, one join', () => {
   function twoJoins() {
     const t = TestTrip.withMembers([]);

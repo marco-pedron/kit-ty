@@ -1,4 +1,10 @@
-import { registry, sha256Hex, type DecodedInvoice, type SignatureVerifier } from '@kitty/shared';
+import {
+  bindInvoiceRefusal,
+  registry,
+  sha256Hex,
+  type DecodedInvoice,
+  type SignatureVerifier,
+} from '@kitty/shared';
 import { paymentMatchesLine } from '../conflicts.js';
 import { hexToBytes } from '../hex.js';
 import { expenseFingerprint, expenseShares } from '../shares.js';
@@ -210,12 +216,14 @@ function checkJoin(
     ensure(e.createdAt <= invite.body.expiresAt, 'the invite has expired');
     // TODO(D3): Sybil on invites, decided together with the exclusion policy (plan §11).
   }
-  const inv = decode(deps, b.bindInvoice);
-  ensure(inv.payeePubkey === b.nodePubkey, 'bind invoice is from another node');
-  ensure(
-    inv.description === `kitty-bind:v2:${deps.tripTag}:${e.author}`,
-    'bind invoice does not commit to this trip and key',
-  );
+  // kitty-bind:v2 (step 3): the member's node signs its registry key for this trip. From here
+  // on nodePubkey is the node every invoice of this member must pay (invoiceRefusal).
+  const bind = bindInvoiceRefusal(decode(deps, b.bindInvoice), {
+    tripTag: deps.tripTag,
+    registryPubkey: e.author,
+    nodePubkey: b.nodePubkey,
+  });
+  ensure(bind === null, bind ?? '');
 }
 
 /**

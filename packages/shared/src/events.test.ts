@@ -81,6 +81,13 @@ describe('trip params', () => {
     expect(TripParamsSchema.parse(params).assetDecimals).toBe(2);
   });
 
+  it('invoices last 48 h unless the trip says otherwise', () => {
+    const rest: Partial<typeof params> = { ...params };
+    delete rest.invoiceExpirySeconds;
+    expect(TripParamsSchema.parse(rest).invoiceExpirySeconds).toBe(DEFAULT_INVOICE_EXPIRY_SECONDS);
+    expect(DEFAULT_INVOICE_EXPIRY_SECONDS).toBe(48 * 3600);
+  });
+
   it('refuses invoices shorter than 24 h', () => {
     expect(TripParamsSchema.safeParse({ ...params, invoiceExpirySeconds: 3600 }).success).toBe(
       false,
