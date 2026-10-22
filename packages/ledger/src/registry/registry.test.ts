@@ -1,0 +1,468 @@
+import fc from 'fast-check';
+import type { registry as shared } from '@kitty/shared';
+import { describe, expect, it } from 'vitest';
+import { PK, T0, TestTrip, shuffled, type Name } from '../test/registry.js';
+import { decideRegistryAutoPay, invoiceRefusal } from './autopay.js';
+import { deriveRegistry, type RegistryTrip } from './derive.js';
+import { lineKey } from './fold.js';
+import { expenseRefusal } from './validate.js';
+
+// Step 2: the registry v2 rules (docs/stack-a-decisioni.md, docs/proposte/regole-conflitto.md).
+
+type Ev = shared.RegistryEvent;
+const LATER = T0 + 3_600;
+
+function derive(t: TestTrip, now = LATER): RegistryTrip {
+  const trip = deriveRegistry(t.events, t.deps, now);
+  if (trip === null) throw new Error('no trip');
+  return trip;
+}
+const reasonOf = (trip: RegistryTrip, e: Ev) => trip.rejected.find((r) => r.id === e.id)?.reason;
+const lineOf = (trip: RegistryTrip, expense: Ev, debtor: Name) => {
+  const line = trip.lines.get(lineKey(expense.id, PK[debtor]));
+  if (line === undefined) throw new Error(`no line of ${debtor}`);
+  return line;
+};
+
+describe('trip without a coordinator', () => {
+  it('the creator joins without an invite, the others with one; nobody has special powers', () => {
+    const t = TestTrip.withMembers();
+    const trip = derive(t);
+    expect(trip.rejected).toEqual([]);
+    expect([...trip.members.values()].map((m) => m.displayName).sort()).toEqual([
+      'alice',
+      'bob',
+      'charlie',
+    ]);
+    expect(trip.members.get(PK.bob)?.invitedBy).toBe(PK.alice);
+  });
+
+  it('anyone else needs an invite, and an invite for a key is only for that key', () => {
+    const t = TestTrip.withMembers(['bob']);
+    const noInvite = t.join('charlie', null);
+    const forBob = t.invite('alice', { for: 'bob' });
+    const wrongKey = t.join('charlie', forBob);
+    const trip = derive(t);
+    expect(reasonOf(trip, noInvite)).toMatch(/without an invite/);
+    expect(reasonOf(trip, wrongKey)).toMatch(/another key/);
+    expect(trip.members.has(PK.charlie)).toBe(false);
+  });
+
+  it('an expense whose genesis is missing is not a trip', () => {
+    const t = TestTrip.withMembers();
+    expect(deriveRegistry(t.events.slice(1), t.deps, LATER)).toBeNull();
+  });
+});
+
+describe('C13: one invite, one join', () => {
+  function twoJoins() {
+    const t = TestTrip.withMembers([]);
+    const invite = t.invite('alice');
+    const bob = t.join('bob', invite, { parents: [invite] });
+    const charlie = t.join('charlie', invite, { parents: [invite] });
+    return { t, bob, charlie };
+  }
+
+  it('two concurrent joins with the same invite: the first in the fixed order joins', () => {
+    const { t, bob, charlie } = twoJoins();
+    const trip = derive(t);
+    const first =
+      trip.fold.c.position(bob.id) < trip.fold.c.position(charlie.id) ? 'bob' : 'charlie';
+    const second = first === 'bob' ? 'charlie' : 'bob';
+    expect(trip.members.has(PK[first])).toBe(true);
+    expect(trip.members.has(PK[second])).toBe(false);
+    // The loser's own events are not applied either.
+    t.add(second, 'POLICY_UPDATED', { policy: { autoPayLimit: 1n, dailyCap: 1n } });
+    expect(derive(t).members.has(PK[second])).toBe(false);
+  });
+
+  it('a join with an invite already used, once known, is invalid', () => {
+    const t = new TestTrip();
+    t.join('alice', null);
+    const invite = t.invite('alice');
+    t.join('bob', invite);
+    const reuse = t.join('charlie', invite);
+    expect(reasonOf(derive(t), reuse)).toMatch(/one invite, one join/);
+  });
+});
+
+describe('C14: an invite stays valid if the inviter leaving was not known', () => {
+  it('concurrent with the leave: valid; after the leave: invalid', () => {
+    const t = TestTrip.withMembers(['bob']);
+    const base = t.heads();
+    const left = t.add('bob', 'MEMBER_LEFT', {}, { parents: base });
+    const concurrent = t.invite('bob', { parents: base });
+    const after = t.invite('bob', { parents: [left, concurrent] });
+    const trip = derive(t);
+    expect(reasonOf(trip, concurrent)).toBeUndefined();
+    expect(reasonOf(trip, after)).toMatch(/active member/);
+    const charlie = t.join('charlie', concurrent);
+    expect(reasonOf(derive(t), charlie)).toBeUndefined();
+  });
+});
+
+describe('expenses, silent assent and table signatures', () => {
+  it('unseen → seen → due after silent assent → paid', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob', 'charlie']);
+    expect(lineOf(derive(t), e, 'bob').state).toBe('submitted');
+    t.add('bob', 'LINE_SEEN', { expenseRef: e.id }, { createdAt: T0 + 1_000 });
+    expect(lineOf(derive(t, T0 + 1_010), e, 'bob').state).toBe('awaiting_decision');
+    expect(lineOf(derive(t, T0 + 1_020), e, 'bob').state).toBe('due');
+    t.pay('bob', e);
+    const trip = derive(t);
+    expect(lineOf(trip, e, 'bob').state).toBe('paid');
+    expect(trip.rejected).toEqual([]);
+    expect(lineOf(trip, e, 'charlie').state).toBe('submitted');
+  });
+
+  it('a line signed at the table is due at once and counts as an explicit approval', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob', 'charlie'], { signed: ['bob'] });
+    const trip = derive(t);
+    expect(lineOf(trip, e, 'bob')).toMatchObject({ state: 'due', approvedExplicitly: true });
+    expect(lineOf(trip, e, 'charlie').state).toBe('submitted');
+    const seen = t.add('bob', 'LINE_SEEN', { expenseRef: e.id });
+    expect(reasonOf(derive(t), seen)).toMatch(/signed this line at the table/);
+  });
+
+  it('a table signature of a non-debtor, or a wrong one, invalidates the expense', () => {
+    const t = TestTrip.withMembers();
+    const notDebtor = t.expense('alice', ['bob'], { signed: ['charlie'] });
+    const body = t.expenseBody('alice', ['bob'], { signed: ['bob'] });
+    const forged = t.add('alice', 'EXPENSE_SUBMITTED', {
+      ...body,
+      tableSignatures: [{ signer: PK.bob, sig: 'ab'.repeat(64) }],
+    });
+    const trip = derive(t);
+    expect(reasonOf(trip, notDebtor)).toMatch(/not a debtor/);
+    expect(reasonOf(trip, forged)).toMatch(/invalid table signature/);
+  });
+
+  it('the ledger recomputes every share and checks the invoices (D2)', () => {
+    const t = TestTrip.withMembers();
+    const ok = t.expenseBody('alice', ['bob']);
+    const [line] = ok.proposal.lines;
+    const wrongShare = t.add('alice', 'EXPENSE_SUBMITTED', {
+      ...ok,
+      proposal: {
+        ...ok.proposal,
+        expenseId: 'wrong-share',
+        payerAmount: ok.proposal.payerAmount + 1n,
+        lines: [
+          { ...(line as shared.Proposal['lines'][number]), amount: (line?.amount ?? 0n) - 1n },
+        ],
+      },
+    });
+    const otherNode = t.add('alice', 'EXPENSE_SUBMITTED', {
+      ...ok,
+      proposal: { ...ok.proposal, expenseId: 'other-node' },
+      invoices: [
+        {
+          debtor: PK.bob,
+          bolt11: t.invoice('alice', line?.amount ?? 0n, { node: `02${'ee'.repeat(32)}` }),
+        },
+      ],
+    });
+    const short = t.add('alice', 'EXPENSE_SUBMITTED', {
+      ...ok,
+      proposal: { ...ok.proposal, expenseId: 'short' },
+      invoices: [
+        {
+          debtor: PK.bob,
+          bolt11: t.invoice('alice', line?.amount ?? 0n, { expiresAt: T0 + 3_600 }),
+        },
+      ],
+    });
+    const trip = derive(t);
+    expect(reasonOf(trip, wrongShare)).toMatch(/recomputed/);
+    expect(reasonOf(trip, otherNode)).toMatch(/another node/);
+    expect(reasonOf(trip, short)).toMatch(/lasts less than/);
+  });
+});
+
+describe('D6 + C8: a block forbids expenses between the two, in both directions', () => {
+  function blocked() {
+    const t = TestTrip.withMembers();
+    const before = t.expense('alice', ['bob']);
+    const block = t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    return { t, before, block };
+  }
+
+  it('alice paying with bob as debtor, or bob paying with alice: invalid once the block is known', () => {
+    const { t } = blocked();
+    const aliceCharges = t.expense('alice', ['bob', 'charlie']);
+    const bobCharges = t.expense('bob', ['alice']);
+    const trip = derive(t);
+    expect(reasonOf(trip, aliceCharges)).toMatch(/bob blocked alice/);
+    expect(reasonOf(trip, bobCharges)).toMatch(/bob blocked alice/);
+    // Invalid as a whole: charlie's line does not exist either.
+    expect(trip.lines.has(lineKey(aliceCharges.id, PK.charlie))).toBe(false);
+  });
+
+  it('a third payer with both as debtors stays valid', () => {
+    const { t } = blocked();
+    const charlie = t.expense('charlie', ['alice', 'bob']);
+    expect(reasonOf(derive(t), charlie)).toBeUndefined();
+  });
+
+  it('an expense concurrent with the block is valid (C8: the block was not known)', () => {
+    const t = TestTrip.withMembers();
+    const base = t.heads();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: base });
+    const concurrent = t.expense('alice', ['bob'], { parents: base });
+    expect(reasonOf(derive(t), concurrent)).toBeUndefined();
+  });
+
+  it('debts from before the block stay, to be paid by hand', () => {
+    const { t, before } = blocked();
+    t.add('bob', 'LINE_DECIDED', { expenseRef: before.id, decision: 'approve', amount: 300n });
+    const trip = derive(t);
+    const line = lineOf(trip, before, 'bob');
+    expect(line).toMatchObject({ state: 'manual_only', manualOnly: 'blocked' });
+    const policy = trip.members.get(PK.bob)?.policy ?? { autoPayLimit: 0n, dailyCap: 0n };
+    expect(decideRegistryAutoPay(policy, line, trip, LATER, null).reason).toMatch(/by hand/);
+    t.pay('bob', before);
+    expect(lineOf(derive(t), before, 'bob').state).toBe('paid');
+  });
+
+  it('the app refuses to build the expense and says why, with the same rule', () => {
+    const { t } = blocked();
+    const f = derive(t).fold;
+    expect(expenseRefusal(f, PK.alice, [PK.bob])).toMatch(/bob blocked alice/);
+    expect(expenseRefusal(f, PK.bob, [PK.alice])).toMatch(/bob blocked alice/);
+    expect(expenseRefusal(f, PK.charlie, [PK.alice, PK.bob])).toBeNull();
+  });
+});
+
+describe('C7: unblock', () => {
+  it('only who blocked can unblock', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const byCharlie = t.add('charlie', 'MEMBER_UNBLOCKED', { target: PK.alice });
+    expect(reasonOf(derive(t), byCharlie)).toMatch(/only who blocked/);
+  });
+
+  it('removes every known block of the author on that member; a new block blocks again', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('bob', 'MEMBER_UNBLOCKED', { target: PK.alice });
+    expect(derive(t).members.get(PK.alice)?.blockedBy).toEqual([]);
+    const allowed = t.expense('alice', ['bob']);
+    expect(reasonOf(derive(t), allowed)).toBeUndefined();
+    expect(derive(t).lines.has(lineKey(allowed.id, PK.bob))).toBe(true);
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    expect(derive(t).members.get(PK.alice)?.blockedBy).toEqual([PK.bob]);
+  });
+
+  it('block and unblock concurrent: the block wins', () => {
+    const t = TestTrip.withMembers();
+    const first = t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: [first] });
+    t.add('bob', 'MEMBER_UNBLOCKED', { target: PK.alice }, { parents: [first] });
+    expect(derive(t).members.get(PK.alice)?.blockedBy).toEqual([PK.bob]);
+  });
+});
+
+describe('exclusion: blocked by more than half of the others [T]', () => {
+  it('two of two others block alice: excluded; one of two: not', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    expect(derive(t).members.get(PK.alice)?.excluded).toBe(false);
+    t.add('charlie', 'MEMBER_BLOCKED', { target: PK.alice });
+    const trip = derive(t);
+    expect(trip.members.get(PK.alice)?.excluded).toBe(true);
+    const exp = t.expense('alice', ['charlie']);
+    expect(reasonOf(derive(t), exp)).toMatch(/excluded/);
+  });
+
+  it('a debt towards an excluded creditor is paid by hand', () => {
+    // charlie leaves while alice charges him (C9) and approves; then bob, the only other member
+    // still in the trip, blocks alice: she is excluded, and charlie has no block with her.
+    const t = TestTrip.withMembers();
+    const base = t.heads();
+    const left = t.add('charlie', 'MEMBER_LEFT', {}, { parents: base });
+    const e = t.expense('alice', ['charlie'], { parents: base });
+    t.add(
+      'charlie',
+      'LINE_DECIDED',
+      { expenseRef: e.id, decision: 'approve', amount: 300n },
+      { parents: [left, e] },
+    );
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const trip = derive(t);
+    expect(trip.members.get(PK.alice)?.excluded).toBe(true);
+    expect(lineOf(trip, e, 'charlie')).toMatchObject({
+      state: 'manual_only',
+      manualOnly: 'creditor_excluded',
+    });
+  });
+
+  it.todo('factions: two halves blocking each other exclude each other (plan §11 D10)');
+});
+
+describe('leaving', () => {
+  it('not with known debts, contested lines included', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob']);
+    const tooEarly = t.add('bob', 'MEMBER_LEFT', {});
+    t.add('bob', 'LINE_DECIDED', {
+      expenseRef: e.id,
+      decision: 'contest',
+      amount: 300n,
+      reason: 'not me',
+    });
+    const contested = t.add('bob', 'MEMBER_LEFT', {});
+    t.pay('bob', e);
+    const ok = t.add('bob', 'MEMBER_LEFT', {});
+    const trip = derive(t);
+    expect(reasonOf(trip, tooEarly)).toMatch(/known debts/);
+    expect(reasonOf(trip, contested)).toMatch(/known debts/);
+    expect(reasonOf(trip, ok)).toBeUndefined();
+    expect(trip.members.get(PK.bob)?.left).toBe(true);
+  });
+
+  it('C9: a debt concurrent with the leave stays, marked, with no silent assent', () => {
+    const t = TestTrip.withMembers();
+    const base = t.heads();
+    const left = t.add('bob', 'MEMBER_LEFT', {}, { parents: base });
+    const e = t.expense('alice', ['bob'], { parents: base });
+    t.add('bob', 'LINE_SEEN', { expenseRef: e.id }, { parents: [left, e], createdAt: T0 + 100 });
+    const trip = derive(t, T0 + 10_000);
+    expect(reasonOf(trip, e)).toBeUndefined();
+    expect(lineOf(trip, e, 'bob')).toMatchObject({
+      afterLeaving: true,
+      state: 'awaiting_explicit',
+    });
+    const policy = trip.members.get(PK.bob)?.policy ?? { autoPayLimit: 0n, dailyCap: 0n };
+    expect(
+      decideRegistryAutoPay(policy, lineOf(trip, e, 'bob'), trip, T0 + 10_000, null).reason,
+    ).toMatch(/after you left/);
+  });
+
+  it('C9: whoever left can still contest or approve those lines', () => {
+    const t = TestTrip.withMembers();
+    const base = t.heads();
+    const left = t.add('bob', 'MEMBER_LEFT', {}, { parents: base });
+    const e = t.expense('alice', ['bob'], { parents: base });
+    const contest = t.add(
+      'bob',
+      'LINE_DECIDED',
+      {
+        expenseRef: e.id,
+        decision: 'contest',
+        amount: 300n,
+        reason: 'I had already left',
+      },
+      { parents: [left, e] },
+    );
+    let trip = derive(t);
+    expect(reasonOf(trip, contest)).toBeUndefined();
+    expect(lineOf(trip, e, 'bob').state).toBe('contested');
+    t.add('bob', 'LINE_DECIDED', { expenseRef: e.id, decision: 'approve', amount: 300n });
+    trip = derive(t);
+    expect(lineOf(trip, e, 'bob').state).toBe('due');
+  });
+
+  it('an expense charging a member whose leave it knows is invalid', () => {
+    const t = TestTrip.withMembers();
+    t.add('bob', 'MEMBER_LEFT', {});
+    const e = t.expense('alice', ['bob']);
+    expect(reasonOf(derive(t), e)).toMatch(/has left/);
+  });
+});
+
+describe('CHECKPOINT: only an active member', () => {
+  const body = { frontier: ['0'.repeat(64)], count: 1, stateHash: '0'.repeat(64) };
+
+  it('active: valid; left or excluded: invalid', () => {
+    const t = TestTrip.withMembers();
+    const ok = t.add('alice', 'CHECKPOINT', body);
+    t.add('charlie', 'MEMBER_LEFT', {});
+    const left = t.add('charlie', 'CHECKPOINT', body);
+    // bob is the only other member still in the trip: his block excludes alice.
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice });
+    const excluded = t.add('alice', 'CHECKPOINT', body);
+    const trip = derive(t);
+    expect(reasonOf(trip, ok)).toBeUndefined();
+    expect(reasonOf(trip, left)).toMatch(/active member/);
+    expect(reasonOf(trip, excluded)).toMatch(/active member/);
+  });
+});
+
+describe('D2: the invoice is checked before any payment', () => {
+  it('payable only if issued for the line, to the creditor node, for the amount, not expired', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob'], { signed: ['bob'] });
+    const trip = derive(t);
+    const line = lineOf(trip, e, 'bob');
+    const inv = t.deps.decodeInvoice(line.invoice ?? '');
+    expect(invoiceRefusal(trip, line, inv, LATER)).toBeNull();
+    expect(
+      invoiceRefusal(trip, line, { ...inv, payeePubkey: `02${'ee'.repeat(32)}` }, LATER),
+    ).toMatch(/node/);
+    expect(invoiceRefusal(trip, line, { ...inv, cents: 1n }, LATER)).toMatch(/not for/);
+    const other = t.deps.decodeInvoice(t.invoice('alice', line.amount));
+    expect(invoiceRefusal(trip, line, other, LATER)).toMatch(/not one issued/);
+    expect(invoiceRefusal(trip, line, inv, T0 + 30 * 86_400)).toMatch(/expired/);
+    const policy = trip.members.get(PK.bob)?.policy ?? { autoPayLimit: 0n, dailyCap: 0n };
+    expect(decideRegistryAutoPay(policy, line, trip, LATER, inv)).toMatchObject({ pay: true });
+    expect(decideRegistryAutoPay(policy, line, trip, LATER, { ...inv, cents: 1n }).pay).toBe(false);
+  });
+
+  it('C5: a payment of the reissued invoice settles the line', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob'], { signed: ['bob'] });
+    const bolt11 = t.invoice('alice', 300n);
+    t.add('alice', 'INVOICE_REISSUED', { expenseRef: e.id, debtor: PK.bob, bolt11 });
+    t.pay('bob', e, { bolt11 });
+    const trip = derive(t);
+    expect(trip.rejected).toEqual([]);
+    expect(lineOf(trip, e, 'bob').state).toBe('paid');
+  });
+});
+
+describe('open questions: placeholders', () => {
+  it.todo('D3: Sybil on invites, decided together with the exclusion policy');
+  it.todo('weekend rate: age of a saved rate in market hours or a 72 h threshold (plan §11 D11)');
+});
+
+describe('properties', () => {
+  it('the arrival order changes nothing', () => {
+    const t = TestTrip.withMembers();
+    const base = t.heads();
+    const e1 = t.expense('alice', ['bob', 'charlie'], { signed: ['charlie'] });
+    t.add('bob', 'MEMBER_BLOCKED', { target: PK.alice }, { parents: base });
+    t.add('bob', 'LINE_SEEN', { expenseRef: e1.id }, { createdAt: T0 + 50 });
+    t.pay('charlie', e1);
+    t.expense('charlie', ['alice', 'bob']);
+    // Rejected (alice is not a debtor of her own expense): rejections are order-free too.
+    t.add(
+      'alice',
+      'LINE_DECIDED',
+      { expenseRef: e1.id, decision: 'approve', amount: 300n },
+      { parents: [e1] },
+    );
+    const snapshot = (trip: RegistryTrip) =>
+      JSON.stringify(
+        {
+          lines: [...trip.lines.values()].map((l) => [l.key, l.state, l.manualOnly]).sort(),
+          rejected: [...trip.rejected].map((r) => r.id).sort(),
+          members: [...trip.members.values()]
+            .map((m) => [m.pubkey, m.excluded, m.blockedBy])
+            .sort(),
+          stateHash: trip.stateHash,
+        },
+        (_k, v) => (typeof v === 'bigint' ? v.toString() : v),
+      );
+    const expected = snapshot(derive(t));
+    fc.assert(
+      fc.property(fc.integer(), (seed) => {
+        const trip = deriveRegistry(shuffled(t.events, seed), t.deps, LATER);
+        expect(trip && snapshot(trip)).toBe(expected);
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

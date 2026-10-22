@@ -16,7 +16,8 @@ import { ev, type TestEvent } from './test/dag.js';
 
 // One test per rule of plan §2.4. "Concurrent" = neither precedes the other.
 // All rules decided (docs/proposte/regole-conflitto.md, 22/10): [T] = from the team document,
-// [D] = decided by the team on 22/10. Rules that need the member states are it.todo for step 2.
+// [D] = decided by the team on 22/10. C7, C8, C9, C13, C14 need the member states: their tests
+// are in registry/registry.test.ts.
 const [ALICE, BOB, CHARLIE] = ['a', 'b', 'c'].map((x) => x.repeat(64)) as [string, string, string];
 const g = ev([], { salt: 'TRIP_CREATED' });
 const expense = ev([g.id], { author: ALICE, salt: 'EXPENSE_SUBMITTED' });
@@ -163,16 +164,6 @@ describe('C6 [D]: two INVOICE_REISSUED of the same line, concurrent', () => {
     expect(invoiceToPay(invoices, 500)?.eventId).toBe('1'.repeat(64));
     expect(invoiceToPay(invoices, 3000)).toBeNull();
   });
-});
-
-describe('step 2: rules that need the member states', () => {
-  it.todo('C7: an unblock is valid only if signed by who blocked');
-  it.todo('C7: an unblock removes every block of its author on that member among its ancestors');
-  it.todo('C7: concurrent block and unblock: the block wins');
-  it.todo('C8 (D6): a block among the ancestors invalidates an expense between payer and debtor');
-  it.todo('C9: a debt concurrent with leaving stays, marked "debt after leaving"; contestable');
-  it.todo('C13: one invite, one join (first in the fixed order)');
-  it.todo('C14: MEMBER_INVITED concurrent with the inviter MEMBER_LEFT is valid');
 });
 
 describe('C10 [D]: two EXPENSE_SUBMITTED with the same fingerprint', () => {
