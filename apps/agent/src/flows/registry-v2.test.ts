@@ -294,6 +294,11 @@ describe('the LSP manages its liquidity from its own channels', () => {
     remoteCents: 0n,
   });
 
+  it('a peer whose channels are not usable yet is left alone (a node just unlocked)', () => {
+    const notYet = { ...ch('a', 3000n), usable: false };
+    expect(lspLiquidityPlan([ch('a', 0n), notYet], 1000n, 3000n)).toEqual([]);
+  });
+
   it('below the threshold, up to L; peers opening or closing a channel are left alone', () => {
     expect(
       lspLiquidityPlan(
