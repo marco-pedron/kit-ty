@@ -580,6 +580,160 @@ describe('D2: the invoice is checked before any payment', () => {
   });
 });
 
+describe('contested lines decided by majority [23/10, provisional]', () => {
+  /** alice pays, bob owes and contests. */
+  function contested(others: Name[] = ['bob', 'charlie']) {
+    const t = TestTrip.withMembers(others);
+    const e = t.expense('alice', ['bob']);
+    const contest = t.decide('bob', e, 'contest');
+    return { t, e, contest };
+  }
+
+  it('three members: the one voter decides, "due" or "voided"', () => {
+    for (const outcome of ['due', 'voided'] as const) {
+      const { t, e } = contested();
+      const vote = t.vote('charlie', e, 'bob', outcome);
+      const trip = derive(t);
+      expect(reasonOf(trip, vote)).toBeUndefined();
+      expect(lineOf(trip, e, 'bob')).toMatchObject({
+        state: outcome,
+        group: { voters: [PK.charlie], outcome },
+      });
+    }
+  });
+
+  it('five members: three voters, two decide; until then the line stays contested', () => {
+    const { t, e } = contested(['bob', 'charlie', 'm4', 'm5']);
+    t.vote('charlie', e, 'bob', 'due');
+    let line = lineOf(derive(t), e, 'bob');
+    expect(line.state).toBe('contested');
+    expect(line.group).toMatchObject({ due: [PK.charlie], outcome: null });
+    expect(line.group?.voters).toHaveLength(3);
+    t.vote('m4', e, 'bob', 'voided');
+    expect(lineOf(derive(t), e, 'bob').state).toBe('contested');
+    t.vote('m5', e, 'bob', 'due');
+    line = lineOf(derive(t), e, 'bob');
+    expect(line).toMatchObject({ state: 'due', group: { outcome: 'due' } });
+  });
+
+  it('creditor and debtor do not vote; nobody votes on a line that is not contested', () => {
+    const { t, e } = contested();
+    const byCreditor = t.vote('alice', e, 'bob', 'due');
+    const byDebtor = t.vote('bob', e, 'bob', 'voided');
+    const t2 = TestTrip.withMembers();
+    const e2 = t2.expense('alice', ['bob']);
+    const notContested = t2.vote('charlie', e2, 'bob', 'voided');
+    expect(reasonOf(derive(t), byCreditor)).toMatch(/creditor and the debtor/);
+    expect(reasonOf(derive(t), byDebtor)).toMatch(/creditor and the debtor/);
+    expect(reasonOf(derive(t2), notContested)).toMatch(/not contested/);
+  });
+
+  it('counted on what the deciding vote knew: a concurrent vote does not count', () => {
+    const { t, e, contest } = contested(['bob', 'charlie', 'm4', 'm5']);
+    const a = t.vote('charlie', e, 'bob', 'voided', { parents: [contest] });
+    const b = t.vote('m4', e, 'bob', 'voided', { parents: [contest] });
+    // Two votes for "voided", but neither knows the other: no majority yet.
+    let line = lineOf(derive(t), e, 'bob');
+    expect(line.group).toMatchObject({ outcome: null });
+    expect(line.state).toBe('contested');
+    // m5 knows both and votes "due": its vote counts all three, 2 of 3 for "voided" decide.
+    t.vote('m5', e, 'bob', 'due', { parents: [a, b] });
+    line = lineOf(derive(t), e, 'bob');
+    expect(line).toMatchObject({ state: 'voided', group: { outcome: 'voided' } });
+  });
+
+  it('definitive: later votes and a new contest do not change it', () => {
+    const { t, e } = contested();
+    t.vote('charlie', e, 'bob', 'due');
+    const again = t.vote('charlie', e, 'bob', 'voided');
+    const recontest = t.decide('bob', e, 'contest');
+    const trip = derive(t);
+    expect(reasonOf(trip, again)).toMatch(/already decided/);
+    expect(reasonOf(trip, recontest)).toMatch(/cannot be contested again/);
+    expect(lineOf(trip, e, 'bob').state).toBe('due');
+  });
+
+  it('"due" by the group is not paid automatically; approving it is', () => {
+    const { t, e } = contested();
+    t.vote('charlie', e, 'bob', 'due');
+    const policy = { autoPayLimit: 2000n, dailyCap: 6000n };
+    let trip = derive(t);
+    expect(decideRegistryAutoPay(policy, lineOf(trip, e, 'bob'), trip, LATER, null)).toEqual({
+      pay: false,
+      reason: expect.stringMatching(/group decided you owe 300 to alice: approve it/),
+    });
+    t.decide('bob', e, 'approve');
+    trip = derive(t);
+    expect(lineOf(trip, e, 'bob')).toMatchObject({ state: 'due', approvedExplicitly: true });
+  });
+
+  it('C3: the debtor withdraws the contest before the majority; votes after it are refused', () => {
+    const { t, e } = contested();
+    t.decide('bob', e, 'approve');
+    const late = t.vote('charlie', e, 'bob', 'voided');
+    const trip = derive(t);
+    expect(reasonOf(trip, late)).toMatch(/not contested/);
+    expect(lineOf(trip, e, 'bob').state).toBe('due');
+  });
+
+  it('an approval concurrent with "voided" wins: the debtor accepted to pay', () => {
+    const { t, e, contest } = contested();
+    t.vote('charlie', e, 'bob', 'voided', { parents: [contest] });
+    t.decide('bob', e, 'approve', { parents: [contest] });
+    let trip = derive(t);
+    expect(lineOf(trip, e, 'bob')).toMatchObject({
+      state: 'due',
+      approvedExplicitly: true,
+      group: { outcome: 'voided' },
+    });
+    // An approval that knows the "voided" outcome is refused: nothing left to decide.
+    const t2 = contested();
+    t2.t.vote('charlie', t2.e, 'bob', 'voided');
+    const after = t2.t.decide('bob', t2.e, 'approve');
+    trip = derive(t2.t);
+    expect(reasonOf(trip, after)).toMatch(/group voided this line/);
+    expect(lineOf(trip, t2.e, 'bob').state).toBe('voided');
+  });
+
+  it('the payer can still void the expense, and a payment by hand still settles it', () => {
+    const a = contested(['bob', 'charlie', 'm4', 'm5']);
+    a.t.add('alice', 'EXPENSE_VOIDED', { expenseRef: a.e.id });
+    expect(lineOf(derive(a.t), a.e, 'bob').state).toBe('voided');
+    const b = contested(['bob', 'charlie', 'm4', 'm5']);
+    b.t.pay('bob', b.e);
+    expect(lineOf(derive(b.t), b.e, 'bob').state).toBe('paid');
+  });
+
+  it('a line voided by the group is not a debt: the debtor can leave', () => {
+    const { t, e } = contested();
+    t.vote('charlie', e, 'bob', 'voided');
+    const left = t.add('bob', 'MEMBER_LEFT', {});
+    expect(reasonOf(derive(t), left)).toBeUndefined();
+  });
+
+  it('the arrival order changes nothing', () => {
+    const { t, e, contest } = contested(['bob', 'charlie', 'm4', 'm5']);
+    const a = t.vote('charlie', e, 'bob', 'voided', { parents: [contest] });
+    t.vote('m4', e, 'bob', 'due', { parents: [contest] });
+    t.decide('bob', e, 'approve', { parents: [a] });
+    t.vote('m5', e, 'bob', 'voided');
+    const snap = (trip: RegistryTrip) =>
+      JSON.stringify([
+        lineOf(trip, e, 'bob').state,
+        lineOf(trip, e, 'bob').group,
+        trip.rejected.length,
+      ]);
+    const expected = snap(derive(t));
+    fc.assert(
+      fc.property(fc.integer(), (seed) => {
+        const trip = deriveRegistry(shuffled(t.events, seed), t.deps, LATER);
+        expect(trip && snap(trip)).toBe(expected);
+      }),
+      { numRuns: 100 },
+    );
+  });
+});
+
 describe('open questions: placeholders', () => {
   it.todo('D3: Sybil on invites, decided together with the exclusion policy');
   it.todo('weekend rate: age of a saved rate in market hours or a 72 h threshold (plan §11 D11)');

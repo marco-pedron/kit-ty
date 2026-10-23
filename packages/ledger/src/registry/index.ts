@@ -20,12 +20,16 @@ export {
   blockersOf,
   blocks,
   fold,
+  groupMajority,
   inTrip,
   isActive,
   isExcluded,
   lineKey,
   pairBlockRefusal,
+  voteRefusal,
+  voidedByGroup,
   type Fold,
+  type VoteOutcome,
 } from './fold.js';
 export {
   expenseRefusal,

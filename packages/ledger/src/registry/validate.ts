@@ -16,6 +16,8 @@ import {
   lineKey,
   openDebtsOf,
   pairBlockRefusal,
+  voidedByGroup,
+  voteRefusal,
   type Fold,
   type LineRecord,
 } from './fold.js';
@@ -126,6 +128,20 @@ function check(e: registry.RegistryEvent, f: Fold, deps: RegistryDeps): void {
       const line = lineOf(f, b.expenseRef, e.author);
       ensure(b.amount === line.amount, `amount ${b.amount} is not the line's ${line.amount}`);
       ensure(b.decision === 'approve' || b.reason !== undefined, 'a contest needs a reason');
+      // The outcome of a vote is definitive [23/10]: after a known "voided" nothing is left to
+      // decide; after a known "due" the debtor can still approve (and let the agent pay).
+      ensure(!voidedByGroup(f, line), 'the group voided this line');
+      ensure(
+        b.decision === 'approve' || line.groupOutcome?.outcome !== 'due',
+        'the group decided this line is due: it cannot be contested again',
+      );
+      return;
+    }
+    case 'LINE_VOTED': {
+      const b = content.body;
+      const line = lineOf(f, b.expenseRef, b.debtor);
+      const refusal = voteRefusal(f, line, e.author);
+      ensure(refusal === null, refusal ?? '');
       return;
     }
     case 'PAYMENT_MADE': {

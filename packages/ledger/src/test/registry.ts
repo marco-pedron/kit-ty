@@ -35,6 +35,9 @@ export const SECRETS = {
   alice: '01'.padStart(64, '0'),
   bob: '02'.padStart(64, '0'),
   charlie: '03'.padStart(64, '0'),
+  // Extra members of a larger group, for the majority rules (not travelers of the demo).
+  m4: '04'.padStart(64, '0'),
+  m5: '05'.padStart(64, '0'),
 } as const;
 export type Name = keyof typeof SECRETS;
 export const PK = Object.fromEntries(
@@ -44,6 +47,8 @@ export const NODE: Record<Name, string> = {
   alice: `02${'a1'.repeat(32)}`,
   bob: `02${'b2'.repeat(32)}`,
   charlie: `02${'c3'.repeat(32)}`,
+  m4: `02${'d4'.repeat(32)}`,
+  m5: `02${'e5'.repeat(32)}`,
 };
 export const POLICY = { autoPayLimit: 2000n, dailyCap: 6000n };
 
@@ -270,6 +275,44 @@ export class TestTrip {
     opts: Parameters<TestTrip['expenseBody']>[2] & { parents?: readonly Ev[] } = {},
   ): Ev {
     return this.add(payer, 'EXPENSE_SUBMITTED', this.expenseBody(payer, debtors, opts), opts);
+  }
+
+  /** LINE_VOTED of `voter` on the line of `debtor` (23/10). */
+  vote(
+    voter: Name,
+    expense: Ev,
+    debtor: Name,
+    outcome: 'due' | 'voided',
+    opts: { parents?: readonly Ev[] } = {},
+  ): Ev {
+    return this.add(
+      voter,
+      'LINE_VOTED',
+      { expenseRef: expense.id, debtor: PK[debtor], outcome },
+      opts,
+    );
+  }
+
+  /** LINE_DECIDED of `debtor` on its line (a contest needs a reason). */
+  decide(
+    debtor: Name,
+    expense: Ev,
+    decision: 'approve' | 'contest',
+    opts: { parents?: readonly Ev[] } = {},
+  ): Ev {
+    const body = (expense.content as registry.RegistryContentOf<'EXPENSE_SUBMITTED'>).body;
+    const amount = body.proposal.lines.find((l) => l.debtor === PK[debtor])?.amount ?? 0n;
+    return this.add(
+      debtor,
+      'LINE_DECIDED',
+      {
+        expenseRef: expense.id,
+        decision,
+        amount,
+        ...(decision === 'contest' && { reason: 'I was not there' }),
+      },
+      opts,
+    );
   }
 
   /** A valid Lightning payment of the line of `debtor` on `expense`, on its first invoice. */

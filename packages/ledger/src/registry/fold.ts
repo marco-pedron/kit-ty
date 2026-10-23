@@ -1,5 +1,11 @@
 import type { registry } from '@kitty/shared';
-import { effectivePolicy, settleLine, voidedLines, type PolicyLimits } from '../conflicts.js';
+import {
+  effectivePolicy,
+  lineDecision,
+  settleLine,
+  voidedLines,
+  type PolicyLimits,
+} from '../conflicts.js';
 import type { Causality } from '../order.js';
 
 // The time-free state of a set of registry events (step 2, docs/ADR-001-formato-eventi.md).
@@ -51,7 +57,13 @@ export interface LineRecord {
     preimage: string | null;
     txid: string | null;
   }[];
+  /** LINE_VOTED on this line, in the fixed order (23/10, provisional). */
+  votes: { id: string; voter: string; outcome: VoteOutcome }[];
+  /** The vote that brought one outcome over the majority: definitive (groupOutcome). */
+  groupOutcome: { id: string; outcome: VoteOutcome } | null;
 }
+
+export type VoteOutcome = 'due' | 'voided';
 
 export interface ExpenseRecord {
   id: string;
@@ -175,6 +187,8 @@ function apply(f: Fold, e: RegistryEvent): void {
           seen: null,
           decisions: [],
           payments: [],
+          votes: [],
+          groupOutcome: null,
         });
       }
       return;
@@ -209,6 +223,17 @@ function apply(f: Fold, e: RegistryEvent): void {
     case 'EXPENSE_VOIDED':
       f.expenses.get(content.body.expenseRef)?.voids.push(e.id);
       return;
+    case 'LINE_VOTED': {
+      const b = content.body;
+      const line = f.lines.get(lineKey(b.expenseRef, b.debtor));
+      if (line === undefined) return;
+      line.votes.push({ id: e.id, voter: e.author, outcome: b.outcome });
+      if (line.groupOutcome === null) {
+        const decided = groupMajority(f, line, e.id).decided;
+        if (decided !== null) line.groupOutcome = { id: e.id, outcome: decided };
+      }
+      return;
+    }
     case 'INVOICE_REISSUED': {
       const b = content.body;
       f.lines
@@ -410,8 +435,68 @@ export function voidedOf(f: Fold, expense: ExpenseRecord): Set<string> {
 /** Not paid and not voided: a debt of the debtor (contested lines count, plan §3.4). */
 export function isOpen(f: Fold, line: LineRecord): boolean {
   const expense = f.expenses.get(line.expenseRef);
-  if (line.payments.length > 0) return false;
+  if (line.payments.length > 0 || voidedByGroup(f, line)) return false;
   return expense === undefined || !voidedOf(f, expense).has(line.debtor);
+}
+
+// ---------- contested lines decided by majority (23/10, provisional) ----------
+//
+// The only place of the rule: the final model of disputes without an arbiter is still open
+// (D5). Who votes, on what, and when an outcome is reached is decided here; derive.ts and
+// validate.ts only read groupMajority, groupOutcome and voidedByGroup.
+
+/**
+ * The votes on a contested line in the past of `at` (the whole fold when null), counted as for
+ * the exclusion: the voters are the active members other than its creditor and debtor; a vote
+ * counts if it knew every decision of the debtor that `at` knows, i.e. it was cast on the
+ * contest in force there; one vote per voter (the first in the fixed order). An outcome is
+ * decided when more than half of the voters chose it.
+ * Limits: depends on D3 (Sybil); in a group of three there is one voter, who decides alone.
+ */
+export function groupMajority(
+  f: Fold,
+  line: LineRecord,
+  at: string | null,
+): { voters: string[]; due: string[]; voided: string[]; decided: VoteOutcome | null } {
+  const known = (x: string) => at === null || atOrBefore(f, x, at);
+  const voters = [...f.members.keys()]
+    .filter((m) => m !== line.payer && m !== line.debtor && activeAt(f, m, at))
+    .sort();
+  const decisions = line.decisions.filter((d) => known(d.id));
+  const counted = new Map<string, VoteOutcome>();
+  for (const v of line.votes) {
+    if (!known(v.id) || !voters.includes(v.voter) || counted.has(v.voter)) continue;
+    if (decisions.every((d) => atOrBefore(f, d.id, v.id))) counted.set(v.voter, v.outcome);
+  }
+  const by = (o: VoteOutcome) => [...counted].filter(([, x]) => x === o).map(([m]) => m);
+  const due = by('due');
+  const voided = by('voided');
+  const decided =
+    2 * due.length > voters.length ? 'due' : 2 * voided.length > voters.length ? 'voided' : null;
+  return { voters, due, voided, decided };
+}
+
+/**
+ * Voided by the group: the outcome is "voided", unless the debtor approved concurrently with
+ * the deciding vote. The debtor accepted to pay [23/10]: the approval wins.
+ */
+export function voidedByGroup(f: Fold, line: LineRecord): boolean {
+  const o = line.groupOutcome;
+  if (o === null || o.outcome !== 'voided') return false;
+  return !line.decisions.some((d) => d.decision === 'approve' && f.c.concurrent(d.id, o.id));
+}
+
+/** Why `voter` cannot vote on `line` now (validation and the app), or null. */
+export function voteRefusal(f: Fold, line: LineRecord, voter: string): string | null {
+  if (!isActive(f, voter)) return 'only an active member can vote';
+  if (voter === line.payer || voter === line.debtor)
+    return 'the creditor and the debtor of a line do not vote on it';
+  if (!isOpen(f, line)) return 'the line is already settled';
+  if (line.groupOutcome !== null) return 'the group already decided this line';
+  if (lineDecision(f.c, line.decisions) !== 'contest') return 'the line is not contested';
+  const { due, voided } = groupMajority(f, line, null);
+  if (due.includes(voter) || voided.includes(voter)) return 'you already voted on this contest';
+  return null;
 }
 
 export function openDebtsOf(f: Fold, pk: string): LineRecord[] {

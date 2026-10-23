@@ -87,6 +87,12 @@ export function decideRegistryAutoPay(
     case 'due':
       break;
   }
+  // [23/10] As a line upheld by dave in v1 (payUpheldDisputes off): the debtor contested it, so
+  // the agent never pays it on its own; approving it is the debtor's explicit consent.
+  if (line.group?.outcome === 'due' && !line.approvedExplicitly)
+    return no(
+      `The group decided you owe ${line.amount} to ${to}: approve it to let your agent pay, or pay it by hand.`,
+    );
   const refusal = invoiceRefusal(trip, line, invoice, now);
   if (refusal !== null) return no(`Not paid: ${refusal}.`);
   if (line.approvedExplicitly)
