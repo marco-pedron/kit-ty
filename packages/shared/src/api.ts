@@ -96,6 +96,16 @@ export const PutPolicyRequestSchema = z.object({ policy: PolicySchema });
 /** KITTY_REGISTRY=v2: what the app shows before and after a block (the exclusion it counts for). */
 export const BlockResponseSchema = z.object({ warning: z.string() });
 
+/** KITTY_REGISTRY=v2 (23/10, provisional): a vote on someone else's contested line. */
+export const VoteRequestSchema = z.object({ outcome: z.enum(['due', 'voided']) });
+
+/** KITTY_REGISTRY=v2 (23/10): leaving closes my channels with the LSP. */
+export const LeaveResponseSchema = z.object({
+  closingTxids: z.array(TxidSchema),
+  /** Set when I left with money still owed to me: from now on payable on-chain only. */
+  warning: z.string().nullable(),
+});
+
 export const ResolveDisputeRequestSchema = z.object({
   outcome: z.enum(['upheld', 'line_voided', 'expense_voided']),
   note: z.string(),
@@ -128,6 +138,7 @@ const coordinator = ['coordinator'] as const;
 const As = z.object({ as: ActorIdSchema });
 const AsExpense = As.extend({ id: ExpenseIdSchema });
 const AsMember = As.extend({ member: MemberIdSchema });
+const AsLine = AsExpense.extend({ member: MemberIdSchema });
 const DaveLine = z.object({ expenseId: ExpenseIdSchema, member: MemberIdSchema });
 
 export const routes = {
@@ -215,6 +226,23 @@ export const routes = {
     roles: traveler,
     params: AsMember,
     response: z.object({ ok: z.literal(true) }),
+  },
+  /** KITTY_REGISTRY=v2 only (23/10): votes on the contested line of `member`. */
+  voteLine: {
+    method: 'POST',
+    path: '/api/:as/expenses/:id/lines/:member/vote',
+    roles: traveler,
+    params: AsLine,
+    body: VoteRequestSchema,
+    response: LineViewSchema,
+  },
+  /** KITTY_REGISTRY=v2 only (23/10): MEMBER_LEFT, then my channels with the LSP are closed. */
+  leaveTrip: {
+    method: 'POST',
+    path: '/api/:as/leave',
+    roles: traveler,
+    params: As,
+    response: LeaveResponseSchema,
   },
   resolveDispute: {
     method: 'POST',

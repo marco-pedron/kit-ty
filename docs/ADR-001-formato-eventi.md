@@ -86,7 +86,11 @@ Il registro della demo ha un coordinatore con poteri (Dave) e un relay che asseg
 
 **D4** *(aggiornato il 22/10)*: le quote firmate al tavolo sono un consenso esplicito e non contano nel tetto giornaliero (`decideRegistryAutoPay`). **Uscita:** anche una riga contestata è un debito noto e blocca l'uscita (conseguenza dichiarata).
 
-Tutte le regole sono decise (`docs/proposte/regole-conflitto.md`, 22/10). Restano aperte D3 (Sybil sugli inviti), fazioni e cambio nel weekend.
+**Contestazioni a maggioranza, provvisoria** *(aggiornato il 23/10)*: su una riga contestata votano con `LINE_VOTED` i membri attivi tranne creditore e debitore, con esito "dovuta" o "annullata". Decide più della metà dei votanti, contati sugli eventi che il voto decisivo conosceva, come per l'esclusione; conta un voto per votante, dato sulla contestazione in vigore; l'esito è definitivo. Finché la maggioranza non c'è la riga resta contestata: il debitore può ritirare la contestazione (C3) e il creditore può annullare la spesa (C2). Un'approvazione del debitore concorrente con l'esito "annullata" vince. Una riga dovuta per voto non si paga in automatico finché il debitore non la approva. La regola sta in un solo punto (`groupMajority`, `voidedByGroup`, `voteRefusal` in `registry/fold.ts`), perché il modello definitivo (D5) è ancora aperto. **Limiti dichiarati:** dipende da D3 (Sybil); in un gruppo di tre c'è un solo votante.
+
+**Chiusura del viaggio** *(aggiornato il 23/10)*: non esiste un evento di chiusura e nessuno la decide. Chi esce (`MEMBER_LEFT`, senza debiti noti) chiude i propri canali con l'LSP dal proprio wallet; il viaggio è chiuso quando tutti sono usciti (`finished`).
+
+Tutte le regole sono decise (`docs/proposte/regole-conflitto.md`, 22/10 e 23/10). Restano aperte D3 (Sybil sugli inviti), il modello definitivo delle contestazioni (D5), fazioni e cambio nel weekend. *(aggiornato il 23/10)*
 
 ## 6. Tipi e corpi
 
@@ -105,11 +109,12 @@ Importi in **unità base dell'asset**, come stringhe decimali (`amount`). La pre
 | `PAYMENT_MADE` | debitore | `expenseRef`, `creditor`, `amount`, `rail: ln` (`paymentHash`, `preimage`) oppure `onchain` (`txid`) |
 | `EXPENSE_VOIDED` | pagatore | `expenseRef` |
 | `INVOICE_REISSUED` | pagatore | `expenseRef`, `debtor`, `bolt11` |
+| `LINE_VOTED` | membro (né creditore né debitore della riga) | `expenseRef`, `debtor`, `outcome: due \| voided` *(aggiornato il 23/10)* |
 | `MEMBER_BLOCKED` / `MEMBER_UNBLOCKED` | membro | `target` |
 | `MEMBER_LEFT` | membro | nessun campo |
 | `CHECKPOINT` | membro | `frontier`, `count`, `stateHash` |
 
-Spariscono `RATE_SET`, `MEMBER_ADMITTED`, `CHANNELS_READY`, `DISPUTE_RESOLVED`, `GUARANTEE_PAID`, `MEMBER_EXCLUDED`, `TRIP_CLOSED`. Il `nonce` non serve più: l'unicità è data dall'`id`; `tripId` (nel contenuto) e `T` legano l'evento al viaggio.
+Spariscono `RATE_SET`, `MEMBER_ADMITTED`, `CHANNELS_READY`, `DISPUTE_RESOLVED` (sostituito dal voto, *aggiornato il 23/10*), `GUARANTEE_PAID`, `MEMBER_EXCLUDED`, `TRIP_CLOSED`. Il `nonce` non serve più: l'unicità è data dall'`id`; `tripId` (nel contenuto) e `T` legano l'evento al viaggio.
 
 Codice: `packages/shared/src/events.ts`, esportato come namespace `registry` finché il passo 2 non toglie `legacy-events.ts`.
 
@@ -143,13 +148,17 @@ Codice: `packages/shared/src/events.ts`, esportato come namespace `registry` fin
 - **Scadenza delle fatture.** `invoiceExpirySeconds` vale **48 ore se il viaggio non dice altro**, e mai meno di 24. L'app crea le fatture con un margine di un'ora, perché la regola conta la durata dall'evento che le aggancia.
 - **Test.** I vettori ufficiali di NIP-06 vengono scaricati da un commit fissato di `nostr-protocol/nips` e verificati con uno sha256 fissato nel test, perché NIP-06 non ne pubblica uno; senza rete la suite salta con un avviso (`registry-key.vectors.test.ts`). Gli altri test confrontano più account con `nostr-tools` e verificano che indici diversi diano chiavi diverse, che si recuperino più viaggi dalla stessa seed e che una fattura di legame con tripTag, chiave o nodo sbagliati venga rifiutata.
 
-## 11. Le app sul registro v2: `KITTY_REGISTRY` *(aggiornato il 22/10)*
+## 11. Le app sul registro v2: `KITTY_REGISTRY` *(aggiornato il 23/10)*
 
-- **Flag.** `KITTY_REGISTRY=v1|v2`, predefinito `v1`. Con `v1` tutto resta com'era. Con `v2` ogni agente di un viaggiatore tiene anche il registro v2 (`apps/agent/src/flows/registry-v2.ts`), con la chiave del §10.
-- **Doppia scrittura** (scelta del 22/10). Il registro vecchio resta il trasporto e guida la storia della demo, compresi i passi di Dave (contestazione risolta, copertura ed esclusione), che nel v2 non esistono. Ogni evento che un viaggiatore scrive nel registro vecchio viene copiato nel v2, firmato con la sua chiave del viaggio: spese, `LINE_SEEN`, decisioni, pagamenti, annullamenti, fatture riemesse, policy, `CHECKPOINT`. Dave non è nel registro v2.
-- **Cosa decide il v2.** Prima di creare una spesa l'app chiama `expenseRefusal` (blocco per coppia, esclusione, uscita) e, se rifiuta, non crea nemmeno le fatture e spiega il motivo. Prima di ogni pagamento valgono `manual_only` e `invoiceRefusal`. Il blocco e lo sblocco esistono solo nel v2; bloccando, l'app riceve l'avviso che il blocco conta anche per l'esclusione (`blockWarning`).
+- **Flag.** `KITTY_REGISTRY=v1|v2`, predefinito `v1`. Con `v1` tutto resta com'era: registro vecchio, Dave coordinatore.
+- **Con `v2` decide il registro nuovo** *(aggiornato il 23/10, sostituisce la doppia scrittura del 22/10)*. Le app leggono e scrivono **solo** il registro v2: ogni viaggiatore è un `RegistryAgent` (`apps/agent/src/flows/registry-agent.ts`) con la chiave del §10. Il registro vecchio non riceve più niente; il relay Fastify conserva solo i backup cifrati dei nodi (SPEC §12).
+  - **Il ciclo dell'agente:** `LINE_SEEN`, silenzio-assenso e pagamento secondo `decideRegistryAutoPay` (con `invoiceRefusal` e `manual_only`), `PAYMENT_MADE`, riemissione delle fatture scadute, backup del nodo.
+  - **Le azioni del membro:** spesa (quote calcolate dal ledger con il cambio salvato sul telefono, rifiutata prima di creare le fatture se `expenseRefusal` dice no), approvazione e contestazione (l'approvazione dopo una contestazione la ritira, C3), voto sulle contestazioni degli altri, annullamento, policy, blocco e sblocco, uscita.
+  - **L'uscita:** `MEMBER_LEFT`, poi il wallet del membro chiude i propri due canali con l'LSP (`closeChannelsWith`). Se la chiusura fallisce, l'agente la ritenta.
+- **Dave è solo l'LSP** *(aggiornato il 23/10)*. Non partecipa al registro (`LspAgent`, `lsp-agent.ts`): il suo nodo instrada i pagamenti e la sua liquidità si gestisce guardando solo i suoi canali (`peerChannels` del wallet: sotto 10.00 ricevibili da un membro, riapre fino a L). Le rotte di Dave come coordinatore (`resolveDispute`, `cover-and-exclude`, `rates`) rispondono `NOT_ALLOWED`.
 - **Ingresso nella demo.** Il primo viaggiatore crea il viaggio v2; gli altri entrano con un suo invito. Il pacchetto dell'invito (segreto del viaggio e riferimento all'invito), che nella realtà viaggia in un QR, qui passa dentro il processo.
-- **Trasporto provvisorio.** Fino al passo 4 gli eventi v2 viaggiano in un trasporto in memoria dentro il processo degli agenti (`registry-transport.ts`, interfaccia `publish`/`query`), e ogni agente li verifica uno per uno. Non c'è persistenza: a un riavvio il registro v2 riparte da zero, quindi le spese create prima del riavvio non si pagano più in automatico con v2. Il passo 4 mette i relay Nostr dietro la stessa interfaccia.
+- **Trasporto provvisorio.** Fino al passo 4 gli eventi v2 viaggiano in un trasporto in memoria dentro il processo degli agenti (`registry-transport.ts`, interfaccia `publish`/`query`), e ogni agente li verifica uno per uno. Non c'è persistenza: a un riavvio degli agenti il registro v2 riparte da zero. Il passo 4 mette i relay Nostr dietro la stessa interfaccia e porta il confronto dei `CHECKPOINT`.
 - **Limiti.**
-  - La copia nel v2 ricalcola le quote con le chiavi v2. Se uno spareggio di centesimi cadesse diversamente rispetto alle chiavi v1, la spesa v2 verrebbe rifiutata e la riga non si pagherebbe in automatico. Con la cena della demo non succede.
+  - L'LSP non vede le righe, quindi riapre liquidità dopo un pagamento, non prima: un rimborso più grande di quanto il creditore può ricevere fallisce finché l'LSP non ha riaperto, e l'agente del debitore ritenta.
+  - Il cambio è l'ultimo salvato sul telefono (`infra/rates.json` in demo) fino al passo 5.
   - Il registro vecchio resta finché il passo 4 non è stabile; lo si toglie in una PR separata.

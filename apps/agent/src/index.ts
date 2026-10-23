@@ -7,6 +7,7 @@ import { fakeRegistrySeeds, realRegistrySeeds, realSetup, walletsOf } from './fl
 import {
   fakeTripChannels,
   registryVersion,
+  seedRegistry,
   seedTrip,
   startAgents,
   StaleRelayError,
@@ -46,20 +47,6 @@ function fakeSetup(): ReturnType<typeof realSetup> {
 }
 
 const { wallets, seed } = config.KITTY_FAKES ? fakeSetup() : realSetup(config);
-// KITTY_REGISTRY=v2: the registry v2 next to the legacy log (double write, step 3); v1 default.
-const registry = registryVersion(process.env.KITTY_REGISTRY);
-const rt = startAgents({
-  fakes: config.KITTY_FAKES,
-  relay,
-  wallets,
-  log: app.log,
-  ...(registry === 'v2' && {
-    registry: { seeds: config.KITTY_FAKES ? fakeRegistrySeeds() : realRegistrySeeds() },
-  }),
-});
-app.log.info(`registry ${registry}`);
-runtime = rt;
-app.addHook('onClose', async () => rt.stop());
 // The timers of the trip come from the config (45/120/10 s for the live demo, SPEC §15); the
 // rest of the parameters are the demo ones.
 const params = {
@@ -69,7 +56,34 @@ const params = {
   upheldDeadlineSeconds: config.UPHELD_DEADLINE_SECONDS,
   invoiceExpirySeconds: config.INVOICE_EXPIRY_SECONDS,
 };
-seedTrip(rt, seed, params, app.log).catch((err: unknown) => {
+// KITTY_REGISTRY=v2 (23/10): the travelers on the registry v2 only, dave's node as the LSP;
+// v1 (default): the legacy log with dave as coordinator, unchanged.
+const registry = registryVersion(process.env.KITTY_REGISTRY);
+const rt = startAgents({
+  fakes: config.KITTY_FAKES,
+  relay,
+  wallets,
+  log: app.log,
+  ...(registry === 'v2' && {
+    registry: {
+      seeds: config.KITTY_FAKES ? fakeRegistrySeeds() : realRegistrySeeds(),
+      rate: () => seed.rate,
+      params,
+    },
+  }),
+});
+app.log.info(`registry ${registry}`);
+runtime = rt;
+app.addHook('onClose', async () => rt.stop());
+const setUp =
+  registry === 'v2'
+    ? seedRegistry(
+        rt,
+        { tripId: 'vietnam-2026', name: 'Vietnam 2026', assetId: seed.assetId },
+        app.log,
+      )
+    : seedTrip(rt, seed, params, app.log);
+setUp.catch((err: unknown) => {
   app.log.error(err instanceof StaleRelayError ? err.message : `trip setup failed: ${String(err)}`);
   process.exit(1);
 });

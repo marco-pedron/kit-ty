@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import {
   ActorIdSchema,
   MEMBER_IDS,
@@ -8,7 +7,7 @@ import {
 } from '@kitty/shared';
 import { nodeUrls, type Config } from '../config.js';
 import { RlnWallet } from '../wallet/rln-wallet.js';
-import { DEFAULT_SECRETS_FILE, loadMemberWalletOptions } from '../wallet/secrets.js';
+import { loadMemberMnemonic, loadMemberWalletOptions } from '../wallet/secrets.js';
 import type { Wallet } from '../wallet/types.js';
 import type { seedTrip } from './runtime.js';
 import { loadRates, loadSeedState } from './seed-state.js';
@@ -35,19 +34,12 @@ export function realSetup(config: Config): { wallets: Record<ActorId, Wallet>; s
 /**
  * KITTY_REGISTRY=v2: each traveler's BIP-39 seed, from the node mnemonic written by the seed
  * (B2): the registry keys derive from the same seed as the node (NIP-06, plan §4.1), offline.
- * Each agent receives only its own. Reads the secrets file the wallets read (secrets.ts);
- * TODO(stream B): a loader of the mnemonic in wallet/secrets.ts, so the format stays in one place.
+ * Each agent receives only its own. The mnemonic is read by the wallet's own loader
+ * (loadMemberMnemonic), so the secrets format stays in one place.
  */
-export function realRegistrySeeds(file = process.env.KITTY_SECRETS_FILE ?? DEFAULT_SECRETS_FILE) {
-  const secrets = JSON.parse(readFileSync(file, 'utf8')) as {
-    nodes?: Record<string, { mnemonic?: unknown }>;
-  };
+export function realRegistrySeeds(file?: string): Record<MemberId, Uint8Array> {
   const seeds = {} as Record<MemberId, Uint8Array>;
-  for (const id of MEMBER_IDS) {
-    const mnemonic = secrets.nodes?.[id]?.mnemonic;
-    if (typeof mnemonic !== 'string') throw new Error(`no node mnemonic for ${id} in ${file}`);
-    seeds[id] = seedFromMnemonic(mnemonic);
-  }
+  for (const id of MEMBER_IDS) seeds[id] = seedFromMnemonic(loadMemberMnemonic(id, file));
   return seeds;
 }
 

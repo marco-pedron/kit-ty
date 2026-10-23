@@ -204,6 +204,15 @@ export const PaymentMadeBodySchema = z.discriminatedUnion('rail', [
 
 export const ExpenseVoidedBodySchema = RefExpense;
 
+/**
+ * A vote on a contested line by a member who is neither its creditor nor its debtor (23/10,
+ * provisional): the line is due, or voided. The majority rule is in the ledger, in one place.
+ */
+export const LineVotedBodySchema = RefExpense.extend({
+  debtor: MemberKeySchema,
+  outcome: z.enum(['due', 'voided']),
+});
+
 export const InvoiceReissuedBodySchema = RefExpense.extend({
   debtor: MemberKeySchema,
   bolt11: Bolt11Schema,
@@ -231,6 +240,7 @@ const bodies = {
   PAYMENT_MADE: PaymentMadeBodySchema,
   EXPENSE_VOIDED: ExpenseVoidedBodySchema,
   INVOICE_REISSUED: InvoiceReissuedBodySchema,
+  LINE_VOTED: LineVotedBodySchema,
   MEMBER_BLOCKED: MemberBlockedBodySchema,
   MEMBER_UNBLOCKED: MemberUnblockedBodySchema,
   MEMBER_LEFT: MemberLeftBodySchema,
@@ -256,6 +266,7 @@ export const EVENT_AUTHOR: Record<EventType, 'creator' | 'member' | 'joiner' | '
     PAYMENT_MADE: 'debtor',
     EXPENSE_VOIDED: 'payer',
     INVOICE_REISSUED: 'payer',
+    LINE_VOTED: 'member',
     MEMBER_BLOCKED: 'member',
     MEMBER_UNBLOCKED: 'member',
     MEMBER_LEFT: 'member',
@@ -284,6 +295,7 @@ export const RegistryContentSchema = z.discriminatedUnion('type', [
   contentOf('PAYMENT_MADE'),
   contentOf('EXPENSE_VOIDED'),
   contentOf('INVOICE_REISSUED'),
+  contentOf('LINE_VOTED'),
   contentOf('MEMBER_BLOCKED'),
   contentOf('MEMBER_UNBLOCKED'),
   contentOf('MEMBER_LEFT'),

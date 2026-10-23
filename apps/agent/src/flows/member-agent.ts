@@ -56,11 +56,6 @@ export interface MemberAgentOptions {
    * has been quiet this long after a change. Unset: no automatic backups (unit tests).
    */
   backupQuietMs?: number;
-  /**
-   * KITTY_REGISTRY=v2: this member's registry v2, written next to the legacy log (double write)
-   * and consulted before expenses and payments. Unset: v1, everything as before.
-   */
-  registry?: RegistryV2;
 }
 
 /** Event types that change a node's state (channels, invoices, payments), SPEC §12. */
@@ -74,6 +69,8 @@ const NODE_EVENTS = new Set([
 ]);
 
 const OPEN = (l: LineRecord) => !FINAL.includes(l.state);
+const v2Only = (memberId: string) =>
+  new FlowError('NOT_ALLOWED', `blocking ${memberId} needs the registry v2 (KITTY_REGISTRY=v2)`);
 const MAX_KEPT = 50;
 
 export class MemberAgent {
@@ -107,7 +104,12 @@ export class MemberAgent {
   /** When the node last changed and was not backed up since; null when the backup is current. */
   private dirtySince: number | null;
   private backingUp: Promise<void> | null = null;
-  readonly registry: RegistryV2 | null;
+  /**
+   * Always null: this is the v1 agent. Since 23/10 a traveler with KITTY_REGISTRY=v2 is a
+   * RegistryAgent and never touches the legacy log (no double write). Kept for the routes of
+   * stream C until they read the v2 runtime.
+   */
+  readonly registry: RegistryV2 | null = null;
 
   constructor(opts: MemberAgentOptions) {
     this.actor = opts.actor;
@@ -119,7 +121,6 @@ export class MemberAgent {
     this.checkpointEvery = opts.checkpointEvery ?? 10;
     this.log = new LocalLog(opts.wallet, opts.verifier);
     this.backupQuietMs = opts.backupQuietMs ?? null;
-    this.registry = opts.registry ?? null;
     // A first backup after start: the relay may hold none for this node yet.
     this.dirtySince = this.now().getTime();
   }
@@ -152,12 +153,7 @@ export class MemberAgent {
     if (this.proofs.has(lineKey(line.expenseEventHash, line.debtorPubkey)))
       return { pay: false, reason: `Paid ${formatCents(line.cents)}: publishing the proof.` };
     const invoice = this.log.invoices.get(line.bolt11) ?? null;
-    const decision = decideAutoPay(this.policy(trip), line, trip, this.now(), invoice);
-    // v2: the registry rules come on top (D2 invoice check, lines payable by hand only).
-    const refusal = decision.pay
-      ? (this.registry?.paymentRefusal(trip, line, invoice) ?? null)
-      : null;
-    return refusal === null ? decision : { pay: false, reason: `Not paid: ${refusal}.` };
+    return decideAutoPay(this.policy(trip), line, trip, this.now(), invoice);
   }
 
   /** The decisions of this agent, newest first (the AGENT rows of Attività). */
@@ -207,10 +203,6 @@ export class MemberAgent {
     const trip = this.trip();
     if (trip === null) return;
     const author = await this.authorPubkey();
-    if (this.registry !== null) {
-      await this.registry.sync();
-      await this.registry.mirror(this.log.events, trip, author);
-    }
     if (trip.members.has(author)) {
       await this.markSeen(trip, author);
       await this.publishProofs(trip);
@@ -447,15 +439,6 @@ export class MemberAgent {
     await this.sync();
     const { trip, me } = this.requireMember();
     const plan = planExpense(trip, me, receipt, assignments);
-    if (this.registry !== null) {
-      // v2 (D6/C8, exclusion): the same rule the registry validates, before anything is made.
-      await this.registryReady();
-      const refusal = this.registry.expenseRefusal(
-        me.nodePubkey,
-        plan.debtors.map((d) => d.member.nodePubkey),
-      );
-      if (refusal !== null) throw new FlowError('NOT_ALLOWED', `Not sent: ${refusal}`);
-    }
     const expenseId = `x${[...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
     const op = this.startOp(
       'submitting_expense',
@@ -489,8 +472,6 @@ export class MemberAgent {
         fingerprint: expenseFingerprint(receipt, receiptImageSha256),
       });
       this.endOp(op, 'done');
-      // v2: mirrored at once, so the debtors' agents find it before their silent assent
-      await this.registry?.mirror(this.log.events, this.requireTrip(), me.pubkey);
       return stored;
     } catch (err) {
       this.endOp(op, 'failed', apiErrorOf(err));
@@ -552,62 +533,22 @@ export class MemberAgent {
     return me;
   }
 
-  /**
-   * v2 only: block a member of the trip (D6, a pair rule). Returns the warning the app shows:
-   * the block also counts towards excluding them.
-   */
-  async blockMember(memberId: string): Promise<{ warning: string }> {
-    return (await this.registryAndNode(memberId)).block();
+  /** Blocks exist only in the registry v2: with v1 there is nothing to block (routes of C). */
+  blockMember(memberId: string): Promise<{ warning: string }> {
+    return Promise.reject(v2Only(memberId));
   }
 
-  /** v2 only: remove every block of mine on that member that I know (C7). */
-  async unblockMember(memberId: string): Promise<void> {
-    await (await this.registryAndNode(memberId)).unblock();
+  unblockMember(memberId: string): Promise<void> {
+    return Promise.reject(v2Only(memberId));
   }
 
-  /** v2 only: what blocking that member would mean, before blocking. */
-  async blockWarning(memberId: string): Promise<string> {
-    return (await this.registryAndNode(memberId)).warning();
+  blockWarning(memberId: string): Promise<string> {
+    return Promise.reject(v2Only(memberId));
   }
 
-  private async registryAndNode(memberId: string) {
-    await this.sync();
-    const { trip } = this.requireMember();
-    const registry = this.registry;
-    if (registry === null)
-      throw new FlowError('NOT_ALLOWED', 'blocking needs the registry v2 (KITTY_REGISTRY=v2)');
-    await this.registryReady();
-    const target = [...trip.members.values()].find((m) => m.memberId === memberId);
-    if (target === undefined) throw new FlowError('NOT_FOUND', `${memberId} is not in the trip`);
-    const wrap = async <R>(f: () => Promise<R> | R): Promise<R> => {
-      try {
-        return await f();
-      } catch (err) {
-        throw new FlowError('NOT_ALLOWED', err instanceof Error ? err.message : String(err));
-      }
-    };
-    return {
-      block: () => wrap(() => registry.block(target.nodePubkey)),
-      unblock: () => wrap(() => registry.unblock(target.nodePubkey)),
-      warning: () => wrap(() => registry.blockWarning(target.nodePubkey)),
-    };
-  }
-
-  /** The registry v2 is set up right after the legacy trip (runtime.ts): wait for it briefly. */
-  private async registryReady(timeoutMs = 30_000): Promise<void> {
-    const end = Date.now() + timeoutMs;
-    for (;;) {
-      await this.registry?.sync();
-      if (this.registry?.isMember() !== false) return;
-      if (Date.now() > end)
-        throw new FlowError('AGENT_NOT_READY', 'the registry v2 of this trip is not ready yet');
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  }
-
-  /** Invoice expiry: the registry's (48 h + margin) with v2, the legacy trip's otherwise. */
+  /** Invoice expiry of the legacy trip. */
   private invoiceExpirySec(trip: TripState): number {
-    return this.registry?.invoiceExpirySec() ?? trip.params.invoiceExpirySeconds;
+    return trip.params.invoiceExpirySeconds;
   }
 
   /** PUT /policy. */

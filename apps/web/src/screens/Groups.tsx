@@ -121,14 +121,14 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
                     name={m.displayName}
                     me={m.memberId === as}
                     size={32}
-                    {...(st === 'excluded' && { variant: 'out' as const })}
+                    {...((st === 'excluded' || st === 'left') && { variant: 'out' as const })}
                   />
                 }
                 title={`${cap(m.displayName)}${m.memberId === as ? ' (you)' : ''}`}
                 {...(m.registry?.blockedByMe === true && { subtitle: 'Blocked by you' })}
                 value={
                   <span className="flex items-center gap-2">
-                    {m.memberId !== as && m.registry != null && (
+                    {m.memberId !== as && m.registry != null && st !== 'left' && (
                       <BlockButton trip={trip} member={m} />
                     )}
                     <Badge kind={st}>{st}</Badge>

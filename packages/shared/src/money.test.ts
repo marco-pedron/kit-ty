@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { formatCents, minorString, moneyString, parseCents, positiveMinorString } from './money.js';
+import {
+  formatCents,
+  formatUnits,
+  minorString,
+  moneyString,
+  parseCents,
+  positiveMinorString,
+} from './money.js';
 
 describe('money codec', () => {
   it('decodes decimal strings to bigint and back', () => {
@@ -42,5 +49,15 @@ describe('formatCents / parseCents', () => {
 
   it.each(['', '-1', '1.234', '1,50', 'abc', '.5'])('rejects %j', (text) => {
     expect(parseCents(text)).toBeNull();
+  });
+});
+
+describe('formatUnits', () => {
+  it('the precision of the asset, shown with the trip display decimals', () => {
+    expect(formatUnits(309n, 2)).toBe('3.09');
+    expect(formatUnits(3_090_000n, 6, 2)).toBe('3.09');
+    expect(formatUnits(3_096_123n, 6)).toBe('3.096123');
+    expect(formatUnits(-7n, 2)).toBe('-0.07');
+    expect(formatUnits(1500n, 2, 0)).toBe('15');
   });
 });

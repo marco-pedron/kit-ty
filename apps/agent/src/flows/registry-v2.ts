@@ -15,19 +15,16 @@ import {
   type DecodedInvoice,
   type Policy,
   type RegistryKey,
-  type StoredEvent,
 } from '@kitty/shared';
-import { registry as v2, type LineRecord, type TripState } from '@kitty/ledger';
+import { registry as v2 } from '@kitty/ledger';
 import { WalletError } from '../wallet/errors.js';
 import type { Wallet } from '../wallet/types.js';
 import type { RegistryTransport } from './registry-transport.js';
 
-// One member's registry v2 (KITTY_REGISTRY=v2, step 3), next to the legacy log that still runs
-// the demo: the "double write" agreed on 22/10. Every event this member writes in the legacy
-// log is mirrored here, signed with the member's NIP-06 key for this trip; the legacy log keeps
-// the coordinator's actions (dispute, guarantee, exclusion), which v2 does not have. The v2
-// rules gate the app: expenseRefusal before an expense, invoiceRefusal and manual_only before
-// every payment, and the blocks, which exist only here.
+// One member's registry v2 (KITTY_REGISTRY=v2): its NIP-06 key for the trip, the events it
+// holds (each verified and decoded with its own node), and publishing. Since 23/10 there is no
+// double write: with v2 the app reads and writes only this registry (RegistryAgent), and the
+// legacy log is not used at all. No coordinator: the LSP node only routes payments.
 
 /** What the inviter hands over with the QR (simulated in-process in the demo). */
 export interface InvitePackage {
@@ -52,10 +49,7 @@ const randomHex = (bytes: number) =>
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-/** RATE_SET.asOf is a day ("2026-10-17"); the registry wants an instant. */
-const isoDateTime = (d: string) => (/^\d{4}-\d{2}-\d{2}$/u.test(d) ? `${d}T00:00:00.000Z` : d);
-
-const toV2Policy = (p: Policy) => ({
+export const toV2Policy = (p: Policy) => ({
   autoPayLimit: p.autoPayLimitCents,
   dailyCap: p.dailyCapCents,
 });
@@ -65,10 +59,9 @@ export class RegistryV2 {
   private trip: Trip | null = null;
   private readonly events = new Map<string, fmt.RegistryEvent>();
   private readonly invoices = new Map<string, DecodedInvoice>();
-  /** Legacy events of this member already mirrored (or that cannot be), by hash. */
-  private readonly mirrored = new Set<string>();
-  /** Why a mirrored event was rejected by the v2 rules, newest first (diagnostics). */
+  /** Why an event of this member was rejected by the rules, newest first (diagnostics). */
   readonly problems: string[] = [];
+  private publishing: Promise<unknown> = Promise.resolve();
   private nodePubkey: string | null = null;
 
   constructor(
@@ -98,6 +91,11 @@ export class RegistryV2 {
       this.deps(),
       v2.unixSeconds(now.toISOString()),
     );
+  }
+
+  /** Every event this phone holds and verified (decoded, signature checked). */
+  allEvents(): fmt.RegistryEvent[] {
+    return [...this.events.values()];
   }
 
   /** Joined, in the trip, as derived from the registry. */
@@ -269,7 +267,21 @@ export class RegistryV2 {
 
   /** Signs with this trip's key, citing every head known, and publishes. Returns the event and, if
    * the rules reject it, why. */
-  async publish<T extends fmt.EventType>(
+  publish<T extends fmt.EventType>(
+    type: T,
+    body: fmt.EventBody<T>,
+  ): Promise<fmt.RegistryEvent & { rejected: string | null }> {
+    // One at a time: two events of this member citing the same heads would fork its own
+    // chain (C15). The loop and the routes publish for the same member.
+    const run = this.publishing.then(
+      () => this.publishNow(type, body),
+      () => this.publishNow(type, body),
+    );
+    this.publishing = run.catch(() => undefined);
+    return run;
+  }
+
+  private async publishNow<T extends fmt.EventType>(
     type: T,
     body: fmt.EventBody<T>,
   ): Promise<fmt.RegistryEvent & { rejected: string | null }> {
@@ -304,78 +316,24 @@ export class RegistryV2 {
     return this.trip;
   }
 
-  // ---------- the rules that gate the app ----------
+  /** This node's decoding of an invoice of the trip; undefined if never decoded. */
+  invoice(bolt11: string): DecodedInvoice | undefined {
+    return this.invoices.get(bolt11);
+  }
+
+  /** Decodes (with this member's node) an invoice the app is about to attach or pay. */
+  async decode(bolt11: string): Promise<DecodedInvoice> {
+    const known = this.invoices.get(bolt11);
+    if (known !== undefined) return known;
+    const inv = await this.o.wallet.decodeInvoice(bolt11);
+    this.invoices.set(bolt11, inv);
+    return inv;
+  }
 
   /** How long the invoices of a new expense must last (TripParams, 48 h by default) plus a margin. */
   invoiceExpirySec(): number | null {
     const params = this.view()?.params;
     return params === undefined ? null : params.invoiceExpirySeconds + EXPIRY_MARGIN_SECONDS;
-  }
-
-  /** expenseRefusal on the registry, with the legacy members mapped through their nodes. */
-  expenseRefusal(payerNode: string, debtorNodes: readonly string[]): string | null {
-    const view = this.view();
-    if (view === null || !this.isMember(view))
-      return 'the registry v2 of this trip is not ready yet';
-    const debtors: string[] = [];
-    for (const node of debtorNodes) {
-      const m = this.memberByNode(view, node);
-      if (m === undefined) return 'a debtor is not in the registry v2';
-      debtors.push(m.pubkey);
-    }
-    const payer = this.memberByNode(view, payerNode);
-    if (payer === undefined) return 'you are not in the registry v2';
-    return v2.expenseRefusal(view.fold, payer.pubkey, debtors);
-  }
-
-  /** The registry line of a legacy line, if the expense is already mirrored. */
-  lineOf(view: v2.RegistryTrip, legacy: TripState, line: LineRecord): v2.RegistryLine | null {
-    const payerNode = legacy.members.get(line.payerPubkey)?.nodePubkey;
-    const debtorNode = legacy.members.get(line.debtorPubkey)?.nodePubkey;
-    const payer = payerNode && this.memberByNode(view, payerNode);
-    const debtor = debtorNode && this.memberByNode(view, debtorNode);
-    if (!payer || !debtor) return null;
-    const ref = [...view.expenses].find(
-      ([, x]) => x.payer === payer.pubkey && x.body.proposal.expenseId === line.expenseId,
-    )?.[0];
-    return ref === undefined ? null : (view.lines.get(v2.lineKey(ref, debtor.pubkey)) ?? null);
-  }
-
-  /**
-   * Before every payment (D2): null if the registry lets this member pay the line now, else
-   * why not. The line must be in the registry, not manual_only, and its invoice must pass
-   * invoiceRefusal (issued for the line, to the node the creditor bound, amount, asset, expiry).
-   */
-  paymentRefusal(
-    legacy: TripState,
-    line: LineRecord,
-    invoice: DecodedInvoice | null,
-  ): string | null {
-    const view = this.view();
-    if (view === null) return 'the registry v2 of this trip is not ready yet';
-    const l = this.lineOf(view, legacy, line);
-    if (l === null) return 'the expense is not in the registry v2 yet';
-    if (l.state === 'manual_only')
-      return l.manualOnly === 'blocked'
-        ? 'you and the payer are blocked: pay it by hand'
-        : 'an exclusion makes this line payable by hand only';
-    return v2.invoiceRefusal(view, l, invoice, v2.unixSeconds(this.o.now().toISOString()));
-  }
-
-  /** MEMBER_BLOCKED on the member with this node; returns the warning the app shows (exclusion). */
-  async block(targetNode: string): Promise<{ warning: string }> {
-    const { me, target, view } = this.pair(targetNode);
-    const warning = v2.blockWarning(view.fold, me, target);
-    const e = await this.publish('MEMBER_BLOCKED', { target });
-    if (e.rejected !== null) throw new Error(e.rejected);
-    return { warning };
-  }
-
-  /** MEMBER_UNBLOCKED (C7: only who blocked; removes every block it knows). */
-  async unblock(targetNode: string): Promise<void> {
-    const { target } = this.pair(targetNode);
-    const e = await this.publish('MEMBER_UNBLOCKED', { target });
-    if (e.rejected !== null) throw new Error(e.rejected);
   }
 
   /**
@@ -392,152 +350,5 @@ export class RegistryV2 {
         { blockedByMe: m.blockedBy.includes(me), excluded: m.excluded },
       ]),
     );
-  }
-
-  /** The warning shown before blocking, without blocking. */
-  blockWarning(targetNode: string): string {
-    const { me, target, view } = this.pair(targetNode);
-    return v2.blockWarning(view.fold, me, target);
-  }
-
-  private pair(targetNode: string): { me: string; target: string; view: v2.RegistryTrip } {
-    const view = this.view();
-    const me = this.key?.pubkey;
-    if (view === null || me === undefined || !this.isMember(view))
-      throw new Error('the registry v2 of this trip is not ready yet');
-    const target = this.memberByNode(view, targetNode);
-    if (target === undefined) throw new Error('that member is not in the registry v2');
-    return { me, target: target.pubkey, view };
-  }
-
-  // ---------- the double write ----------
-
-  /**
-   * Mirrors this member's own legacy events, in their order, into the registry. Stops at the
-   * first one whose expense is not in the registry yet (next tick); a mirror the rules reject is
-   * recorded in `problems` and not retried. The coordinator's events have no v2 equivalent.
-   */
-  async mirror(events: readonly StoredEvent[], legacy: TripState, me: string): Promise<void> {
-    if (!this.isMember()) return;
-    for (const e of events) {
-      if (e.signed.inner.author !== me || this.mirrored.has(e.hash)) continue;
-      try {
-        if (!(await this.mirrorOne(e, legacy))) return;
-      } catch (err) {
-        if (err instanceof WalletError && err.code === 'NODE_UNREACHABLE') throw err;
-        this.problems.unshift(`${e.signed.inner.type} not mirrored: ${String(err)}`);
-      }
-      this.mirrored.add(e.hash);
-    }
-  }
-
-  private async mirrorOne(e: StoredEvent, legacy: TripState): Promise<boolean> {
-    const inner = e.signed.inner;
-    const view = this.view();
-    if (view === null) return false;
-    const node = (pk: string) => legacy.members.get(pk)?.nodePubkey ?? '';
-    const v2Key = (pk: string) => this.memberByNode(view, node(pk))?.pubkey ?? null;
-    /** The registry expense of a legacy expense event, if already there. */
-    const expenseRef = (hash: string): string | null => {
-      const x = legacy.expenses.get(hash);
-      const payer = x && v2Key(x.payerPubkey);
-      if (!x || !payer) return null;
-      return (
-        [...view.expenses].find(
-          ([, y]) => y.payer === payer && y.body.proposal.expenseId === x.body.expenseId,
-        )?.[0] ?? null
-      );
-    };
-    switch (inner.type) {
-      case 'EXPENSE_SUBMITTED': {
-        const b = inner.body;
-        const debtors = b.lines.map((l) => v2Key(l.debtorPubkey));
-        const payer = v2Key(inner.author);
-        if (payer === null || debtors.some((d) => d === null)) return false;
-        await this.publish('EXPENSE_SUBMITTED', {
-          proposal: {
-            tripId: this.requireTrip().tripId,
-            expenseId: b.expenseId,
-            payer,
-            receipt: b.receipt,
-            rate: {
-              pair: `USD/${b.receipt.currency}`,
-              value: b.rate,
-              asOf: isoDateTime(legacy.rate?.body.asOf ?? inner.createdAt),
-              source: legacy.rate?.body.source ?? 'legacy RATE_SET',
-            },
-            assetId: view.params.assetId,
-            assetDecimals: view.params.assetDecimals,
-            total: b.totalUsdCents,
-            payerAmount: b.payerCents,
-            payerItemIndexes: b.payerItemIndexes,
-            lines: b.lines.map((l, i) => ({
-              debtor: debtors[i] as string,
-              amount: l.cents,
-              itemIndexes: l.itemIndexes,
-            })),
-          },
-          tableSignatures: [],
-          invoices: b.lines.map((l, i) => ({ debtor: debtors[i] as string, bolt11: l.bolt11 })),
-          receiptImageSha256: b.receiptImageSha256,
-          fingerprint: b.fingerprint,
-        });
-        return true;
-      }
-      case 'LINE_SEEN':
-      case 'EXPENSE_VOIDED': {
-        const ref = expenseRef(inner.body.expenseEventHash);
-        if (ref === null) return false;
-        await this.publish(inner.type, { expenseRef: ref });
-        return true;
-      }
-      case 'LINE_DECIDED': {
-        const ref = expenseRef(inner.body.expenseEventHash);
-        if (ref === null) return false;
-        const b = inner.body;
-        await this.publish('LINE_DECIDED', {
-          expenseRef: ref,
-          decision: b.decision,
-          amount: b.cents,
-          ...(b.reason !== undefined && { reason: b.reason }),
-        });
-        return true;
-      }
-      case 'PAYMENT_MADE': {
-        const b = inner.body;
-        const ref = expenseRef(b.expenseEventHash);
-        const creditor = v2Key(b.creditorPubkey);
-        if (ref === null || creditor === null) return false;
-        const common = { expenseRef: ref, creditor, amount: b.cents };
-        await this.publish(
-          'PAYMENT_MADE',
-          b.rail === 'ln'
-            ? { ...common, rail: 'ln', paymentHash: b.paymentHash, preimage: b.preimage }
-            : { ...common, rail: 'onchain', txid: b.txid },
-        );
-        return true;
-      }
-      case 'INVOICE_REISSUED': {
-        const b = inner.body;
-        const ref = expenseRef(b.expenseEventHash);
-        const debtor = v2Key(b.debtorPubkey);
-        if (ref === null || debtor === null) return false;
-        await this.publish('INVOICE_REISSUED', { expenseRef: ref, debtor, bolt11: b.bolt11 });
-        return true;
-      }
-      case 'POLICY_UPDATED':
-        await this.publish('POLICY_UPDATED', { policy: toV2Policy(inner.body.policy) });
-        return true;
-      case 'CHECKPOINT': {
-        await this.publish('CHECKPOINT', {
-          frontier: [...view.frontier],
-          count: view.count,
-          stateHash: view.stateHash,
-        });
-        return true;
-      }
-      default:
-        return true; // MEMBER_JOINED is written by join(); the rest are the coordinator's
-    }
   }
 }

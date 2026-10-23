@@ -39,6 +39,21 @@ export function formatCents(cents: bigint): string {
   return `${sign}${abs / 100n}.${(abs % 100n).toString().padStart(2, '0')}`;
 }
 
+/**
+ * Base units of an asset for display, with `shown` decimals (the trip's displayDecimals):
+ * formatUnits(309n, 2) → "3.09"; formatUnits(3_090_000n, 6, 2) → "3.09". Digits below `shown`
+ * are cut (shares are rounded to them, TripParams).
+ */
+export function formatUnits(amount: bigint, decimals: number, shown = decimals): string {
+  const sign = amount < 0n ? '-' : '';
+  const abs = amount < 0n ? -amount : amount;
+  const unit = 10n ** BigInt(decimals);
+  const whole = abs / unit;
+  if (shown === 0) return `${sign}${whole}`;
+  const frac = (abs % unit).toString().padStart(decimals, '0').slice(0, shown).padEnd(shown, '0');
+  return `${sign}${whole}.${frac}`;
+}
+
 /** User input "20", "20.5", "20.50" → 2050n; anything else (more than 2 decimals, signs) → null. */
 export function parseCents(input: string): bigint | null {
   const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(input.trim());
