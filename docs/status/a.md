@@ -17,6 +17,24 @@
 - [x] **S1 Stack A, passo 1: formato degli eventi** (mer 21/10, branch `a/S1-nostr-envelope`; firme Schnorr in `b/S1-schnorr`, stream B). Dettagli sotto.
 - [x] **S2 Stack A, passo 2: regole del registro v2** (gio 22/10, branch `a/S2-registry-rules`). Dettagli sotto.
 - [x] **S3 Stack A, passo 3: chiave del registro per viaggio, `kitty-bind:v2`, app sul registro v2 dietro `KITTY_REGISTRY`** (gio 22/10, branch `a/S3-registry-v2-flag`). Dettagli sotto.
+- [x] **S3 bis, decisioni del 23/10: con v2 decide il registro nuovo** (ven 23/10, pila di PR `b/S3-wallet-leave` ← `a/S3-v2-only` ← `c/S3-v2-routes` ← `b/S3-demo-v2-story`). Dettagli sotto.
+
+## S3 bis: le decisioni del 23/10 (con `KITTY_REGISTRY=v2` decide il registro nuovo)
+- **Cosa funziona:**
+  - **Niente più doppia scrittura.** Con v2 ogni viaggiatore è un `RegistryAgent` (`flows/registry-agent.ts`) che legge e scrive solo il registro v2: `LINE_SEEN`, silenzio-assenso e pagamento (`decideRegistryAutoPay`, `invoiceRefusal`, `manual_only`), `PAYMENT_MADE`, riemissione delle fatture, backup del nodo; azioni: spesa (quote del ledger con il cambio salvato), approvazione e contestazione (C3), voto, annullamento, policy, blocco, uscita. Con v1 non cambia niente; `MemberAgent` torna com'era prima del passo 3.
+  - **Dave solo LSP** (`flows/lsp-agent.ts`): non partecipa al registro; la liquidità si gestisce dai suoi canali (`lspLiquidityPlan` su `peerChannels`, PR di B). Le rotte da coordinatore rispondono `NOT_ALLOWED` (PR di C).
+  - **Contestazioni a maggioranza (provvisoria):** `LINE_VOTED` (schemi), regola in un solo punto (`groupMajority`, `voidedByGroup`, `voteRefusal` in `registry/fold.ts`), validazione e stati in `validate.ts`/`derive.ts`; una riga dovuta per voto aspetta l'approvazione del debitore (`decideRegistryAutoPay`).
+  - **Uscita e chiusura:** `RegistryAgent.leave`: `MEMBER_LEFT`, poi il wallet del membro chiude i propri canali con l'LSP (ritentata dal ciclo se fallisce). Il viaggio è chiuso quando sono usciti tutti (`finished`).
+  - Gli importi nelle frasi dell'agente v2 sono leggibili (`formatUnits`: "3.09", non "309").
+  - `realRegistrySeeds` usa `loadMemberMnemonic` di `wallet/secrets.ts` (TODO chiuso).
+  - Documenti: `docs/proposte/regole-conflitto.md`, ADR-001 §5, §6, §11 e il documento del team, segnati "(aggiornato il 23/10)"; `docs/proposte/inventario-dave.md`, `docs/proposte/spec-14-3-rotte.md`, `docs/proposte/spec-16-demo-v2.md`.
+- **Come si prova:** `pnpm test` (ledger `registry.test.ts`, "contested lines decided by majority"; agente `registry-v2.test.ts`; rotte `routes-v2.test.ts`); `pnpm demo:reset && pnpm e2e:demo` (v1) e `pnpm demo:reset && pnpm e2e:demo:v2` (la nuova storia).
+- **Problemi noti:**
+  - Il registro v2 vive in memoria dentro il processo degli agenti fino al passo 4: a un riavvio riparte da zero.
+  - `MemberAgent.registry` resta come campo sempre `null` finché una pulizia non lo toglie (le rotte di C non lo usano più).
+  - Uscire con crediti è permesso, ma dopo l'uscita i canali sono chiusi: quei crediti si pagano solo on-chain (l'app avvisa). Da confermare.
+  - `demo:lose-phone` non è provato con v2.
+- **Prossimo passo:** passo 4 (trasporto Nostr), dopo la tua conferma.
 
 ## Demo di riserva `demo-finale-v1` (non si modifica più)
 - Tag `demo-finale-v1` = commit `d963464` del ramo principale (21/10), pubblicato su origin.

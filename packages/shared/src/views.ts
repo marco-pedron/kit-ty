@@ -7,6 +7,7 @@ import {
   TripParamsSchema,
 } from './domain.js';
 import { ApiErrorSchema } from './errors.js';
+import { EventTypeSchema as RegistryEventTypeSchema } from './events.js';
 import { EventTypeSchema } from './legacy-events.js';
 import {
   ActorIdSchema,
@@ -77,6 +78,23 @@ export const LineViewSchema = z.object({
   paidBy: z.enum(['debtor', 'guarantee']).nullable(),
   proof: ProofRefSchema.nullable(),
   invoiceExpiresAt: z.iso.datetime(),
+  /**
+   * KITTY_REGISTRY=v2 only (23/10, provisional): the vote of the other members on a contested
+   * line. `voters` exclude creditor and debtor; `outcome` is definitive once reached. `canVote`:
+   * the viewer may vote now. Absent with v1; null on a line never contested.
+   */
+  group: z
+    .object({
+      voters: z.array(MemberIdSchema),
+      due: z.array(MemberIdSchema),
+      voided: z.array(MemberIdSchema),
+      outcome: z.enum(['due', 'voided']).nullable(),
+      canVote: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+  /** KITTY_REGISTRY=v2 only: why a due line is payable by hand only (blocks, exclusions). */
+  manualOnly: z.enum(['blocked', 'creditor_excluded', 'debtor_excluded']).nullable().optional(),
 });
 export type LineView = z.output<typeof LineViewSchema>;
 
@@ -114,7 +132,8 @@ export type ExpenseView = z.output<typeof ExpenseViewSchema>;
 
 // ---------- members ----------
 
-export const MemberStatusSchema = z.enum(['joined', 'admitted', 'active', 'excluded']);
+/** v1: joined → admitted → active → excluded. v2 also `left` (MEMBER_LEFT, channels closed). */
+export const MemberStatusSchema = z.enum(['joined', 'admitted', 'active', 'excluded', 'left']);
 export type MemberStatus = z.infer<typeof MemberStatusSchema>;
 
 /** Public facts about a member, from the log. No balances. */
@@ -243,7 +262,7 @@ export type LedgerHealth = z.infer<typeof LedgerHealthSchema>;
 /** One row of Attività: an event of the log, or a decision of my agent. */
 export const ActivityItemSchema = z.object({
   at: z.iso.datetime(),
-  kind: z.union([EventTypeSchema, z.literal('AGENT')]),
+  kind: z.union([EventTypeSchema, RegistryEventTypeSchema, z.literal('AGENT')]),
   /** Human sentence, e.g. "Your agent paid 3.09 to alice: no objection in 20 s, under 20.00". */
   text: z.string(),
   expenseId: ExpenseIdSchema.nullable(),
@@ -297,6 +316,11 @@ export const TripViewSchema = z
     role: RoleSchema,
     /** KITTY_FAKES=1: the UI shows a banner on every screen. */
     fakes: z.boolean(),
+    /**
+     * KITTY_REGISTRY: v2 has no coordinator (dave is only the LSP), votes on contested lines
+     * and leaving. Absent = v1.
+     */
+    registry: z.enum(['v1', 'v2']).optional(),
     /** Server clock, so countdowns do not depend on the browser clock. */
     serverNow: z.iso.datetime(),
     /** null before TRIP_CREATED. */

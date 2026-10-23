@@ -18,11 +18,16 @@ export function stepFromLimit(limitCents: bigint, channelCents: bigint): number 
   return step > max ? max : step;
 }
 
-export type MemberStanding = 'active' | 'insolvent' | 'excluded' | 'joining';
+export type MemberStanding = 'active' | 'insolvent' | 'excluded' | 'left' | 'joining';
 
-/** Excluded by dave; insolvent while one of their parts is overdue; else active. */
+/**
+ * Excluded (by dave with v1; by more than half of the others with v2, also shown while the
+ * member is still listed); left (v2: out of the trip, channels closed); insolvent while one of
+ * their parts is overdue; else active.
+ */
 export function memberStanding(m: MemberView, expenses: readonly ExpenseView[]): MemberStanding {
-  if (m.status === 'excluded') return 'excluded';
+  if (m.status === 'excluded' || m.registry?.excluded === true) return 'excluded';
+  if (m.status === 'left') return 'left';
   if (m.status !== 'active') return 'joining';
   const overdue = expenses.some((e) =>
     e.lines.some((l) => l.debtor === m.memberId && l.state === 'overdue'),

@@ -1,6 +1,6 @@
 import { fakeSign, sha256Hex, type DecodedInvoice, type PaymentProof } from '@kitty/shared';
 import { WalletError } from '../wallet/errors.js';
-import type { Wallet, WalletBalances } from '../wallet/types.js';
+import type { PeerChannel, Wallet, WalletBalances } from '../wallet/types.js';
 import { assertFakesOn } from './guard.js';
 
 // DEV ONLY (KITTY_FAKES=1): an in-memory Lightning network with one hub (dave), so a fake
@@ -9,7 +9,16 @@ import { assertFakesOn } from './guard.js';
 
 type FakeInvoice = DecodedInvoice & { preimage: string; paid: boolean };
 
-type Account = { name: string; nodePubkey: string; appPubkey: string } & WalletBalances;
+type Account = {
+  name: string;
+  nodePubkey: string;
+  appPubkey: string;
+  /** Its channels with the hub are closed. */
+  closed?: boolean;
+} & WalletBalances;
+
+/** The hub every fake payment goes through: dave's node, the LSP of the demo. */
+const HUB = 'dave';
 
 const randomHex = (bytes: number) =>
   Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString('hex');
@@ -170,12 +179,30 @@ export class FakeWallet implements Wallet {
     return { channelId: `fake-ch-${this.net.fakeTxid().slice(0, 16)}` };
   }
 
+  /** The hub closing a member's channels (v1), or a member its own with the hub (v2). */
   async closeChannelsWith(peerPubkey: string): Promise<{ txids: string[] }> {
     const peer = this.net.byNode(peerPubkey);
-    peer.onchainCents += peer.tripOutboundCents;
-    peer.tripOutboundCents = 0n;
-    peer.inboundCents = 0n;
+    const member = peer.name === HUB ? this.me : peer;
+    member.onchainCents += member.tripOutboundCents;
+    member.tripOutboundCents = 0n;
+    member.inboundCents = 0n;
+    member.closed = true;
     return { txids: [this.net.fakeTxid(), this.net.fakeTxid()] };
+  }
+
+  /** The hub's channels: one per member, what the member can receive on the hub's side. */
+  async peerChannels(): Promise<PeerChannel[]> {
+    if (this.member !== HUB) return [];
+    return [...this.net.accounts.values()]
+      .filter((a) => a.name !== HUB && a.closed !== true)
+      .map((a) => ({
+        channelId: `fake-liq-${a.name}`,
+        peerPubkey: a.nodePubkey,
+        status: 'Opened' as const,
+        usable: true,
+        localCents: a.inboundCents,
+        remoteCents: a.tripOutboundCents,
+      }));
   }
 
   async backupNow(): Promise<{ version: string; blob: Uint8Array }> {

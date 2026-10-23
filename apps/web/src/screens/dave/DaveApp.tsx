@@ -137,6 +137,8 @@ export function DaveApp({ frame }: { frame: (children: ReactNode) => ReactNode }
               action={{ label: 'Try again', onClick: trip.refresh }}
             />
           )
+        ) : s.registry === 'v2' ? (
+          <LspHome state={s} />
         ) : (
           <div key={daveHash(route)} className="animate-push">
             <Route route={route} props={{ trip, state: s, go, covers, startCover }} />
@@ -179,6 +181,39 @@ function Route({ route, props }: { route: DaveRoute; props: DaveProps }) {
     case 'cover':
       return <CoverScreen {...props} expenseId={route.expenseId} member={route.member} />;
   }
+}
+
+/**
+ * KITTY_REGISTRY=v2 (21/10, 23/10): dave is only the LSP. He is not in the group, reads nothing
+ * of it and decides nothing: his node routes the payments and keeps each member's liquidity,
+ * looking at his own channels.
+ */
+function LspHome({ state }: { state: TripView }) {
+  const done = state.operations.filter((o) => o.status !== 'running').slice(0, 8);
+  return (
+    <div className="space-y-4 px-4 pt-[calc(16px+env(safe-area-inset-top))]">
+      <h1 className="text-large-title font-bold">LSP</h1>
+      <div className="card px-4 py-3">
+        <p className="text-body">
+          This node routes the payments of the group and keeps liquidity for each member.
+        </p>
+        <p className="mt-1 text-footnote text-label-2">
+          It is not a member: it signs no event, reads nothing of the group and decides nothing.
+          Disputes are withdrawn by the debtor or decided by the others; each member leaves by
+          closing their own channels.
+        </p>
+      </div>
+      {done.length > 0 && (
+        <ul className="card divide-y divide-separator px-4">
+          {done.map((o) => (
+            <li key={o.id} className="py-2 text-footnote">
+              {o.text} · {o.status}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 /** "opened 0:42 ago", ticking. */

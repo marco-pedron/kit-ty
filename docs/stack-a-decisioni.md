@@ -3,6 +3,8 @@
 > **Documento di passaggio per una nuova chat.** Riassume le decisioni prese dal team il 21 ottobre 2026 sullo Stack A (nodo WDK sul telefono, LSP Utexo, registro su Nostr, nessun operatore centrale). Sostituisce le parti dello SPEC (repository `kit-ty`, `docs/SPEC.md`) che descrivono Dave come nodo centrale: quelle sono superate e vanno ignorate.
 >
 > **Aggiornato il 22/10/2026** con i punti 1-7 di `docs/proposte/aggiornamenti-documento-team.md`; ogni punto è segnato con "aggiornato il 22/10".
+>
+> **Aggiornato il 23/10/2026** con le decisioni del 23/10 (Dave solo LSP, chiusura del viaggio, contestazioni a maggioranza); ogni punto è segnato con "aggiornato il 23/10".
 
 Lo Stack A si può costruire: le regole del gruppo sono decise, la parte che manca dipende da Utexo.
 
@@ -13,7 +15,7 @@ Nessun membro ha poteri speciali: ognuno firma solo per sé, e le regole valgono
 | Tema | Decisione |
 | --- | --- |
 | Telefono spento | Il pagamento riparte da solo quando entrambi hanno l'app aperta. Il pagamento in attesa sull'LSP va in roadmap, quando Utexo lo renderà possibile |
-| Contestazioni | Da decidere. Nel frattempo la riga contestata resta bloccata: nessuno la paga in automatico |
+| Contestazioni | A maggioranza, regola provvisoria: su una riga contestata votano i membri attivi tranne creditore e debitore, con esito "dovuta" o "annullata". Decide più della metà dei votanti, contati su ciò che il voto decisivo conosceva, come per l'esclusione; l'esito è definitivo. Finché la maggioranza non c'è la riga resta contestata e nessuno la paga in automatico: il debitore può sempre ritirare la contestazione e il creditore può annullare la spesa. Se il debitore approva in concorrenza con "annullata", vale l'approvazione. Una riga dovuta per voto si paga solo quando il debitore la approva o la paga a mano. Limiti dichiarati: dipende da D3 (Sybil); in un gruppo di tre c'è un solo votante. Il modello definitivo è ancora da decidere. *(aggiornato il 23/10)* |
 | Ingresso | Basta l'invito di un membro. Ogni invito vale per un solo ingresso. *(aggiornato il 22/10)* |
 | Cambio valuta | L'app scarica il cambio dall'oracolo quando c'è rete e lo salva. Alla spesa usa l'ultimo salvato, scritto con la sua data. Avviso se è vecchio |
 | Blocco | Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)* Il blocco è visibile a tutti; lo toglie solo chi l'ha messo, quando vuole. *(aggiornato il 22/10)* |
@@ -21,7 +23,8 @@ Nessun membro ha poteri speciali: ognuno firma solo per sé, e le regole valgono
 | Debiti verso chi è bloccato o escluso | Restano. Niente pagamento automatico: si paga a mano |
 | Debiti di chi è bloccato o escluso | Può sempre saldarli. I debiti dell'escluso restano e si pagano a mano; sulle righe arrivate dopo l'esclusione il silenzio-assenso non vale, come dopo l'uscita. *(aggiornato il 22/10)* |
 | Uscita | Un messaggio firmato "esco", quando non hai più debiti noti. *(aggiornato il 22/10)* Si può uscire anche con crediti da incassare. I soldi non si muovono. Conseguenza dichiarata: anche una riga contestata è un debito noto, quindi finché la contestazione resta aperta non si esce. *(aggiornato il 22/10)* |
-| Fine del viaggio | Quando sono usciti tutti |
+| Fine del viaggio | Quando sono usciti tutti. Non esiste un evento di chiusura e nessuno la decide: quando un membro esce, chiude i propri canali con l'LSP dal proprio wallet, e il viaggio è chiuso quando sono usciti tutti. *(aggiornato il 23/10)* |
+| LSP | Dave non è un membro, come deciso il 21/10: non viene invitato, non firma eventi e non legge il registro. Il suo nodo instrada i pagamenti come LSP e la sua liquidità si gestisce guardando solo i suoi canali; l'app e il ledger non sanno che dietro c'è Dave. I membri della demo sono Alice, Bob e Charlie. *(aggiornato il 23/10)* |
 
 ## Come funziona
 
@@ -86,6 +89,8 @@ Sono tre messaggi firmati: "blocco", "sblocco", "esco". L'esclusione non è un m
 - Se Bob blocca Alice, da quel momento non possono esserci spese in cui uno dei due paga e l'altro è debitore, in nessuna delle due direzioni. Una spesa pagata da un terzo con entrambi tra i debitori resta possibile. I debiti precedenti al blocco restano e si saldano normalmente. *(aggiornato il 22/10)*
 - Uno sblocco toglie tutti i blocchi che chi sblocca aveva messo su quella persona. Per bloccarla di nuovo serve un nuovo blocco. *(aggiornato il 22/10)*
 - L'esclusione scatta quando più della metà degli altri membri attivi blocca qualcuno, ed è definitiva: per rientrare serve un nuovo invito. I debiti dell'escluso restano e si pagano a mano; sulle righe arrivate dopo l'esclusione il silenzio-assenso non vale. Dipende da D3 (Sybil), ancora aperta. *(aggiornato il 22/10)*
+- Su una riga contestata votano gli altri membri attivi (non creditore e debitore): più della metà decide "dovuta" o "annullata", per sempre. Regola provvisoria. *(aggiornato il 23/10)*
+- Uscendo, il membro chiude i propri canali con l'LSP dal proprio wallet: i suoi soldi tornano a lui on-chain. Il viaggio è chiuso quando sono usciti tutti. *(aggiornato il 23/10)*
 - Si esce quando non si hanno più debiti noti. Se nel frattempo arriva una spesa registrata da qualcuno che non sapeva dell'uscita, il debito resta: chi è uscito lo vede, può contestarlo se non era presente, e lo paga a mano. L'app non può garantire che venga pagato. Sulle righe arrivate dopo l'uscita il silenzio-assenso non vale: restano da decidere finché chi è uscito non le approva o le contesta. *(aggiornato il 22/10)*
 - Chi esce o è escluso continua a incassare i suoi crediti e a poter saldare i suoi debiti.
 
@@ -114,6 +119,7 @@ Ogni evento lo firma solo la persona che agisce per sé. Nessun evento richiede 
 | `PAYMENT_MADE` | il debitore | Resta |
 | `EXPENSE_VOIDED` | chi ha pagato | Resta |
 | `INVOICE_REISSUED` | chi ha pagato | Resta |
+| `LINE_VOTED` | un membro che non è né creditore né debitore della riga | Nuovo. Voto su una riga contestata: "dovuta" o "annullata" *(aggiornato il 23/10)* |
 | `MEMBER_BLOCKED` | un membro qualsiasi | Nuovo. Il blocco conta anche come voto per l'esclusione |
 | `MEMBER_UNBLOCKED` | chi aveva bloccato | Nuovo |
 | `MEMBER_LEFT` | chi esce | Nuovo. Solo senza debiti noti *(aggiornato il 22/10)* |
@@ -121,7 +127,7 @@ Ogni evento lo firma solo la persona che agisce per sé. Nessun evento richiede 
 
 Limite dichiarato: chi esce o viene escluso conserva il segreto e può leggere gli eventi successivi. La rotazione del segreto è in roadmap. *(aggiornato il 22/10)*
 
-**Spariscono:** `RATE_SET` (il cambio sta nella spesa), `MEMBER_ADMITTED` (basta l'invito), `CHANNELS_READY` (ognuno vede da solo il suo canale), `DISPUTE_RESOLVED` (contestazioni da decidere), `GUARANTEE_PAID` (niente garanzia), `MEMBER_EXCLUDED` e `TRIP_CLOSED` (li calcola ogni telefono).
+**Spariscono:** `RATE_SET` (il cambio sta nella spesa), `MEMBER_ADMITTED` (basta l'invito), `CHANNELS_READY` (ognuno vede da solo il suo canale), `DISPUTE_RESOLVED` (sostituito dal voto a maggioranza, *aggiornato il 23/10*), `GUARANTEE_PAID` (niente garanzia), `MEMBER_EXCLUDED` e `TRIP_CLOSED` (li calcola ogni telefono).
 
 ## Cosa dipende da Utexo
 
@@ -151,7 +157,7 @@ Si parte dal formato degli eventi, perché tutto il resto ci si appoggia. Il mot
 
 ## Domande aperte
 
-- [ ] Contestazioni: chi decide quando i due non si accordano?
+- [ ] Contestazioni: chi decide quando i due non si accordano? Dal 23/10 vale la regola provvisoria a maggioranza; il modello definitivo resta da decidere. *(aggiornato il 23/10)*
 - [ ] Quale oracolo per il cambio: deve coprire le valute del viaggio (dong, euro, dollari) e, se possibile, firmare i cambi.
 - [ ] Dopo quante ore un cambio salvato è "vecchio": proposta 24.
 - [ ] Quanto può durare una fattura RGB: serve almeno un giorno.

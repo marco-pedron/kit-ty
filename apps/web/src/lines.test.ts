@@ -1,6 +1,6 @@
 import type { LineView } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
-import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from './lines.js';
+import { canApprove, canDispute, canVote, formatCountdown, needsMe, secondsLeft } from './lines.js';
 
 const line = (over: Partial<LineView>): LineView => ({
   expenseId: 'x1',
@@ -87,5 +87,37 @@ describe('what a debtor can do on a part', () => {
     expect(canApprove({ ...late, agent: { pay: true, reason: '' } })).toBe(false);
     // an overdue part never disputed has nothing to approve: the operator covers it
     expect(canApprove(line({ state: 'overdue', agent: { pay: false, reason: '' } }))).toBe(false);
+  });
+});
+
+describe('KITTY_REGISTRY=v2: withdrawing a dispute and the vote of the others', () => {
+  const group = (over: Partial<NonNullable<LineView['group']>> = {}) => ({
+    voters: ['bob' as const],
+    due: [],
+    voided: [],
+    outcome: null,
+    canVote: false,
+    ...over,
+  });
+
+  it('approves my contested part (C3); with v1 a contested part waits for dave', () => {
+    expect(canApprove(line({ state: 'contested', group: group() }))).toBe(true);
+    expect(canApprove(line({ state: 'contested' }))).toBe(false);
+  });
+
+  it('approves a part the group voted due until my agent can pay it', () => {
+    const waiting = line({
+      state: 'due',
+      group: group({ outcome: 'due' }),
+      agent: { pay: false, reason: 'The group decided …' },
+    });
+    expect(canApprove(waiting)).toBe(true);
+    expect(canApprove({ ...waiting, agent: { pay: true, reason: '' } })).toBe(false);
+  });
+
+  it('votes only where the agent says I can', () => {
+    expect(canVote(line({ state: 'contested', group: group({ canVote: true }) }))).toBe(true);
+    expect(canVote(line({ state: 'contested', group: group() }))).toBe(false);
+    expect(canVote(line({ state: 'contested' }))).toBe(false);
   });
 });

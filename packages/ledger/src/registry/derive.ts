@@ -13,13 +13,16 @@ import {
   blocks,
   exclusionsConcurrentWith,
   fold,
+  groupMajority,
   isExcluded,
   isOpen,
   memberPolicy,
   settlement,
+  voidedByGroup,
   voidedOf,
   type Fold,
   type LineRecord,
+  type VoteOutcome,
 } from './fold.js';
 import { unixSeconds, validateRegistryEvent, type RegistryDeps } from './validate.js';
 
@@ -65,6 +68,16 @@ export interface RegistryLine {
   payment: LineRecord['payments'][number] | null;
   /** C4: what the creditor owes back to the debtor for payments after the first. */
   overpaid: bigint;
+  /**
+   * The vote on a contested line (23/10, provisional): who may vote, who voted what on the
+   * contest in force, and the definitive outcome once reached. Null when never contested.
+   */
+  group: {
+    voters: readonly string[];
+    due: readonly string[];
+    voided: readonly string[];
+    outcome: VoteOutcome | null;
+  } | null;
 }
 
 export interface RegistryMember {
@@ -223,10 +236,14 @@ function lineAt(
   const policy = members.get(l.debtor)?.policy;
   const latestContest = l.decisions.filter((d) => d.decision === 'contest').at(-1);
 
+  const outcome = l.groupOutcome?.outcome ?? null;
   let state: RegistryLineState;
   let deadlineAt: number | null = null;
   if (paidBy !== null) state = 'paid';
   else if (expense !== undefined && voidedOf(f, expense).has(l.debtor)) state = 'voided';
+  else if (voidedByGroup(f, l)) state = 'voided';
+  // Due by the group [23/10]: due, but never paid automatically unless the debtor approves.
+  else if (outcome === 'due') state = 'due';
   else if (decision === 'contest') state = 'contested';
   else if (decision === 'approve' || l.signedAtTable) state = 'due';
   else if (l.seen === null) state = 'submitted';
@@ -278,6 +295,9 @@ function lineAt(
     invoices: l.invoices.map((i) => i.bolt11),
     payment: paidBy === null ? null : (l.payments.find((p) => p.id === paidBy.id) ?? null),
     overpaid: overpaid(overpayments),
+    group: l.decisions.some((d) => d.decision === 'contest')
+      ? (({ voters, due, voided }) => ({ voters, due, voided, outcome }))(groupMajority(f, l, null))
+      : null,
   };
 }
 
