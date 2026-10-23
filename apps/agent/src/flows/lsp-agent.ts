@@ -12,7 +12,7 @@ export const LSP_THRESHOLD_CENTS = 1000n;
 
 export interface LspNeed {
   peerPubkey: string;
-  /** What the peer can receive now: the LSP's side of its usable channels with the peer. */
+  /** What the peer can receive now: the LSP's side of its channels with the peer. */
   inboundCents: bigint;
   /** To open now so the peer can receive `targetCents` again; 0n when enough. */
   openCents: bigint;
@@ -21,7 +21,8 @@ export interface LspNeed {
 /**
  * The liquidity rule of the LSP, from its channels alone: per peer with an open channel, what
  * the peer can receive; below `thresholdCents`, open up to `targetCents`. Peers with a channel
- * opening or closing are left alone (an opening is on its way; a closing peer is leaving).
+ * not usable yet or closing are left alone (right after a node unlocks its channels are not
+ * usable for a while; an opening is on its way; a closing peer is leaving).
  * Limit: the LSP cannot see the lines to come, so it tops up after a payment, not before it.
  */
 export function lspLiquidityPlan(
@@ -33,8 +34,9 @@ export function lspLiquidityPlan(
   for (const c of channels) peers.set(c.peerPubkey, [...(peers.get(c.peerPubkey) ?? []), c]);
   const out: LspNeed[] = [];
   for (const [peerPubkey, list] of peers) {
-    if (list.some((c) => c.status !== 'Opened')) continue;
-    const inboundCents = list.filter((c) => c.usable).reduce((a, c) => a + c.localCents, 0n);
+    // Not usable yet (a node just unlocked, an opening) or closing: nothing to decide now.
+    if (list.some((c) => c.status !== 'Opened' || !c.usable)) continue;
+    const inboundCents = list.reduce((a, c) => a + c.localCents, 0n);
     const openCents = inboundCents < thresholdCents ? targetCents - inboundCents : 0n;
     out.push({ peerPubkey, inboundCents, openCents });
   }
