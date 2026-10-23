@@ -97,6 +97,8 @@ export class RegistryAgent {
   /** After MEMBER_LEFT: the closing txids once the channels are closed, null until then. */
   private closed: string[] | null = null;
   private closeRetryAt = 0;
+  /** The close in flight, resolving to its error (null when it succeeded). */
+  private closing: Promise<unknown> | null = null;
 
   constructor(o: RegistryAgentOptions) {
     this.actor = o.actor;
@@ -190,7 +192,8 @@ export class RegistryAgent {
   }
 
   async idle(): Promise<void> {
-    while (this.paying !== null || this.backingUp !== null) await (this.paying ?? this.backingUp);
+    while (this.paying !== null || this.backingUp !== null || this.closing !== null)
+      await (this.paying ?? this.backingUp ?? this.closing);
   }
 
   // ---------- the loop ----------
@@ -214,7 +217,7 @@ export class RegistryAgent {
     await this.publishProofs(trip);
     this.maybePay(trip, me.pubkey);
     if (!me.left) await this.reissueExpired(trip, me.pubkey);
-    if (me.left) await this.closeChannels();
+    if (me.left) void this.closeChannels(); // in the background: a close takes about a minute
     this.noteReceived(trip, me.pubkey);
     await this.maybeBackup();
   }
@@ -602,10 +605,24 @@ export class RegistryAgent {
     };
   }
 
-  /** After MEMBER_LEFT: closes my channels with the LSP, once; retried after retryMs. */
+  /**
+   * After MEMBER_LEFT: closes my channels with the LSP, once; retried after retryMs. One close
+   * at a time: the loop and the leave route share the one in flight. `now` (the route) does
+   * not wait for retryMs and throws if the close fails.
+   */
   private async closeChannels(now = false): Promise<void> {
     if (this.closed !== null) return;
-    if (!now && this.now().getTime() < this.closeRetryAt) return;
+    if (this.closing === null) {
+      if (!now && this.now().getTime() < this.closeRetryAt) return;
+      this.closing = this.closeOnce().finally(() => {
+        this.closing = null;
+      });
+    }
+    const err = await this.closing;
+    if (now && err !== null) throw err;
+  }
+
+  private async closeOnce(): Promise<unknown> {
     const op = this.startOp('closing_channels', 'Closing your channels with the LSP…');
     try {
       const { txids } = await this.wallet.closeChannelsWith(await this.lspNodePubkey());
@@ -613,10 +630,11 @@ export class RegistryAgent {
       this.markNodeChanged();
       this.endOp(op, 'done');
       this.addActivity(`You left the trip: your ${txids.length} channels with the LSP are closed.`);
+      return null;
     } catch (err) {
       this.closeRetryAt = this.now().getTime() + this.retryMs;
       this.endOp(op, 'failed', apiErrorOf(err));
-      if (now) throw err;
+      return err;
     }
   }
 

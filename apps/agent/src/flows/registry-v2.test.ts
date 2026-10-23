@@ -192,6 +192,18 @@ describe('the story of the v2 demo', () => {
     expect(await d.net.wallet('dave').peerChannels()).toEqual([]);
   });
 
+  it('the loop and the leave route never close the channels twice', async () => {
+    const d = await registryDemo();
+    const close = vi.spyOn(FakeLightningNetwork.prototype, 'fakeTxid');
+    const [r] = await Promise.all([d.travelers.bob.leave(), d.tickAll(), d.tickAll()]);
+    await d.tickAll();
+    expect(r.closingTxids).toHaveLength(2);
+    expect(close).toHaveBeenCalledTimes(2); // one close: its two txids
+    expect(d.travelers.bob.operations().filter((o) => o.kind === 'closing_channels')).toHaveLength(
+      1,
+    );
+  });
+
   it('nobody leaves with a known debt, contested lines included', async () => {
     const d = await registryDemo();
     const id = await dinner(d);
