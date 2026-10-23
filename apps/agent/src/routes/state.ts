@@ -165,6 +165,8 @@ class ViewContext {
   }
 
   members(): MemberView[] {
+    const registry = this.agent.registry;
+    const standing = registry?.standing() ?? null;
     return [...this.trip.members.values()].map((m) => ({
       memberId: m.memberId,
       displayName: m.displayName,
@@ -178,6 +180,7 @@ class ViewContext {
             ? 'admitted'
             : 'joined',
       closingTxids: [...m.closingTxids],
+      ...(registry !== null && { registry: standing?.get(m.nodePubkey) ?? null }),
     }));
   }
 

@@ -18,6 +18,10 @@ describe('route table (SPEC §14.3)', () => {
         'POST /api/:as/expenses/:id/decision',
         'POST /api/:as/expenses/:id/void',
         'PUT /api/:as/policy',
+        // KITTY_REGISTRY=v2 only, not in SPEC §14.3 yet
+        'GET /api/:as/members/:member/block',
+        'POST /api/:as/members/:member/block',
+        'POST /api/:as/members/:member/unblock',
         'POST /api/dave/disputes/:expenseId/:member',
         'POST /api/dave/defaults/:expenseId/:member/cover-and-exclude',
         'PUT /api/dave/rates',

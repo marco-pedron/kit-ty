@@ -252,6 +252,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
 
   handle('putPolicy', async ({ params: { as }, body }) => agentOf(as).updatePolicy(body.policy));
 
+  // KITTY_REGISTRY=v2 only: with v1 the agent answers NOT_ALLOWED.
+  handle('blockWarning', async ({ params: { as, member } }) => ({
+    warning: await agentOf(as).blockWarning(member),
+  }));
+  handle('blockMember', async ({ params: { as, member } }) => agentOf(as).blockMember(member));
+  handle('unblockMember', async ({ params: { as, member } }) => {
+    await agentOf(as).unblockMember(member);
+    return { ok: true as const };
+  });
+
   handle('resolveDispute', async ({ params: { expenseId, member }, body }) => {
     const dave = daveAgent();
     const line = await dave.resolveDispute(expenseId, member, body.outcome, body.note);
