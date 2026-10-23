@@ -89,6 +89,22 @@ describe('FakeWallet', () => {
       onchainCents: 10_000n,
     });
   });
+
+  it('v2: a member closes its own channels with the hub; the hub stops listing them', async () => {
+    const net = new FakeLightningNetwork();
+    const dave = net.wallet('dave');
+    const bob = net.wallet('bob');
+    net.wallet('charlie');
+    expect((await dave.peerChannels()).map((c) => c.localCents)).toEqual([3000n, 3000n]);
+    await bob.closeChannelsWith(await dave.nodePubkey());
+    expect(await bob.balances()).toEqual({
+      tripOutboundCents: 0n,
+      inboundCents: 0n,
+      onchainCents: 10_000n,
+    });
+    expect(await dave.peerChannels()).toHaveLength(1);
+    expect(await bob.peerChannels()).toEqual([]);
+  });
 });
 
 describe('FakeAi', () => {

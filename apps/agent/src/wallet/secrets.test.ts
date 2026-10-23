@@ -30,7 +30,8 @@ describe('loadMemberWalletOptions', () => {
       secretsFile,
       seedStateFile,
     });
-    const { backup, ...rest } = o;
+    const { backup, chain, ...rest } = o;
+    expect(chain?.miner).toBeDefined(); // closing its own channels when leaving (v2)
     expect(rest).toEqual({
       nodeUrl: 'http://127.0.0.1:3002',
       appSecretHex: deriveAppSecretHex('bob words'),
@@ -44,14 +45,13 @@ describe('loadMemberWalletOptions', () => {
     expect(JSON.stringify(backup)).not.toMatch(/alice|pw-alice|pw-dave|treasury/);
   });
 
-  it('gives the chain tools that close channels to dave only (B7)', () => {
+  it('gives every member the chain tools that close channels (B7; v2: leaving, 23/10)', () => {
     const at = { secretsFile, seedStateFile, esploraUrl: 'http://127.0.0.1:3010/' };
-    expect(loadMemberWalletOptions('bob', { nodeUrl: 'http://x', ...at }).coordinator).toBe(
-      undefined,
-    );
-    const dave = loadMemberWalletOptions('dave', { nodeUrl: 'http://x', ...at });
-    expect(dave.coordinator?.esplora.baseUrl).toBe('http://127.0.0.1:3010');
-    expect(dave.coordinator?.miner).toBeDefined();
+    for (const actor of ['bob', 'dave'] as const) {
+      const { chain } = loadMemberWalletOptions(actor, { nodeUrl: 'http://x', ...at });
+      expect(chain?.esplora.baseUrl).toBe('http://127.0.0.1:3010');
+      expect(chain?.miner).toBeDefined();
+    }
   });
 
   it('fails clearly for a member with no secrets or a missing file', () => {

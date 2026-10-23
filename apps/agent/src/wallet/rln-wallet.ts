@@ -11,7 +11,7 @@ import {
 } from '@kitty/shared';
 import { explorerTxUrl, type Esplora, type Miner } from './chain.js';
 import { toWalletError, WalletError } from './errors.js';
-import type { Wallet, WalletBalances } from './types.js';
+import type { PeerChannel, Wallet, WalletBalances } from './types.js';
 
 // The real Wallet of one member, motore `rln-rest` (gate 2, SPEC §14.0, §20): the member's own
 // rgb-lightning-node (d4762ac) over REST, plus the ed25519 app key that signs events (§9.1).
@@ -32,8 +32,12 @@ export interface RlnWalletOptions {
   now?: () => number;
   /** /refreshtransfers before a balance read at most this often (default 15 s). */
   refreshEveryMs?: number;
-  /** dave only (loadMemberWalletOptions sets it for dave): what closing channels needs. */
-  coordinator?: CoordinatorChain;
+  /**
+   * What opening and closing channels needs on regtest (esplora, a miner). dave's wallet uses it
+   * to open liquidity and, with v1, to close an excluded member's channels; with
+   * KITTY_REGISTRY=v2 each member closes its own channels with the LSP when it leaves (23/10).
+   */
+  chain?: WalletChain;
   /** RGB proxy as the nodes see it (on-chain rail, B5); default DEFAULT_PROXY_ENDPOINT. */
   proxyEndpoint?: string;
   /** B6: what lock → backup → unlock needs; without it backupNow is NOT_ALLOWED. */
@@ -63,7 +67,7 @@ const BACKUP_TIMEOUT_MS = 60_000;
 /** Where the node writes its backups, inside its container (infra/docker-compose.yml). */
 const BACKUP_CONTAINER_DIR = '/backups';
 
-export interface CoordinatorChain {
+export interface WalletChain {
   esplora: Esplora;
   miner: Miner;
   /** Pause after each block so the nodes can see it and broadcast sweeps (default 1.5 s). */
@@ -155,6 +159,9 @@ type RlnChannel = {
   capacity_sat: number;
   ready?: boolean;
   is_usable?: boolean;
+  asset_id?: string | null;
+  asset_local_amount?: number | null;
+  asset_remote_amount?: number | null;
 };
 
 /** The funding output of a channel, whose spender is the closing tx. */
@@ -421,6 +428,29 @@ export class RlnWallet implements Wallet {
     }
   }
 
+  /**
+   * The LSP's view of its own channels (v2, 23/10): per channel the peer, its status and the
+   * trip asset on each side, from /listchannels. The LSP manages its liquidity from these
+   * alone, without the registry. Channels of another asset are left out.
+   */
+  async peerChannels(): Promise<PeerChannel[]> {
+    try {
+      const { channels } = await this.call('/listchannels', () => this.rln.GET('/listchannels'));
+      return (channels as RlnChannel[])
+        .filter((c) => c.asset_id === this.opts.assetId)
+        .map((c) => ({
+          channelId: c.channel_id,
+          peerPubkey: c.peer_pubkey,
+          status: c.status === 'Opened' || c.status === 'Opening' ? c.status : 'Closing',
+          usable: c.ready === true && c.is_usable === true,
+          localCents: BigInt(c.asset_local_amount ?? 0),
+          remoteCents: BigInt(c.asset_remote_amount ?? 0),
+        }));
+    } catch (e) {
+      throw toWalletError(e, 'other');
+    }
+  }
+
   pay(bolt11: string, opts: { timeoutMs?: number } = {}): Promise<LnProof> {
     const run = this.payQueue.then(() => this.payNow(bolt11, opts.timeoutMs ?? this.payTimeoutMs));
     this.payQueue = run.catch(() => undefined);
@@ -629,8 +659,9 @@ export class RlnWallet implements Wallet {
   }
 
   private async openNow(peerPubkey: string, cents: bigint): Promise<{ channelId: string }> {
-    const chain = this.opts.coordinator;
-    if (!chain) throw new WalletError('NOT_ALLOWED', 'only dave opens liquidity channels');
+    const chain = this.opts.chain;
+    if (!chain)
+      throw new WalletError('NOT_ALLOWED', 'opening a channel needs the chain access of the LSP');
     if (!PUBKEY.test(peerPubkey))
       throw new WalletError('VALIDATION_ERROR', `not a node pubkey: ${peerPubkey}`);
     if (cents <= 0n || cents > BigInt(Number.MAX_SAFE_INTEGER))
@@ -706,20 +737,22 @@ export class RlnWallet implements Wallet {
   }
 
   /**
-   * dave only (SPEC §6.7): cooperative close of every channel with the member (trip and
-   * liquidity), then mines until the closes confirm and their outputs are swept, within
-   * CLOSE_BLOCK_BUDGET blocks. Never a forced close: if the peer cannot cooperate, it fails.
+   * Cooperative close of every channel with `peerPubkey` (trip and liquidity): dave closing an
+   * excluded member's (v1, SPEC §6.7), or a member closing its own with the LSP when it leaves
+   * (v2, 23/10). Then mines until the closes confirm and their outputs are swept, within
+   * CLOSE_BLOCK_BUDGET blocks (regtest: whoever closes mines). Never a forced close: if the
+   * peer cannot cooperate, it fails.
    */
   async closeChannelsWith(peerPubkey: string): Promise<CloseResult> {
-    const chain = this.opts.coordinator;
-    if (!chain) throw new WalletError('NOT_ALLOWED', 'only dave closes channels with a member');
+    const chain = this.opts.chain;
+    if (!chain) throw new WalletError('NOT_ALLOWED', 'closing channels needs the chain access');
     if (!PUBKEY.test(peerPubkey))
       throw new WalletError('VALIDATION_ERROR', `not a node pubkey: ${peerPubkey}`);
     try {
       const targets = await this.closingChannels(chain, peerPubkey);
       const txids = await this.closeCooperatively(chain, peerPubkey, targets);
       const { swept, blocksMined } = await this.mineUntilSwept(chain, txids);
-      // dave's own share of the closes (the liquidity channel) settles on his node too.
+      // The closer's own share of the closes settles on its node too (after a refresh).
       await this.refreshTransfers().catch(() => undefined);
       return {
         txids,
@@ -733,21 +766,17 @@ export class RlnWallet implements Wallet {
   }
 
   /** Checks before closing anything: the member is online and every channel is Opened. */
-  private async closingChannels(
-    chain: CoordinatorChain,
-    peerPubkey: string,
-  ): Promise<ClosingChannel[]> {
+  private async closingChannels(chain: WalletChain, peerPubkey: string): Promise<ClosingChannel[]> {
     const [{ channels }, { peers }] = await Promise.all([
       this.call('/listchannels', () => this.rln.GET('/listchannels')),
       this.call('/listpeers', () => this.rln.GET('/listpeers')),
     ]);
     const mine = (channels as RlnChannel[]).filter((c) => c.peer_pubkey === peerPubkey);
-    if (mine.length === 0)
-      throw new WalletError('NOT_FOUND', `dave has no channel with ${peerPubkey}`);
+    if (mine.length === 0) throw new WalletError('NOT_FOUND', `no channel with ${peerPubkey}`);
     if (!peers.some((p) => p.pubkey === peerPubkey))
       throw new WalletError(
         'RECEIVER_UNREACHABLE',
-        `the node ${peerPubkey} is not connected to dave: a cooperative close needs both online`,
+        `the node ${peerPubkey} is not connected: a cooperative close needs both online`,
         NOT_FORCING,
       );
     const out: ClosingChannel[] = [];
@@ -774,7 +803,7 @@ export class RlnWallet implements Wallet {
 
   /** /closechannel force:false one by one, then waits for each closing tx in the mempool. */
   private async closeCooperatively(
-    chain: CoordinatorChain,
+    chain: WalletChain,
     peerPubkey: string,
     targets: ClosingChannel[],
   ): Promise<string[]> {
@@ -824,7 +853,7 @@ export class RlnWallet implements Wallet {
 
   /** Mines one block at a time: first until the closes confirm, then until they are swept. */
   private async mineUntilSwept(
-    chain: CoordinatorChain,
+    chain: WalletChain,
     txids: string[],
   ): Promise<{ swept: boolean; blocksMined: number }> {
     const blockWaitMs = chain.blockWaitMs ?? 1_500;

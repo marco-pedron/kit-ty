@@ -74,11 +74,10 @@ export function loadMemberWalletOptions(
       unlockBody: unlockBody(actor, password),
       hostDir: p.backupDir ?? `${repoRoot}infra/data/backups/${actor}`,
     };
-  // Only dave closes channels (SPEC §6.7): only his wallet gets the miner and esplora.
-  if (actor === 'dave') {
-    const esploraUrl = p.esploraUrl ?? process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010';
-    opts.coordinator = { esplora: createEsplora(esploraUrl), miner: dockerMiner };
-  }
+  // Opening and closing channels on regtest: dave opens liquidity (and with v1 closes an
+  // excluded member's channels); with v2 each member closes its own when it leaves (23/10).
+  const esploraUrl = p.esploraUrl ?? process.env.ESPLORA_URL ?? 'http://127.0.0.1:3010';
+  opts.chain = { esplora: createEsplora(esploraUrl), miner: dockerMiner };
   return opts;
 }
 
