@@ -1,4 +1,10 @@
-import { DEFAULT_POLICY, formatCents, type ApiClientError } from '@kitty/shared';
+import {
+  DEFAULT_POLICY,
+  formatCents,
+  type ApiClientError,
+  type MemberId,
+  type MemberView,
+} from '@kitty/shared';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
@@ -14,8 +20,9 @@ import { Button } from '../ui/Button.js';
 import { Slider } from '../ui/Controls.js';
 import { Row, Section } from '../ui/List.js';
 import { ErrorNote } from '../ui/Notes.js';
-import { StateView } from '../ui/Overlays.js';
+import { AlertDialog, StateView } from '../ui/Overlays.js';
 import type { ScreenProps } from './types.js';
+import type { TripState } from '../state.js';
 import { Working } from '../ui/PlusMinus.js';
 
 // Groups (wireframe, bottom left): each group with my balance and its limit badge; Group 2 dashed
@@ -118,7 +125,15 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
                   />
                 }
                 title={`${cap(m.displayName)}${m.memberId === as ? ' (you)' : ''}`}
-                value={<Badge kind={st}>{st}</Badge>}
+                {...(m.registry?.blockedByMe === true && { subtitle: 'Blocked by you' })}
+                value={
+                  <span className="flex items-center gap-2">
+                    {m.memberId !== as && m.registry != null && (
+                      <BlockButton trip={trip} member={m} />
+                    )}
+                    <Badge kind={st}>{st}</Badge>
+                  </span>
+                }
               />
             );
           })}
@@ -131,6 +146,66 @@ export function GroupSettingsScreen({ trip, as, go }: ScreenProps) {
           />
         </Section>
       </div>
+    </>
+  );
+}
+
+/**
+ * KITTY_REGISTRY=v2 (D6): block or unblock a member. Before blocking, the dialog says what the
+ * block means, the exclusion it counts for included (the agent's own warning).
+ */
+function BlockButton({ trip, member }: { trip: TripState; member: MemberView }) {
+  const [warning, setWarning] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiClientError | null>(null);
+  const blocked = member.registry?.blockedByMe === true;
+  const target = { member: member.memberId as MemberId };
+  const run = async (f: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await f();
+      trip.refresh();
+    } catch (e) {
+      setError(toClientError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const name = cap(member.displayName);
+  return (
+    <>
+      <Button
+        variant={blocked ? 'gray' : 'destructive'}
+        disabled={busy}
+        className="min-h-8 px-3 text-footnote"
+        onClick={() =>
+          blocked
+            ? void run(() => trip.client.unblockMember(target))
+            : void run(async () => setWarning((await trip.client.blockWarning(target)).warning))
+        }
+      >
+        {blocked ? 'Unblock' : 'Block'}
+      </Button>
+      {warning !== null && (
+        <AlertDialog
+          title={`Block ${name}?`}
+          message={
+            <>
+              No expense can have one of you paying and the other owing. Debts from before stay,
+              paid by hand. {warning}
+            </>
+          }
+          confirm="Block"
+          destructive
+          onCancel={() => setWarning(null)}
+          onConfirm={() => {
+            setWarning(null);
+            void run(() => trip.client.blockMember(target));
+          }}
+        />
+      )}
+      {error !== null && <ErrorNote error={error} className="mt-2" />}
     </>
   );
 }
