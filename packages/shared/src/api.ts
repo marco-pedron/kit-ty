@@ -93,6 +93,9 @@ export const DecisionRequestSchema = z
 
 export const PutPolicyRequestSchema = z.object({ policy: PolicySchema });
 
+/** KITTY_REGISTRY=v2: what the app shows before and after a block (the exclusion it counts for). */
+export const BlockResponseSchema = z.object({ warning: z.string() });
+
 export const ResolveDisputeRequestSchema = z.object({
   outcome: z.enum(['upheld', 'line_voided', 'expense_voided']),
   note: z.string(),
@@ -124,6 +127,7 @@ const coordinator = ['coordinator'] as const;
 
 const As = z.object({ as: ActorIdSchema });
 const AsExpense = As.extend({ id: ExpenseIdSchema });
+const AsMember = As.extend({ member: MemberIdSchema });
 const DaveLine = z.object({ expenseId: ExpenseIdSchema, member: MemberIdSchema });
 
 export const routes = {
@@ -188,6 +192,29 @@ export const routes = {
     params: As,
     body: PutPolicyRequestSchema,
     response: PolicySchema,
+  },
+  /** KITTY_REGISTRY=v2 only (D6): the warning, without blocking. */
+  blockWarning: {
+    method: 'GET',
+    path: '/api/:as/members/:member/block',
+    roles: traveler,
+    params: AsMember,
+    response: BlockResponseSchema,
+  },
+  blockMember: {
+    method: 'POST',
+    path: '/api/:as/members/:member/block',
+    roles: traveler,
+    params: AsMember,
+    response: BlockResponseSchema,
+  },
+  /** C7: removes every block of mine on that member. */
+  unblockMember: {
+    method: 'POST',
+    path: '/api/:as/members/:member/unblock',
+    roles: traveler,
+    params: AsMember,
+    response: z.object({ ok: z.literal(true) }),
   },
   resolveDispute: {
     method: 'POST',

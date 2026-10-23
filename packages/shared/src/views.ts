@@ -127,6 +127,11 @@ export const MemberViewSchema = z.object({
   status: MemberStatusSchema,
   /** Channel closing txids when excluded, for the explorer link. */
   closingTxids: z.array(TxidSchema),
+  /**
+   * KITTY_REGISTRY=v2: this member as the viewer's registry v2 sees it (null before the viewer
+   * is in it). Absent with v1.
+   */
+  registry: z.object({ blockedByMe: z.boolean(), excluded: z.boolean() }).nullable().optional(),
 });
 export type MemberView = z.output<typeof MemberViewSchema>;
 
