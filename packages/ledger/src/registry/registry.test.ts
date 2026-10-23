@@ -660,7 +660,7 @@ describe('contested lines decided by majority [23/10, provisional]', () => {
     let trip = derive(t);
     expect(decideRegistryAutoPay(policy, lineOf(trip, e, 'bob'), trip, LATER, null)).toEqual({
       pay: false,
-      reason: expect.stringMatching(/group decided you owe 300 to alice: approve it/),
+      reason: expect.stringMatching(/group decided you owe 3.00 to alice: approve it/),
     });
     t.decide('bob', e, 'approve');
     trip = derive(t);
