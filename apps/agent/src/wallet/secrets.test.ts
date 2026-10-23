@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { deriveAppSecretHex } from './rln-wallet.js';
-import { loadMemberWalletOptions } from './secrets.js';
+import { loadMemberMnemonic, loadMemberWalletOptions } from './secrets.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'kitty-secrets-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -65,5 +65,14 @@ describe('loadMemberWalletOptions', () => {
         seedStateFile,
       }),
     ).toThrow(/demo:reset/);
+  });
+});
+
+describe('loadMemberMnemonic', () => {
+  it("returns only that member's mnemonic", () => {
+    expect(loadMemberMnemonic('bob', secretsFile)).toBe('bob words');
+    expect(() => loadMemberMnemonic('charlie', secretsFile)).toThrow(
+      /no node mnemonic for charlie/,
+    );
   });
 });
