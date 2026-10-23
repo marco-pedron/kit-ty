@@ -7,7 +7,9 @@ import {
 } from '@kitty/shared';
 import { FakeLightningNetwork } from '../../dev-fakes/fake-wallet.js';
 import { CoordinatorAgent } from '../dave.js';
+import { LspAgent } from '../lsp-agent.js';
 import { MemberAgent } from '../member-agent.js';
+import { RegistryAgent } from '../registry-agent.js';
 import { MemoryTransport } from '../registry-transport.js';
 import { RegistryV2 } from '../registry-v2.js';
 import { seedRegistryV2 } from '../runtime.js';
@@ -28,15 +30,12 @@ export interface Demo {
   now: () => Date;
   /** One tick of every agent, then waits for their payments. */
   tickAll: () => Promise<void>;
-  /** With `registry: true`: the travelers' seeds and the registry v2 transport. */
-  registry: { seeds: Record<MemberId, Uint8Array>; transport: MemoryTransport } | null;
 }
 
 export interface TripAgents {
   agents: Record<MemberId, MemberAgent> & { dave: CoordinatorAgent };
   /** One tick of every agent, then waits for their payments. */
   tickAll: () => Promise<void>;
-  registry: Demo['registry'];
 }
 
 /** The four agents on any RelayClient, and the trip set up through the flows. */
@@ -47,8 +46,6 @@ export async function setUpTrip(p: {
   retryMs?: number;
   params?: Partial<TripParams>;
   backupQuietMs?: number;
-  /** KITTY_REGISTRY=v2: the registry v2 next to the legacy log, set up after it. */
-  registry?: boolean;
 }): Promise<TripAgents> {
   const common = {
     relay: p.relay,
@@ -58,28 +55,11 @@ export async function setUpTrip(p: {
     ...(p.backupQuietMs !== undefined && { backupQuietMs: p.backupQuietMs }),
   };
   const dave = new CoordinatorAgent({ ...common, wallet: p.net.wallet('dave') });
-  const registry = p.registry
-    ? {
-        transport: new MemoryTransport(),
-        seeds: Object.fromEntries(
-          MEMBER_IDS.map((id) => [id, crypto.getRandomValues(new Uint8Array(64))]),
-        ) as Record<MemberId, Uint8Array>,
-      }
-    : null;
   const travelers = Object.fromEntries(
-    MEMBER_IDS.map((id) => {
-      const wallet = p.net.wallet(id);
-      const reg =
-        registry &&
-        new RegistryV2({
-          displayName: id,
-          seed: registry.seeds[id],
-          wallet,
-          transport: registry.transport,
-          now: p.now,
-        });
-      return [id, new MemberAgent({ ...common, actor: id, wallet, ...(reg && { registry: reg }) })];
-    }),
+    MEMBER_IDS.map((id) => [
+      id,
+      new MemberAgent({ ...common, actor: id, wallet: p.net.wallet(id) }),
+    ]),
   ) as Record<MemberId, MemberAgent>;
   const agents = { ...travelers, dave };
 
@@ -94,19 +74,11 @@ export async function setUpTrip(p: {
     await dave.admit(id);
     await dave.channelsReady(id, { tripChannelId: `trip-${id}`, liquidityChannelId: `liq-${id}` });
   }
-  if (registry !== null)
-    await seedRegistryV2(
-      new Map<MemberId | 'dave', MemberAgent>(Object.entries(agents) as [MemberId, MemberAgent][]),
-      'vietnam-2026',
-      'Vietnam 2026',
-      p.net.assetId,
-      { ...DEMO_TRIP_PARAMS, ...p.params },
-    );
   const tickAll = async () => {
     for (const a of Object.values(agents)) await a.tick();
     for (const a of Object.values(agents)) await a.idle();
   };
-  return { agents, tickAll, registry };
+  return { agents, tickAll };
 }
 
 /** A manual clock, starting now. */
@@ -126,20 +98,78 @@ export async function demo(
     retryMs?: number;
     params?: Partial<TripParams>;
     backupQuietMs?: number;
-    registry?: boolean;
   } = {},
 ): Promise<Demo> {
   const net = new FakeLightningNetwork();
   const { now, advance } = manualClock();
   const relay = new MemoryRelay(net, now, { strict: opts.strict ?? true });
-  const { agents, tickAll, registry } = await setUpTrip({
+  const { agents, tickAll } = await setUpTrip({
     net,
     relay,
     now,
     ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
     ...(opts.params !== undefined && { params: opts.params }),
     ...(opts.backupQuietMs !== undefined && { backupQuietMs: opts.backupQuietMs }),
-    ...(opts.registry !== undefined && { registry: opts.registry }),
   });
-  return { net, relay, agents, advance, now, tickAll, registry };
+  return { net, relay, agents, advance, now, tickAll };
+}
+
+/** KITTY_REGISTRY=v2: three travelers on the registry only, dave's node as the LSP. */
+export interface RegistryDemo {
+  net: FakeLightningNetwork;
+  relay: MemoryRelay;
+  travelers: Record<MemberId, RegistryAgent>;
+  lsp: LspAgent;
+  seeds: Record<MemberId, Uint8Array>;
+  transport: MemoryTransport;
+  advance: (seconds: number) => void;
+  now: () => Date;
+  tickAll: () => Promise<void>;
+}
+
+/** The trip of the v2 demo, set up through the flows: alice creates it, bob and charlie join. */
+export async function registryDemo(opts: { retryMs?: number } = {}): Promise<RegistryDemo> {
+  const net = new FakeLightningNetwork();
+  const { now, advance } = manualClock();
+  const relay = new MemoryRelay(net, now, { strict: true });
+  const transport = new MemoryTransport();
+  const seeds = Object.fromEntries(
+    MEMBER_IDS.map((id) => [id, crypto.getRandomValues(new Uint8Array(64))]),
+  ) as Record<MemberId, Uint8Array>;
+  const daveWallet = net.wallet('dave');
+  const travelers = Object.fromEntries(
+    MEMBER_IDS.map((id) => {
+      const wallet = net.wallet(id);
+      const registry = new RegistryV2({ displayName: id, seed: seeds[id], wallet, transport, now });
+      return [
+        id,
+        new RegistryAgent({
+          actor: id,
+          wallet,
+          registry,
+          relay,
+          rate: () => ({ asOf: '2026-10-17', source: 'infra/rates.json', rates: { VND: '26350' } }),
+          lspNodePubkey: () => daveWallet.nodePubkey(),
+          now,
+          ...(opts.retryMs !== undefined && { retryMs: opts.retryMs }),
+        }),
+      ];
+    }),
+  ) as Record<MemberId, RegistryAgent>;
+  const lsp = new LspAgent({ wallet: daveWallet, targetCents: 3000n, now });
+  await seedRegistryV2(
+    new Map(Object.entries(travelers) as [MemberId, RegistryAgent][]),
+    'vietnam-2026',
+    'Vietnam 2026',
+    net.assetId,
+    DEMO_TRIP_PARAMS,
+  );
+  const tickAll = async () => {
+    for (const a of Object.values(travelers)) await a.tick();
+    await lsp.tick();
+    for (const a of Object.values(travelers)) await a.idle();
+    await lsp.idle();
+  };
+  await tickAll(); // every phone fetches the joins of the others
+  return { net, relay, travelers, lsp, seeds, transport, advance, now, tickAll };
 }

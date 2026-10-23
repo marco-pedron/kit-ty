@@ -491,8 +491,8 @@ export function voteRefusal(f: Fold, line: LineRecord, voter: string): string | 
   if (!isActive(f, voter)) return 'only an active member can vote';
   if (voter === line.payer || voter === line.debtor)
     return 'the creditor and the debtor of a line do not vote on it';
-  if (!isOpen(f, line)) return 'the line is already settled';
   if (line.groupOutcome !== null) return 'the group already decided this line';
+  if (!isOpen(f, line)) return 'the line is already settled';
   if (lineDecision(f.c, line.decisions) !== 'contest') return 'the line is not contested';
   const { due, voided } = groupMajority(f, line, null);
   if (due.includes(voter) || voided.includes(voter)) return 'you already voted on this contest';

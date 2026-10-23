@@ -61,7 +61,7 @@ describe('seedTrip', () => {
     await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
     const n = relay.events.length;
     expect(n).toBe(2 + 3 * 3);
-    const trip = rt.dave.trip();
+    const trip = rt.dave!.trip();
     expect(trip?.rate?.body.source).toBe(seed.rate.source);
     expect([...trip!.members.values()].every((m) => m.admitted && m.channelsReady)).toBe(true);
     await seedTrip(rt, seed, DEMO_TRIP_PARAMS, silent);
@@ -82,7 +82,7 @@ describe('seedTrip', () => {
     const { rt, seed } = runtime();
     const params = { ...DEMO_TRIP_PARAMS, silentAssentSeconds: 45, paymentDeadlineSeconds: 120 };
     await seedTrip(rt, seed, params, silent);
-    expect(rt.dave.trip()?.params).toEqual(params);
+    expect(rt.dave!.trip()?.params).toEqual(params);
     rt.stop();
   });
 

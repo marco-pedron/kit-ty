@@ -1,14 +1,19 @@
 import { sha256Hex, type SplitAssignment } from '@kitty/shared';
+import type { registry as v2 } from '@kitty/ledger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_RECEIPT, DEMO_SPLIT } from '../dev-fakes/fake-ai.js';
+import { FakeLightningNetwork } from '../dev-fakes/fake-wallet.js';
 import { FlowError } from './errors.js';
-import type { MemberAgent } from './member-agent.js';
+import { LspAgent, lspLiquidityPlan } from './lsp-agent.js';
 import { RegistryV2 } from './registry-v2.js';
-import { registryVersion } from './runtime.js';
-import { demo, type Demo } from './test/setup.js';
+import { registryVersion, startAgents } from './runtime.js';
+import { MemoryRelay } from './test/memory-relay.js';
+import { demo, manualClock, registryDemo, type RegistryDemo } from './test/setup.js';
 
-// KITTY_REGISTRY=v2 (step 3 and the double write of 22/10): the registry v2 next to the legacy
-// log, its keys per trip, and the rules it adds to the app.
+// KITTY_REGISTRY=v2 since 23/10: the travelers read and write only the registry v2 (no double
+// write), nobody coordinates, dave's node is only the LSP. The story of the v2 demo: bob pays
+// after the silent assent, charlie contests and then withdraws by approving (C3) and pays,
+// then everyone leaves closing their own channels, and the trip is closed.
 
 beforeEach(() => vi.stubEnv('KITTY_FAKES', '1'));
 afterEach(() => vi.unstubAllEnvs());
@@ -21,16 +26,24 @@ const WITHOUT_BOB: SplitAssignment[] = [
   { itemIndex: 2, members: ['alice', 'charlie'] },
 ];
 
-function reg(a: MemberAgent): RegistryV2 {
-  if (a.registry === null) throw new Error('no registry v2');
-  return a.registry;
+function lineOf(d: RegistryDemo, expenseId: string, debtor: 'bob' | 'charlie'): v2.RegistryLine {
+  const a = d.travelers[debtor];
+  const { trip, me } = a.requireMember();
+  return a.lineOf(trip, expenseId, me.pubkey);
 }
 
-async function v2demo(): Promise<Demo> {
-  const d = await demo({ registry: true });
+async function dinner(d: RegistryDemo): Promise<string> {
+  const { expenseId } = await d.travelers.alice.submitExpense(
+    DEMO_RECEIPT,
+    DEMO_SPLIT.assignments,
+    PHOTO,
+  );
   await d.tickAll();
-  return d;
+  return expenseId;
 }
+
+const balance = async (d: RegistryDemo, who: 'alice' | 'bob' | 'charlie') =>
+  d.net.wallet(who).balances();
 
 describe('KITTY_REGISTRY', () => {
   it('v1 by default; v2; anything else is refused', () => {
@@ -41,113 +54,263 @@ describe('KITTY_REGISTRY', () => {
     expect(() => registryVersion('v3')).toThrow(/v1 or v2/);
   });
 
-  it('with v1 there is no registry v2 and no blocks', async () => {
+  it('with v1 nothing changes, and there are no blocks', async () => {
     const d = await demo();
     expect(d.agents.alice.registry).toBeNull();
     await expect(d.agents.bob.blockMember('alice')).rejects.toThrow(/KITTY_REGISTRY=v2/);
   });
+
+  it('with v2 the runtime has the travelers and the LSP, and no coordinator', () => {
+    const net = new FakeLightningNetwork();
+    const { now } = manualClock();
+    const wallets = {
+      alice: net.wallet('alice'),
+      bob: net.wallet('bob'),
+      charlie: net.wallet('charlie'),
+      dave: net.wallet('dave'),
+    };
+    const seeds = {
+      alice: new Uint8Array(64).fill(1),
+      bob: new Uint8Array(64).fill(2),
+      charlie: new Uint8Array(64).fill(3),
+    };
+    const rt = startAgents({
+      fakes: true,
+      relay: new MemoryRelay(net, now),
+      wallets,
+      log: { info: () => undefined, warn: () => undefined },
+      tickMs: 3_600_000,
+      registry: { seeds },
+    });
+    expect(rt.registry).toBe('v2');
+    expect(rt.dave).toBeUndefined();
+    expect(rt.agents.size).toBe(0);
+    expect([...(rt.v2?.travelers.keys() ?? [])]).toEqual(['alice', 'bob', 'charlie']);
+    expect(rt.v2?.lsp).toBeInstanceOf(LspAgent);
+    rt.stop();
+  });
 });
 
-describe('registry v2 next to the legacy log', () => {
-  it('the trip is in the registry too: three members, no coordinator, one key per trip', async () => {
-    const d = await v2demo();
-    const { alice, bob, charlie, dave } = d.agents;
-    const view = reg(alice).view();
+describe('the trip in the registry v2 only', () => {
+  it('three members with one key per trip, each bound to its node; the LSP is not in it', async () => {
+    const d = await registryDemo();
+    const view = d.travelers.alice.view();
     expect(view?.rejected).toEqual([]);
     expect([...(view?.members.values() ?? [])].map((m) => m.displayName).sort()).toEqual([
       'alice',
       'bob',
       'charlie',
     ]);
-    expect(dave.registry).toBeNull();
-    for (const a of [alice, bob, charlie]) {
-      // the NIP-06 key of the trip is not the legacy app key, and binds the member's node
-      const pk = reg(a).pubkey;
-      expect(pk).not.toBe(await a.authorPubkey());
-      expect(view?.members.get(pk ?? '')?.nodePubkey).toBe(a.me()?.nodePubkey);
+    for (const id of ['alice', 'bob', 'charlie'] as const) {
+      const a = d.travelers[id];
+      expect(view?.members.get(a.registry.pubkey ?? '')?.nodePubkey).toBe(
+        await d.net.wallet(id).nodePubkey(),
+      );
     }
-  });
-
-  it('double write: the dinner is in the registry, valid; bob pays after the silent assent', async () => {
-    const d = await v2demo();
-    const { alice, bob } = d.agents;
-    await alice.submitExpense(DEMO_RECEIPT, DEMO_SPLIT.assignments, PHOTO);
-    await d.tickAll();
-    d.advance(20);
-    await d.tickAll();
-    await d.tickAll();
-    const legacy = bob.trip();
-    const line = [...(legacy?.lines.values() ?? [])].find(
-      (l) => l.debtorPubkey === bob.me()?.pubkey,
-    );
-    expect(line?.state).toBe('paid');
-    await d.tickAll(); // the PAYMENT_MADE is mirrored
-    const view = reg(alice).view();
-    expect(view?.rejected).toEqual([]);
-    const v2line = view && legacy && line ? reg(alice).lineOf(view, legacy, line) : null;
-    expect(v2line).toMatchObject({ amount: 309n, state: 'paid' });
-    // the invoices of a v2 trip last 48 h (plus a margin), not the legacy 3600 s
-    const inv = alice.log.invoices.get(line?.bolt11 ?? '');
-    expect(Date.parse(inv?.expiresAt ?? '') - Date.now()).toBeGreaterThan(48 * 3600 * 1000);
-  });
-
-  it('a block: "Ho pagato" refuses the expense and says why; the line is paid by hand only', async () => {
-    const d = await v2demo();
-    const { alice, bob } = d.agents;
-    await alice.submitExpense(DEMO_RECEIPT, DEMO_SPLIT.assignments, PHOTO);
-    await d.tickAll();
-
-    const { warning } = await bob.blockMember('alice');
-    expect(warning).toMatch(/counts towards excluding alice: with it, 1 of the 2 other active/);
-    await d.tickAll();
-    const aliceNode = alice.me()?.nodePubkey ?? '';
-    expect(reg(bob).standing()?.get(aliceNode)).toEqual({ blockedByMe: true, excluded: false });
-    expect(
-      reg(alice)
-        .standing()
-        ?.get(bob.me()?.nodePubkey ?? '')?.blockedByMe,
-    ).toBe(false);
-
-    // the debt from before the block stays, but no automatic payment
-    d.advance(20);
-    await d.tickAll();
-    const line = [...(bob.trip()?.lines.values() ?? [])].find(
-      (l) => l.debtorPubkey === bob.me()?.pubkey,
-    );
-    expect(line?.state).toBe('due');
-    expect(line && bob.decisionFor(line)?.reason).toMatch(/blocked: pay it by hand/);
-    expect((await d.net.wallet('bob').balances()).tripOutboundCents).toBe(5000n);
-
-    // a new expense between alice and bob: refused before any invoice is made
-    const refused = alice.submitExpense(DEMO_RECEIPT, DEMO_SPLIT.assignments, sha256Hex('2'));
-    await expect(refused).rejects.toThrow(FlowError);
-    await expect(refused).rejects.toThrow(/bob blocked alice/);
-    // without bob it goes through
-    await alice.submitExpense(DEMO_RECEIPT, WITHOUT_BOB, sha256Hex('3'));
-    await d.tickAll();
-    expect(reg(alice).view()?.rejected).toEqual([]);
-    expect(reg(alice).view()?.expenses.size).toBe(2);
-
-    await bob.unblockMember('alice');
-    await alice.submitExpense(DEMO_RECEIPT, DEMO_SPLIT.assignments, sha256Hex('4'));
-    expect(reg(alice).view()?.expenses.size).toBe(3);
+    const lspNode = await d.net.wallet('dave').nodePubkey();
+    expect([...(view?.members.values() ?? [])].some((m) => m.nodePubkey === lspNode)).toBe(false);
+    // nothing goes through the legacy log
+    expect(d.relay.events).toEqual([]);
   });
 
   it('after a restart a member finds its trip again from the seed alone', async () => {
-    const d = await v2demo();
-    const { bob } = d.agents;
-    if (d.registry === null) throw new Error('no registry');
+    const d = await registryDemo();
     const again = new RegistryV2({
       displayName: 'bob',
-      seed: d.registry.seeds.bob,
+      seed: d.seeds.bob,
       wallet: d.net.wallet('bob'),
-      transport: d.registry.transport,
+      transport: d.transport,
       now: d.now,
     });
     expect(await again.recover('vietnam-2026')).toBe(true);
-    expect(again.pubkey).toBe(reg(bob).pubkey);
-    expect(again.tripTag).toBe(reg(bob).tripTag);
+    expect(again.pubkey).toBe(d.travelers.bob.registry.pubkey);
+    expect(again.tripTag).toBe(d.travelers.bob.registry.tripTag);
     expect(again.isMember()).toBe(true);
-    expect(await again.recover('another-trip')).toBe(true); // already set: no second trip
+  });
+});
+
+describe('the story of the v2 demo', () => {
+  it('bob pays after the silent assent; charlie contests, withdraws (C3) and pays', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    expect(lineOf(d, id, 'bob')).toMatchObject({ amount: 309n, state: 'awaiting_decision' });
+    expect(lineOf(d, id, 'charlie')).toMatchObject({ amount: 350n, state: 'awaiting_decision' });
+
+    await d.travelers.charlie.decide(id, 'contest', 'I only had water');
+    expect(lineOf(d, id, 'charlie').state).toBe('contested');
+
+    d.advance(20);
+    await d.tickAll();
+    await d.tickAll();
+    const bobLine = lineOf(d, id, 'bob');
+    expect(bobLine.state).toBe('paid');
+    expect(d.travelers.bob.activity()[0]?.text).toMatch(
+      /paid 3\.09 to alice: .*no objection in 20 s, under your limit of 20\.00/,
+    );
+    expect((await balance(d, 'bob')).tripOutboundCents).toBe(4691n);
+    // a contested line is never paid automatically
+    expect(lineOf(d, id, 'charlie').state).toBe('contested');
+    expect((await balance(d, 'charlie')).tripOutboundCents).toBe(5000n);
+
+    // charlie has seen the line again: he approves, which withdraws the contest (C3)
+    const line = await d.travelers.charlie.decide(id, 'approve');
+    expect(line).toMatchObject({ state: 'due', approvedExplicitly: true });
+    await d.tickAll();
+    await d.tickAll();
+    expect(lineOf(d, id, 'charlie').state).toBe('paid');
+    expect((await balance(d, 'charlie')).tripOutboundCents).toBe(4650n);
+    expect((await balance(d, 'alice')).tripOutboundCents).toBe(5659n);
+    // the invoices of a v2 trip last 48 h (plus a margin)
+    const inv = d.travelers.alice.registry.invoice(lineOf(d, id, 'bob').invoices[0] ?? '');
+    expect(Date.parse(inv?.expiresAt ?? '') - d.now().getTime()).toBeGreaterThan(48 * 3600_000);
+  });
+
+  it('then every member leaves, closing its own channels with the LSP: the trip is closed', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    d.advance(20);
+    await d.tickAll();
+    await d.travelers.charlie.decide(id, 'approve');
+    await d.tickAll();
+    await d.tickAll();
+
+    for (const who of ['bob', 'charlie', 'alice'] as const) {
+      const before = await balance(d, who);
+      const r = await d.travelers[who].leave();
+      expect(r.closingTxids).toHaveLength(2);
+      expect(r.warning).toBeNull();
+      const after = await balance(d, who);
+      expect(after.tripOutboundCents).toBe(0n);
+      expect(after.onchainCents).toBe(before.onchainCents + before.tripOutboundCents);
+    }
+    await d.tickAll();
+    for (const who of ['alice', 'bob', 'charlie'] as const) {
+      const view = d.travelers[who].view();
+      expect(view?.finished).toBe(true);
+      expect(view?.rejected).toEqual([]);
+    }
+    expect(await d.net.wallet('dave').peerChannels()).toEqual([]);
+  });
+
+  it('nobody leaves with a known debt, contested lines included', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    await d.travelers.charlie.decide(id, 'contest', 'I only had water');
+    await expect(d.travelers.charlie.leave()).rejects.toThrow(/still owe 1 line/);
+    expect((await balance(d, 'charlie')).tripOutboundCents).toBe(5000n);
+    // alice can leave with credits: she is warned they will come on-chain only
+    const r = await d.travelers.alice.leave();
+    expect(r.warning).toMatch(/still owed 6\.59/);
+  });
+});
+
+describe('contested lines decided by the others [23/10, provisional]', () => {
+  it('bob is the only voter: "due" makes it due, but charlie must approve before it is paid', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    await d.travelers.charlie.decide(id, 'contest', 'I only had water');
+    await expect(d.travelers.alice.vote(id, 'charlie', 'voided')).rejects.toThrow(
+      /creditor and the debtor/,
+    );
+    const voted = await d.travelers.bob.vote(id, 'charlie', 'due');
+    expect(voted).toMatchObject({ state: 'due', group: { outcome: 'due' } });
+    d.advance(60);
+    await d.tickAll();
+    expect(lineOf(d, id, 'charlie').state).toBe('due');
+    const charlieLine = lineOf(d, id, 'charlie');
+    expect(d.travelers.charlie.decisionFor(charlieLine)?.reason).toMatch(
+      /group decided you owe 3\.50 to alice: approve it/,
+    );
+    await d.travelers.charlie.decide(id, 'approve');
+    await d.tickAll();
+    await d.tickAll();
+    expect(lineOf(d, id, 'charlie').state).toBe('paid');
+  });
+
+  it('"voided": charlie owes nothing and can leave', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    await d.travelers.charlie.decide(id, 'contest', 'I only had water');
+    await d.travelers.bob.vote(id, 'charlie', 'voided');
+    await d.tickAll();
+    expect(lineOf(d, id, 'charlie').state).toBe('voided');
+    await expect(d.travelers.bob.vote(id, 'charlie', 'due')).rejects.toThrow(/already decided/);
+    const r = await d.travelers.charlie.leave();
+    expect(r.closingTxids).toHaveLength(2);
+  });
+});
+
+describe('blocks', () => {
+  it('"Ho pagato" refuses the expense and says why; the line is paid by hand only', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    const { warning } = await d.travelers.bob.blockMember('alice');
+    expect(warning).toMatch(/counts towards excluding alice: with it, 1 of the 2 other active/);
+    d.advance(20);
+    await d.tickAll();
+    const line = lineOf(d, id, 'bob');
+    expect(line.state).toBe('manual_only');
+    expect(d.travelers.bob.decisionFor(line)?.reason).toMatch(/blocked: pay 3\.09 by hand/);
+    expect((await balance(d, 'bob')).tripOutboundCents).toBe(5000n);
+
+    const refused = d.travelers.alice.submitExpense(
+      DEMO_RECEIPT,
+      DEMO_SPLIT.assignments,
+      '2'.repeat(64),
+    );
+    await expect(refused).rejects.toThrow(FlowError);
+    await expect(refused).rejects.toThrow(/bob blocked alice/);
+    await d.travelers.alice.submitExpense(DEMO_RECEIPT, WITHOUT_BOB, '3'.repeat(64));
+    expect(d.travelers.alice.view()?.expenses.size).toBe(2);
+    await d.travelers.bob.unblockMember('alice');
+    await d.travelers.alice.submitExpense(DEMO_RECEIPT, DEMO_SPLIT.assignments, '4'.repeat(64));
+    expect(d.travelers.alice.view()?.rejected).toEqual([]);
+  });
+});
+
+describe('the LSP manages its liquidity from its own channels', () => {
+  const ch = (
+    peer: string,
+    local: bigint,
+    status: 'Opened' | 'Opening' | 'Closing' = 'Opened',
+  ) => ({
+    channelId: `${peer}-${local}`,
+    peerPubkey: peer,
+    status,
+    usable: status === 'Opened',
+    localCents: local,
+    remoteCents: 0n,
+  });
+
+  it('below the threshold, up to L; peers opening or closing a channel are left alone', () => {
+    expect(
+      lspLiquidityPlan(
+        [
+          ch('a', 2341n),
+          ch('b', 600n),
+          ch('b', 200n),
+          ch('c', 0n, 'Closing'),
+          ch('d', 0n, 'Opening'),
+        ],
+        1000n,
+        3000n,
+      ),
+    ).toEqual([
+      { peerPubkey: 'a', inboundCents: 2341n, openCents: 0n },
+      { peerPubkey: 'b', inboundCents: 800n, openCents: 2200n },
+    ]);
+  });
+
+  it('opens one channel when a member can receive too little, without the registry', async () => {
+    const d = await registryDemo();
+    const bob = d.net.account('bob');
+    bob.inboundCents = 500n;
+    await d.lsp.tick();
+    await d.lsp.idle();
+    expect(bob.inboundCents).toBe(3000n);
+    expect(d.lsp.operations()[0]).toMatchObject({ kind: 'opening_liquidity', status: 'done' });
+    await d.lsp.tick();
+    await d.lsp.idle();
+    expect(d.lsp.operations()).toHaveLength(1);
   });
 });

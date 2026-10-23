@@ -101,7 +101,7 @@ describe('A5 on the real RlnWallet (simulated nodes)', () => {
     >;
 
     // The trip: asset of the seed, rate of the fixture, members bound to their real nodes.
-    const trip = s.rt.dave.trip()!;
+    const trip = s.rt.dave!.trip()!;
     expect(trip.assetId).toBe(ASSET);
     expect(trip.rate?.body.rates.VND).toBe('26350');
     for (const id of MEMBER_IDS) {
@@ -144,10 +144,10 @@ describe('A5 on the real RlnWallet (simulated nodes)', () => {
   it('a restart with the same seed adds nothing; another seed stops with a clear error', async () => {
     const s = await realStack();
     await seedTrip(s.rt, s.seed, DEMO_TRIP_PARAMS, s.log);
-    const before = s.rt.dave.log.events.length;
+    const before = s.rt.dave!.log.events.length;
     await seedTrip(s.rt, s.seed, DEMO_TRIP_PARAMS, s.log);
-    await s.rt.dave.sync();
-    expect(s.rt.dave.log.events.length).toBe(before);
+    await s.rt.dave!.sync();
+    expect(s.rt.dave!.log.events.length).toBe(before);
     await expect(
       seedTrip(s.rt, { ...s.seed, assetId: 'rgb:new-seed' }, DEMO_TRIP_PARAMS, s.log),
     ).rejects.toThrow(
