@@ -3,7 +3,14 @@ import { useState } from 'react';
 import { SHOW_DEMO_SECOND_GROUP } from '../config.js';
 import { approvalText, cap, historyRows } from '../history.js';
 import { openProof } from '../nav.js';
-import { canApprove, canDispute, formatCountdown, needsMe, secondsLeft } from '../lines.js';
+import {
+  canApprove,
+  canDispute,
+  canVote,
+  formatCountdown,
+  needsMe,
+  secondsLeft,
+} from '../lines.js';
 import { toClientError, useNow } from '../state.js';
 import { Badge, LimitBadge } from '../ui/Badge.js';
 import { Button } from '../ui/Button.js';
@@ -27,8 +34,10 @@ export function HomeScreen(props: ScreenProps) {
   const limit = (s?.me?.policy ?? DEFAULT_POLICY).autoPayLimitCents;
   const [disputing, setDisputing] = useState<{ line: LineView; merchant: string } | null>(null);
 
-  if (s?.members.find((m) => m.memberId === as)?.status === 'excluded')
+  const mine = s?.members.find((m) => m.memberId === as);
+  if (mine?.status === 'excluded' || mine?.registry?.excluded === true)
     return <ExcludedScreen {...props} />;
+  if (mine?.status === 'left') return <LeftScreen {...props} />;
   return (
     <>
       <TopBar {...props} />
@@ -49,7 +58,11 @@ export function HomeScreen(props: ScreenProps) {
             <StateView
               kind="loading"
               title="Waiting for the trip"
-              text="Dave, the coordinator, is setting it up."
+              text={
+                s?.registry === 'v2'
+                  ? 'Joining the group with the invite.'
+                  : 'Dave, the coordinator, is setting it up.'
+              }
             />
           ) : (
             <GroupBody {...props} limit={limit} onDispute={setDisputing} />
@@ -131,11 +144,42 @@ function ExcludedScreen({ trip, go }: ScreenProps) {
     <div className="flex flex-col items-center px-8 pt-[18dvh] text-center">
       <CatHead variant="out" size={128} label="The kitten, out of the group" />
       <h1 className="mt-6 text-title2 font-bold">You're out of {s?.trip?.name ?? 'the group'}.</h1>
-      <p className="mt-1 text-body text-label-2">Dave covered your part.</p>
+      <p className="mt-1 text-body text-label-2">
+        {s?.registry === 'v2'
+          ? 'More than half of the others blocked you. What you owe stays: pay it by hand.'
+          : 'Dave covered your part.'}
+      </p>
       <div className="card mt-6 px-5 py-3">
         <p className="text-footnote text-label-2">Your funds, back on-chain</p>
         <p className="tabular text-title2 font-semibold">
           {left == null ? '—' : `${formatCents(left.onchainCents)} DUSD`}
+        </p>
+      </div>
+      <Button variant="plain" className="mt-4" onClick={() => go('log')}>
+        See the verified log
+      </Button>
+    </div>
+  );
+}
+
+/** KITTY_REGISTRY=v2: I left the trip; my channels with the LSP are closed. */
+function LeftScreen({ trip, go }: ScreenProps) {
+  const s = trip.state;
+  const closed = s?.trip?.status === 'closed';
+  return (
+    <div className="flex flex-col items-center px-8 pt-[18dvh] text-center">
+      <CatHead variant="out" size={128} label="The kitten, home from the trip" />
+      <h1 className="mt-6 text-title2 font-bold">You left {s?.trip?.name ?? 'the trip'}.</h1>
+      <p className="mt-1 text-body text-label-2">
+        Your channels with the LSP are closed.{' '}
+        {closed
+          ? 'Everyone has left: the trip is closed.'
+          : 'The trip closes when everyone has left.'}
+      </p>
+      <div className="card mt-6 px-5 py-3">
+        <p className="text-footnote text-label-2">Your funds, back on-chain</p>
+        <p className="tabular text-title2 font-semibold">
+          {s?.me?.balance == null ? '—' : `${formatCents(s.me.balance.onchainCents)} DUSD`}
         </p>
       </div>
       <Button variant="plain" className="mt-4" onClick={() => go('log')}>
@@ -170,6 +214,9 @@ function GroupBody({
       .map((line) => ({ line, merchant: e.merchant })),
   );
   const rows = historyRows(expenses, as, (l) => l.debtor === as && needsMe(l));
+  const votes = expenses.flatMap((e) =>
+    e.lines.filter((l) => canVote(l)).map((line) => ({ line, merchant: e.merchant })),
+  );
 
   if (expenses.length === 0)
     return (
@@ -182,6 +229,18 @@ function GroupBody({
     );
   return (
     <>
+      {votes.length > 0 && (
+        <div className="space-y-3 pb-3">
+          {votes.map((v) => (
+            <VoteCard
+              key={`${v.line.expenseId}:${v.line.debtor}`}
+              trip={trip}
+              line={v.line}
+              merchant={v.merchant}
+            />
+          ))}
+        </div>
+      )}
       {pending.length > 0 && (
         <div className={`space-y-3 ${rows.length > 0 ? 'pb-3' : ''}`}>
           {pending.map((p) => (
@@ -262,6 +321,49 @@ function PendingPart({
   );
 }
 
+/**
+ * KITTY_REGISTRY=v2 (23/10, provisional): a part someone else disputed; I am one of the voters
+ * (neither its payer nor its debtor). More than half of the voters decide, for good.
+ */
+function VoteCard({
+  trip,
+  line: l,
+  merchant,
+}: Pick<ScreenProps, 'trip'> & { line: LineView; merchant: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiClientError | null>(null);
+  const vote = (outcome: 'due' | 'voided') => {
+    setBusy(true);
+    setError(null);
+    trip.client
+      .voteLine({ id: l.expenseId, member: l.debtor, outcome })
+      .then(() => trip.refresh())
+      .catch((e: unknown) => setError(toClientError(e)))
+      .finally(() => setBusy(false));
+  };
+  const voters = l.group?.voters.length ?? 0;
+  return (
+    <div className="card px-4 py-3">
+      <p className="text-subhead font-semibold">
+        {cap(l.debtor)} disputes {formatCents(l.cents)} DUSD · {merchant}
+      </p>
+      <p className="mt-1 text-footnote text-label-2">
+        “{l.contestReason ?? ''}” · You are one of {voters} {voters === 1 ? 'voter' : 'voters'}:
+        more than half decides, for good.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <Button variant="gray" disabled={busy} onClick={() => vote('voided')}>
+          Void it
+        </Button>
+        <Button disabled={busy} onClick={() => vote('due')}>
+          {busy ? <Working /> : `${cap(l.debtor)} owes it`}
+        </Button>
+      </div>
+      {error && <ErrorNote error={error} className="mt-3" />}
+    </div>
+  );
+}
+
 /** Dispute your part (wireframe story 1): the reason is required, Dave reads it. */
 function DisputeSheet({
   trip,
@@ -289,7 +391,11 @@ function DisputeSheet({
   return (
     <Sheet
       title="Dispute your part"
-      subtitle={`${merchant} · ${formatCents(l.cents)} to ${cap(l.payer)} · Dave will decide`}
+      subtitle={`${merchant} · ${formatCents(l.cents)} to ${cap(l.payer)} · ${
+        trip.state?.registry === 'v2'
+          ? 'the others in the group will decide, or you withdraw it'
+          : 'Dave will decide'
+      }`}
       onClose={onClose}
     >
       <form

@@ -44,5 +44,13 @@ describe('member standing in Group settings', () => {
     expect(memberStanding(member('bob', 'active'), expenses)).toBe('active');
     expect(memberStanding(member('charlie', 'excluded'), expenses)).toBe('excluded');
     expect(memberStanding(member('alice', 'admitted'), expenses)).toBe('joining');
+    // v2: left the trip; excluded by the others, from the registry
+    expect(memberStanding(member('bob', 'left'), expenses)).toBe('left');
+    expect(
+      memberStanding(
+        { ...member('bob', 'active'), registry: { blockedByMe: true, excluded: true } },
+        expenses,
+      ),
+    ).toBe('excluded');
   });
 });
