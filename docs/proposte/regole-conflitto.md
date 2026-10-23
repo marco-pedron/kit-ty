@@ -1,6 +1,6 @@
 # Regole di conflitto: decisioni
 
-> **Aggiornato il 22/10/2026.** Le regole C1-C15 vengono da `docs/piano-migrazione-stack-a.md` §2.4. Il documento del team (`docs/stack-a-decisioni.md`) fissava C1 ("vince contesto") e C2 ("vince il pagamento"). Il 22/10 sono state decise tutte le altre; per C2 (ambito) e C12 è stata scelta l'alternativa alla proposta iniziale. È stata decisa anche D6 (ambito del blocco). Resta aperta solo D3 (Sybil). Il codice è in `packages/ledger/src/conflicts.ts`, con un test per regola in `conflicts.test.ts`.
+> **Aggiornato il 23/10/2026** con le decisioni del 23/10 (Dave solo LSP, chiusura del viaggio, contestazioni a maggioranza), segnate "(aggiornato il 23/10)". **Aggiornato il 22/10/2026.** Le regole C1-C15 vengono da `docs/piano-migrazione-stack-a.md` §2.4. Il documento del team (`docs/stack-a-decisioni.md`) fissava C1 ("vince contesto") e C2 ("vince il pagamento"). Il 22/10 sono state decise tutte le altre; per C2 (ambito) e C12 è stata scelta l'alternativa alla proposta iniziale. È stata decisa anche D6 (ambito del blocco). Resta aperta solo D3 (Sybil). Il codice è in `packages/ledger/src/conflicts.ts`, con un test per regola in `conflicts.test.ts`.
 
 **Vincolo comune a tutte le regole.** Lo spareggio sull'id si può minare: chi scrive un evento può provare nonce diversi finché il suo id non viene "prima". Per questo una regola che muove soldi guarda solo la causalità ("X precede Y") e il tipo di evento. L'ordine fisso decide solo i casi "vince il primo" in cui vincere non dà vantaggi.
 
@@ -57,7 +57,33 @@ Le quote firmate al tavolo **non contano nel tetto giornaliero**, perché sono u
 
 Confermato: anche una riga contestata è un debito noto, quindi blocca l'uscita finché la contestazione è aperta. È una conseguenza dichiarata della regola "si esce senza debiti noti".
 
+## Dave solo LSP *(aggiornato il 23/10)*
+
+Confermato quanto deciso il 21/10: Dave non è un membro. Non viene invitato, non firma eventi e non legge il registro. Il suo nodo instrada i pagamenti come LSP; l'app e il ledger non sanno che dietro c'è Dave. I membri della demo sono Alice, Bob e Charlie. La liquidità dell'LSP si gestisce guardando solo i suoi canali.
+
+Codice: con `KITTY_REGISTRY=v2` i viaggiatori sono `RegistryAgent` (`apps/agent/src/flows/registry-agent.ts`) e Dave è `LspAgent` (`lsp-agent.ts`); le rotte di Dave come coordinatore rispondono `NOT_ALLOWED`.
+
+## Chiusura del viaggio *(aggiornato il 23/10)*
+
+Non esiste un evento di chiusura e nessuno la decide. Quando un membro esce (`MEMBER_LEFT`, valido solo senza debiti noti), chiude i propri canali con l'LSP dal proprio wallet. Il viaggio è chiuso quando tutti i membri sono usciti: lo calcola ogni telefono (`finished` di `deriveRegistry`).
+
+- **Ordine nell'app.** Prima `MEMBER_LEFT` (se il registro lo rifiuta non si chiude niente), poi la chiusura cooperativa dei due canali. Se la chiusura non riesce, l'agente la ritenta finché non riesce; l'uscita resta valida.
+- **Conseguenza da confermare.** Si può uscire con crediti da incassare (regola del 22/10), ma dopo l'uscita i canali sono chiusi: chi deve ancora pagare l'uscito può farlo solo on-chain. L'app lo avvisa al momento dell'uscita.
+
+## Contestazioni a maggioranza (provvisoria) *(aggiornato il 23/10)*
+
+Nuovo evento `LINE_VOTED` su una riga contestata, con esito "dovuta" o "annullata".
+
+- **Chi vota.** I membri attivi tranne il creditore e il debitore della riga.
+- **Quando decide.** Più della metà dei votanti, contati sugli eventi che il voto decisivo conosceva, come per l'esclusione: un voto concorrente non conta, e l'ordine di arrivo non cambia l'esito. Conta un voto per votante, dato sulla contestazione in vigore. L'esito è **definitivo**: dopo, nessuno vota più su quella riga e il debitore non può contestarla di nuovo.
+- **Finché la maggioranza non c'è,** la riga resta contestata. Il debitore può sempre ritirare la contestazione approvando dopo averla vista (C3), e il creditore può annullare la spesa (C2). Il pagamento a mano resta sempre possibile.
+- **Approvazione concorrente con "annullata".** Vale l'approvazione: il debitore ha accettato di pagare. Un'approvazione che conosce già l'esito "annullata" è rifiutata.
+- **Riga dovuta per voto.** Torna dovuta, ma l'agente del debitore non la paga da solo finché il debitore non la approva o la paga a mano (scelta del 23/10, come per la riga confermata da Dave nel v1 con `payUpheldDisputes` spento).
+- **Limiti dichiarati.** Dipende da D3 (Sybil). In un gruppo di tre membri c'è un solo votante, che decide da solo.
+- **Un solo punto del codice,** perché il modello definitivo (D5) è ancora da decidere: `groupMajority`, `voidedByGroup` e `voteRefusal` in `packages/ledger/src/registry/fold.ts`. `validate.ts` e `derive.ts` li leggono soltanto. Test in `registry.test.ts`, "contested lines decided by majority".
+
 ## Domande ancora aperte
 
-- **D3, Sybil sugli inviti:** si decide insieme alla politica di esclusione. Finché resta aperta, l'esclusione ha il limite dichiarato sopra.
+- **D3, Sybil sugli inviti:** si decide insieme alla politica di esclusione. Finché resta aperta, l'esclusione e il voto sulle contestazioni hanno il limite dichiarato sopra. *(aggiornato il 23/10)*
+- **D5, contestazioni senza arbitro:** dal 23/10 c'è la regola provvisoria a maggioranza; il modello definitivo resta da decidere. *(aggiornato il 23/10)*
 - **Fazioni** e **cambio nel weekend:** invariati.
