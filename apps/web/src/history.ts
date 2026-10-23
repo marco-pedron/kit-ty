@@ -163,6 +163,9 @@ export function approvalText(
   const askAlways = limitCents <= 0n;
   let sentence: string;
   if (l.resolution?.outcome === 'upheld') sentence = 'Dave upheld it: I need your OK';
+  else if (l.group?.outcome === 'due') sentence = 'The group voted it due: I need your OK';
+  else if (l.state === 'contested')
+    sentence = 'You disputed it. Approve to withdraw the dispute, or wait for the group';
   else if (l.state === 'submitted') sentence = 'Your agent is checking it…';
   else if (l.state === 'awaiting_decision' && l.cents <= limitCents)
     sentence = `Paying in ${formatCountdown(secondsLeft ?? 0)} unless you dispute`;

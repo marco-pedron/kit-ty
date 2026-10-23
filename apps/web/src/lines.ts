@@ -15,12 +15,19 @@ export const canDispute = (l: LineView): boolean => UNDECIDED.includes(l.state);
  */
 export function canApprove(l: LineView): boolean {
   if (UNDECIDED.includes(l.state)) return true;
+  // KITTY_REGISTRY=v2: approving my contested part withdraws the contest (C3); a part the
+  // others voted due waits for my OK before my agent pays it.
+  if (l.group !== undefined && l.state === 'contested') return true;
+  if (l.group?.outcome === 'due' && l.state === 'due' && l.agent?.pay === false) return true;
   return (
     (l.state === 'due' || l.state === 'overdue') &&
     l.resolution?.outcome === 'upheld' &&
     l.agent?.pay === false
   );
 }
+
+/** KITTY_REGISTRY=v2: someone else's contested part I may vote on (23/10, provisional). */
+export const canVote = (l: LineView): boolean => l.group?.canVote === true;
 
 /** A part waiting for me: shown as the inline card with the agent's sentence and the buttons. */
 export const needsMe = (l: LineView): boolean => canApprove(l) || canDispute(l);

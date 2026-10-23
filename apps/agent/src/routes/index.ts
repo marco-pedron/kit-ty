@@ -15,18 +15,25 @@ import {
   type RouteName,
   type Routes,
 } from '@kitty/shared';
-import { LedgerError } from '@kitty/ledger';
+import { LedgerError, registry } from '@kitty/ledger';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AiService } from '../ai/types.js';
 import { FlowError } from '../flows/errors.js';
 import type { CoordinatorAgent } from '../flows/dave.js';
 import type { MemberAgent } from '../flows/member-agent.js';
-import type { AgentRuntime } from '../flows/runtime.js';
+import type { RegistryAgent } from '../flows/registry-agent.js';
+import type { AgentRuntime, RegistryRuntime } from '../flows/runtime.js';
 import { RelayError } from '../relay/errors.js';
 import { WalletError } from '../wallet/errors.js';
 import { buildProof } from './proof.js';
 import { buildTripView, expenseViewOf, lineViewOf } from './state.js';
+import {
+  buildRegistryProof,
+  buildRegistryTripView,
+  registryExpenseView,
+  registryLineView,
+} from './state-v2.js';
 
 export interface RouteDeps {
   /**
@@ -181,7 +188,48 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
       .filter((m) => m.channelsReady && !m.excluded)
       .map((m) => m.memberId);
 
+  // KITTY_REGISTRY=v2 (23/10): the travelers' RegistryAgents, the LSP, no coordinator.
+  const registryOf = (): RegistryRuntime | null => {
+    const rt = deps.runtime();
+    return rt?.registry === 'v2' ? (rt.v2 ?? null) : null;
+  };
+  const travelerV2 = (v2: RegistryRuntime, as: ActorId): RegistryAgent => {
+    const a = as === 'dave' ? undefined : v2.travelers.get(as);
+    if (a === undefined) throw notRunning(`the agent of ${as} is`);
+    return a;
+  };
+  /** Members of the registry who can share an expense: in the trip, not excluded. */
+  const activeV2 = (agent: RegistryAgent): MemberId[] => {
+    const trip = agent.view();
+    return trip === null
+      ? []
+      : [...trip.members.values()]
+          .filter((m) => registry.isActive(trip.fold, m.pubkey))
+          .map((m) => m.displayName as MemberId);
+  };
+  const noCoordinator = () =>
+    refuse(
+      'NOT_ALLOWED',
+      'With KITTY_REGISTRY=v2 there is no coordinator: dave is only the LSP and routes the payments.',
+      'Contests are withdrawn by the debtor or decided by the other members; each member leaves on their own.',
+    );
+  const v1Only = (what: string) =>
+    refuse('NOT_ALLOWED', `${what} needs the registry v2 (KITTY_REGISTRY=v2)`);
+
   handle('getState', async ({ params: { as } }) => {
+    const v2 = registryOf();
+    if (v2 !== null) {
+      const agent = as === 'dave' ? null : (v2.travelers.get(as) ?? null);
+      return buildRegistryTripView({
+        as,
+        rt: v2,
+        balances: agent === null ? null : await agent.balances(),
+        ai: as === 'dave' ? null : (deps.ai?.status() ?? null),
+        fakes: deps.fakes,
+        explorerBaseUrl: deps.explorerBaseUrl,
+        now: deps.now(),
+      });
+    }
     const agent = deps.runtime()?.agents.get(as) ?? null;
     if (agent !== null) await agent.authorPubkey().catch(() => undefined);
     return buildTripView({
@@ -201,10 +249,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   );
 
   handle('proposeSplit', async ({ params: { as }, body }) => {
-    const agent = agentOf(as);
+    const v2 = registryOf();
+    const agent: MemberAgent | RegistryAgent = v2 === null ? agentOf(as) : travelerV2(v2, as);
     const result = await readyAi().proposeSplit(
       body.receipt,
-      activeTravelers(agent),
+      'trip' in agent ? activeTravelers(agent) : activeV2(agent),
       body.text,
       body.clarification,
       as === 'dave' ? undefined : as, // traveler-only route: never dave
@@ -226,6 +275,19 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   handle('submitExpense', async ({ params: { as }, body }) => {
+    const v2 = registryOf();
+    if (v2 !== null) {
+      const agent = travelerV2(v2, as);
+      const { expenseId } = await agent.submitExpense(
+        body.receipt,
+        body.assignments,
+        body.receiptImageSha256,
+      );
+      const view = registryExpenseView(agent, expenseId, deps.now());
+      if (view === null)
+        throw refuse('INTERNAL', 'the expense was sent but is not in the registry');
+      return view;
+    }
     const agent = agentOf(as);
     const stored = await agent.submitExpense(
       body.receipt,
@@ -238,11 +300,28 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
   });
 
   handle('decideLine', async ({ params: { as, id }, body }) => {
+    const v2 = registryOf();
+    if (v2 !== null) {
+      const agent = travelerV2(v2, as);
+      return registryLineView(
+        agent,
+        await agent.decide(id, body.decision, body.reason),
+        deps.now(),
+      );
+    }
     const agent = agentOf(as);
     return lineViewOf(agent, await agent.decide(id, body.decision, body.reason), deps.now());
   });
 
   handle('voidExpense', async ({ params: { as, id } }) => {
+    const v2 = registryOf();
+    if (v2 !== null) {
+      const agent = travelerV2(v2, as);
+      await agent.voidExpense(id);
+      const view = registryExpenseView(agent, id, deps.now());
+      if (view === null) throw refuse('NOT_FOUND', `no expense ${id}`);
+      return view;
+    }
     const agent = agentOf(as);
     await agent.voidExpense(id);
     const view = expenseViewOf(agent, { expenseId: id }, deps.now());
@@ -250,34 +329,64 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return view;
   });
 
-  handle('putPolicy', async ({ params: { as }, body }) => agentOf(as).updatePolicy(body.policy));
+  handle('putPolicy', async ({ params: { as }, body }) => {
+    const v2 = registryOf();
+    return (v2 === null ? agentOf(as) : travelerV2(v2, as)).updatePolicy(body.policy);
+  });
 
   // KITTY_REGISTRY=v2 only: with v1 the agent answers NOT_ALLOWED.
+  const blocker = (as: ActorId) => {
+    const v2 = registryOf();
+    return v2 === null ? agentOf(as) : travelerV2(v2, as);
+  };
   handle('blockWarning', async ({ params: { as, member } }) => ({
-    warning: await agentOf(as).blockWarning(member),
+    warning: await blocker(as).blockWarning(member),
   }));
-  handle('blockMember', async ({ params: { as, member } }) => agentOf(as).blockMember(member));
+  handle('blockMember', async ({ params: { as, member } }) => blocker(as).blockMember(member));
   handle('unblockMember', async ({ params: { as, member } }) => {
-    await agentOf(as).unblockMember(member);
+    await blocker(as).unblockMember(member);
     return { ok: true as const };
   });
 
+  handle('voteLine', async ({ params: { as, id, member }, body }) => {
+    const v2 = registryOf();
+    if (v2 === null) throw v1Only('Voting on a contested line');
+    const agent = travelerV2(v2, as);
+    return registryLineView(agent, await agent.vote(id, member, body.outcome), deps.now());
+  });
+
+  handle('leaveTrip', async ({ params: { as } }) => {
+    const v2 = registryOf();
+    if (v2 === null) throw v1Only('Leaving the trip');
+    return travelerV2(v2, as).leave();
+  });
+
   handle('resolveDispute', async ({ params: { expenseId, member }, body }) => {
+    if (registryOf() !== null) throw noCoordinator();
     const dave = daveAgent();
     const line = await dave.resolveDispute(expenseId, member, body.outcome, body.note);
     return lineViewOf(dave, line, deps.now());
   });
 
-  handle('coverAndExclude', async ({ params: { expenseId, member } }) =>
-    daveAgent().coverAndExclude(expenseId, member),
-  );
+  handle('coverAndExclude', async ({ params: { expenseId, member } }) => {
+    if (registryOf() !== null) throw noCoordinator();
+    return daveAgent().coverAndExclude(expenseId, member);
+  });
 
   handle('putRates', async ({ body }) => {
+    if (registryOf() !== null) throw noCoordinator();
     await daveAgent().setRate(body);
     return daveAgent().trip()?.rate?.body ?? body;
   });
 
   handle('getProof', async ({ params: { paymentHash } }) => {
+    const v2 = registryOf();
+    if (v2 !== null) {
+      const proof = buildRegistryProof(v2, paymentHash);
+      if (proof === null)
+        throw refuse('NOT_FOUND', `no payment ${paymentHash.slice(0, 8)}… in the registry`);
+      return proof;
+    }
     // Every agent holds the same verified log; dave's sees every line.
     const agent = deps.runtime()?.dave;
     if (agent === undefined) throw notRunning('the agents are');

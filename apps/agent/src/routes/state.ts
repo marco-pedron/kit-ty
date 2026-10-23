@@ -1,6 +1,6 @@
-// OWNED BY STREAM C (task C3): GET /api/:as/state. The TripView is built from the agent's own
-// verified copy of the log (MemberAgent, task A5), never from the relay, and from the member's
-// own node for balances. Privacy (SPEC §1): a traveler gets only their own balances and lines
+// OWNED BY STREAM C (task C3): GET /api/:as/state with KITTY_REGISTRY=v1 (v2: state-v2.ts).
+// The TripView is built from the agent's own verified copy of the log (MemberAgent, task A5),
+// never from the relay, and from the member's own node for balances. Privacy (SPEC §1): a traveler gets only their own balances and lines
 // in full; dave gets the operator screens and no traveler balance.
 import {
   DEFAULT_POLICY,
@@ -165,8 +165,6 @@ class ViewContext {
   }
 
   members(): MemberView[] {
-    const registry = this.agent.registry;
-    const standing = registry?.standing() ?? null;
     return [...this.trip.members.values()].map((m) => ({
       memberId: m.memberId,
       displayName: m.displayName,
@@ -180,7 +178,6 @@ class ViewContext {
             ? 'admitted'
             : 'joined',
       closingTxids: [...m.closingTxids],
-      ...(registry !== null && { registry: standing?.get(m.nodePubkey) ?? null }),
     }));
   }
 

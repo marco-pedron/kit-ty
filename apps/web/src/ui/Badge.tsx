@@ -4,7 +4,16 @@ import { paymentMode } from '../mode.js';
 // Badges (DESIGN.md §7): Caption1 semibold pills.
 
 export type BadgeKind =
-  'auto' | 'limit' | 'ask' | 'active' | 'insolvent' | 'excluded' | 'operator' | 'joining' | 'muted';
+  | 'auto'
+  | 'limit'
+  | 'ask'
+  | 'active'
+  | 'insolvent'
+  | 'excluded'
+  | 'left'
+  | 'operator'
+  | 'joining'
+  | 'muted';
 
 const KIND: Record<BadgeKind, string> = {
   auto: 'bg-positive text-on-positive',
@@ -13,6 +22,7 @@ const KIND: Record<BadgeKind, string> = {
   active: 'bg-positive-soft text-label',
   insolvent: 'bg-accent-soft text-label',
   excluded: 'bg-bg-fill text-label-2 line-through',
+  left: 'bg-bg-fill text-label-2',
   operator: 'bg-bg-fill text-label',
   joining: 'bg-bg-fill text-label-2',
   muted: 'bg-bg-fill text-label-3',
