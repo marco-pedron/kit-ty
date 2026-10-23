@@ -400,7 +400,7 @@ describe('closeChannelsWith (B7)', () => {
       })
       .on('/refreshtransfers', () => ({ json: { transfers: {} } }));
     const { wallet } = setup(rln, {
-      coordinator: {
+      chain: {
         esplora: chain.esplora,
         miner: chain.miner,
         blockWaitMs: 0,
@@ -412,7 +412,7 @@ describe('closeChannelsWith (B7)', () => {
     return { rln, wallet, chain };
   }
 
-  it('is refused on any wallet but dave, before touching the node', async () => {
+  it('is refused without the chain access, before touching the node', async () => {
     const { rln, wallet } = setup();
     expect(await codeOf(wallet.closeChannelsWith(CHARLIE_NODE))).toBe('NOT_ALLOWED');
     expect(rln.calls).toEqual([]);
@@ -507,6 +507,69 @@ describe('closeChannelsWith (B7)', () => {
     expect(await codeOf(wallet.closeChannelsWith('nope'))).toBe('VALIDATION_ERROR');
     expect(rln.calls).toEqual([]);
   });
+
+  it('v2: a member leaving closes its own two channels with the LSP the same way', async () => {
+    const { rln, wallet, chain } = daveSetup();
+    const toLsp = { peer_pubkey: DAVE_NODE };
+    rln
+      .on('/listchannels', () => ({
+        json: {
+          channels: [channel('trip', TRIP_FUNDING, toLsp), channel('liq', LIQ_FUNDING, toLsp)],
+        },
+      }))
+      .on('/listpeers', () => ({ json: { peers: [{ pubkey: DAVE_NODE }] } }));
+    const r = await wallet.closeChannelsWith(DAVE_NODE);
+    expect(r).toMatchObject({ swept: true, blocksMined: 7 });
+    expect(rln.calls.filter((c) => c.endpoint === '/closechannel').map((c) => c.body)).toEqual([
+      { channel_id: 'trip', peer_pubkey: DAVE_NODE, force: false },
+      { channel_id: 'liq', peer_pubkey: DAVE_NODE, force: false },
+    ]);
+    expect(chain.mined).toBe(7);
+  });
+});
+
+describe('peerChannels (v2: the LSP manages its liquidity from its channels, 23/10)', () => {
+  it('per channel: peer, status and the trip asset on each side; other assets left out', async () => {
+    const rln = new FakeRln().on('/listchannels', () => ({
+      json: {
+        channels: [
+          channel('liq', LIQ_FUNDING, {
+            asset_id: ASSET,
+            asset_local_amount: 2341,
+            asset_remote_amount: 659,
+          }),
+          channel('opening', 'bb'.repeat(32), {
+            asset_id: ASSET,
+            status: 'Opening',
+            ready: false,
+            is_usable: false,
+            asset_local_amount: 3000,
+            asset_remote_amount: 0,
+          }),
+          channel('btc-only', 'cc'.repeat(32), { asset_id: null }),
+        ],
+      },
+    }));
+    const { wallet } = setup(rln);
+    expect(await wallet.peerChannels()).toEqual([
+      {
+        channelId: 'liq',
+        peerPubkey: CHARLIE_NODE,
+        status: 'Opened',
+        usable: true,
+        localCents: 2341n,
+        remoteCents: 659n,
+      },
+      {
+        channelId: 'opening',
+        peerPubkey: CHARLIE_NODE,
+        status: 'Opening',
+        usable: false,
+        localCents: 3000n,
+        remoteCents: 0n,
+      },
+    ]);
+  });
 });
 
 describe('openLiquidity (B9)', () => {
@@ -546,7 +609,7 @@ describe('openLiquidity (B9)', () => {
         return { json: { temporary_channel_id: 'tmp' } };
       });
     const { wallet } = setup(rln, {
-      coordinator: {
+      chain: {
         esplora: chain.esplora,
         miner: chain.miner,
         blockWaitMs: 0,
@@ -556,7 +619,7 @@ describe('openLiquidity (B9)', () => {
     return { rln, wallet, chain };
   }
 
-  it('is refused on any wallet but dave, before touching the node', async () => {
+  it('is refused without the chain access, before touching the node', async () => {
     const { rln, wallet } = setup();
     expect(await codeOf(wallet.openLiquidity(CHARLIE_NODE, 100n))).toBe('NOT_ALLOWED');
     expect(rln.calls).toEqual([]);

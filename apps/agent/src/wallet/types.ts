@@ -16,6 +16,18 @@ export interface WalletBalances {
   onchainCents: bigint;
 }
 
+/** One channel of this node, as the LSP sees it (peerChannels). */
+export interface PeerChannel {
+  channelId: string;
+  peerPubkey: string;
+  status: 'Opening' | 'Opened' | 'Closing';
+  usable: boolean;
+  /** Trip asset on this node's side: what the peer can still receive through this channel. */
+  localCents: bigint;
+  /** Trip asset on the peer's side. */
+  remoteCents: bigint;
+}
+
 export interface Wallet {
   /** `rln-rest` in the demo (gate 2, SPEC §20); `wdk` stays in the union, unused. */
   readonly engine: WalletEngine;
@@ -42,8 +54,13 @@ export interface Wallet {
   balances(): Promise<WalletBalances>;
   /** dave only (SPEC §10.5). */
   openLiquidity(peerPubkey: string, cents: bigint): Promise<{ channelId: string }>;
-  /** dave only: cooperative close of both channels with a member (SPEC §6.7). */
+  /**
+   * Cooperative close of both channels with a peer: dave closing an excluded member's (v1,
+   * SPEC §6.7), or a member closing its own with the LSP when it leaves (v2, 23/10).
+   */
   closeChannelsWith(peerPubkey: string): Promise<{ txids: string[] }>;
+  /** The LSP only (v2): its channels per peer, to manage its liquidity without the registry. */
+  peerChannels?(): Promise<PeerChannel[]>;
   /**
    * rln-rest: lock → backup → unlock (SPEC §12). Returns the backup file, encrypted by the node
    * with its password: the agent uploads it to the relay, which cannot read it.
