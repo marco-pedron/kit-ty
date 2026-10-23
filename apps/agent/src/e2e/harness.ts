@@ -141,7 +141,8 @@ export async function startStack(p: {
       async () => {
         const dead = exited();
         if (dead !== null) throw new StackDied(`the ${dead} stopped: see ${p.processLog}`);
-        const s = await client('dave').getState();
+        // v1: dave's view; v2: dave is only the LSP, with no trip, so a traveler's view.
+        const s = await client(p.env?.KITTY_REGISTRY === 'v2' ? 'alice' : 'dave').getState();
         const active = s.members.filter((m) => m.status === 'active').map((m) => m.memberId);
         return MEMBER_IDS.every((id) => active.includes(id)) ? s : undefined;
       },
