@@ -23,6 +23,21 @@ function readJson(path: string, what: string): unknown {
   }
 }
 
+/**
+ * KITTY_REGISTRY=v2 (stream A, step 3): the node mnemonic of ONE member, from which the agent
+ * derives that member's registry keys (NIP-06). Nothing of the other members leaves here.
+ */
+export function loadMemberMnemonic(actor: ActorId, secretsFile?: string): string {
+  const secrets = readJson(
+    secretsFile ?? process.env.KITTY_SECRETS_FILE ?? DEFAULT_SECRETS_FILE,
+    'node secrets',
+  ) as { nodes?: Record<string, { mnemonic?: unknown }> };
+  const mnemonic = secrets.nodes?.[actor]?.mnemonic;
+  if (typeof mnemonic !== 'string')
+    throw new Error(`no node mnemonic for ${actor} in the secrets file`);
+  return mnemonic;
+}
+
 export function loadMemberWalletOptions(
   actor: ActorId,
   p: {
