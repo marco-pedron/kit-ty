@@ -179,6 +179,11 @@ export class RegistryAgent {
     return this.ops;
   }
 
+  /** The rate this phone saved last, used for the next expense. */
+  savedRate(): SavedRate {
+    return this.rate();
+  }
+
   /** The closing txids of my channels after leaving; null before. */
   closingTxids(): readonly string[] | null {
     return this.closed;

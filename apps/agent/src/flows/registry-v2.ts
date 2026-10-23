@@ -92,6 +92,11 @@ export class RegistryV2 {
     );
   }
 
+  /** Every event this phone holds and verified (decoded, signature checked). */
+  allEvents(): fmt.RegistryEvent[] {
+    return [...this.events.values()];
+  }
+
   /** Joined, in the trip, as derived from the registry. */
   isMember(view = this.view()): boolean {
     return this.key !== null && view?.members.get(this.key.pubkey) !== undefined;
