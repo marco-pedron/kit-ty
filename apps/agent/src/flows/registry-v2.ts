@@ -61,6 +61,7 @@ export class RegistryV2 {
   private readonly invoices = new Map<string, DecodedInvoice>();
   /** Why an event of this member was rejected by the rules, newest first (diagnostics). */
   readonly problems: string[] = [];
+  private publishing: Promise<unknown> = Promise.resolve();
   private nodePubkey: string | null = null;
 
   constructor(
@@ -266,7 +267,21 @@ export class RegistryV2 {
 
   /** Signs with this trip's key, citing every head known, and publishes. Returns the event and, if
    * the rules reject it, why. */
-  async publish<T extends fmt.EventType>(
+  publish<T extends fmt.EventType>(
+    type: T,
+    body: fmt.EventBody<T>,
+  ): Promise<fmt.RegistryEvent & { rejected: string | null }> {
+    // One at a time: two events of this member citing the same heads would fork its own
+    // chain (C15). The loop and the routes publish for the same member.
+    const run = this.publishing.then(
+      () => this.publishNow(type, body),
+      () => this.publishNow(type, body),
+    );
+    this.publishing = run.catch(() => undefined);
+    return run;
+  }
+
+  private async publishNow<T extends fmt.EventType>(
     type: T,
     body: fmt.EventBody<T>,
   ): Promise<fmt.RegistryEvent & { rejected: string | null }> {
