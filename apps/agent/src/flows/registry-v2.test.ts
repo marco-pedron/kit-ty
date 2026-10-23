@@ -113,6 +113,22 @@ describe('the trip in the registry v2 only', () => {
     expect(d.relay.events).toEqual([]);
   });
 
+  it('events published at once by the loop and a route never fork the member (C15)', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    await Promise.all([
+      d.travelers.charlie.decide(id, 'contest', 'I only had water'),
+      d.travelers.charlie.registry.publish('POLICY_UPDATED', {
+        policy: { autoPayLimit: 1000n, dailyCap: 5000n },
+      }),
+      d.tickAll(),
+    ]);
+    await d.tickAll();
+    const view = d.travelers.alice.view();
+    expect(view?.members.get(d.travelers.charlie.registry.pubkey ?? '')?.forked).toBe(false);
+    expect(view?.rejected).toEqual([]);
+  });
+
   it('after a restart a member finds its trip again from the seed alone', async () => {
     const d = await registryDemo();
     const again = new RegistryV2({
