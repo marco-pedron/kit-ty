@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
   ActorId,
+  BalanceView,
   AgentClient,
   LineView,
   Receipt,
@@ -51,6 +52,8 @@ let stack: Stack;
 let api: Record<ActorId, AgentClient>;
 let expenseId: string;
 const before: Partial<Record<ActorId, TripView>> = {};
+/** The balances right before the members leave (step 7). */
+let was: Record<string, BalanceView | null | undefined> = {};
 
 const debt = (s: TripView): LineView | undefined =>
   s.me?.debts.find((l) => l.expenseId === expenseId);
@@ -328,7 +331,7 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
   });
 
   it('step 7: the three members leave at once, each closing their own channels with the LSP', async () => {
-    const was = Object.fromEntries(
+    const before7 = Object.fromEntries(
       await Promise.all(TRAVELERS.map(async (w) => [w, (await state(w)).me?.balance] as const)),
     );
     const h0 = await tipHeight();
@@ -348,20 +351,30 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
         );
       }
     }
-    for (const who of TRAVELERS) {
-      const b = await waitFor(
-        `${who}'s DUSD back on-chain`,
-        async () => {
-          const x = (await state(who)).me?.balance;
-          const w = was[who];
-          return x && w && x.onchainCents === w.onchainCents + w.tripOutboundCents ? x : undefined;
-        },
-        90_000,
-        2_000,
-      );
-      note(`${who} balance`, b);
-      expect(b.tripOutboundCents).toBe(0n);
-    }
+    was = before7;
+  });
+
+  it("step 7: each member's DUSD come back on-chain", async () => {
+    // RGB settles the swept outputs a little after the closes confirm: the three in parallel.
+    const t0 = Date.now();
+    const back = await Promise.all(
+      TRAVELERS.map((who) =>
+        waitFor(
+          `${who}'s DUSD back on-chain`,
+          async () => {
+            const x = (await state(who)).me?.balance;
+            const w = was[who];
+            return x && w && x.onchainCents === w.onchainCents + w.tripOutboundCents
+              ? x
+              : undefined;
+          },
+          170_000,
+          2_000,
+        ),
+      ),
+    );
+    note('back on-chain', { afterMs: Date.now() - t0, balances: back });
+    for (const b of back) expect(b.tripOutboundCents).toBe(0n);
   });
 
   it('step 7: everyone has left: the trip is closed on every phone', async () => {
