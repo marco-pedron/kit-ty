@@ -1,6 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { createAiService } from './ai/ai-service.js';
 import { createQvacEngine } from './ai/qvac-engine.js';
-import { DEMO_TRIP_PARAMS } from '@kitty/shared';
+import { DEMO_TRIP_PARAMS, type MemberId } from '@kitty/shared';
 import { loadConfig } from './config.js';
 import { FakeLightningNetwork } from './dev-fakes/fake-wallet.js';
 import { fakeRegistrySeeds, realRegistrySeeds, realSetup, walletsOf } from './flows/real-setup.js';
@@ -13,11 +14,29 @@ import {
   StaleRelayError,
   type AgentRuntime,
 } from './flows/runtime.js';
+import { FileStore } from './flows/registry-transport.js';
 import { loadRates } from './flows/seed-state.js';
+import { NostrTransport } from './relay/nostr-transport.js';
 import { createRelayClient } from './relay/http-client.js';
 import { buildAgentServer } from './server.js';
 
 const config = loadConfig();
+// Step 4 (KITTY_REGISTRY=v2): the Nostr relays of infra/docker-compose.yml, each phone's local
+// copy of the registry, and how often an active member checkpoints (plan §2.6: 5 minutes in
+// production; 10 s by default here, for the demo).
+const NOSTR_RELAYS = (
+  process.env.KITTY_NOSTR_RELAYS ?? 'ws://127.0.0.1:7001,ws://127.0.0.1:7002,ws://127.0.0.1:7003'
+)
+  .split(',')
+  .map((u) => u.trim())
+  .filter((u) => u !== '');
+const REGISTRY_DIR =
+  process.env.KITTY_REGISTRY_DIR ??
+  fileURLToPath(new URL('../../../infra/data/registry', import.meta.url));
+const CHECKPOINT_SECONDS =
+  process.env.KITTY_CHECKPOINT_SECONDS === undefined
+    ? undefined
+    : Number(process.env.KITTY_CHECKPOINT_SECONDS);
 // The routes (C3) read the runtime through a getter: it is created right below, with the
 // server's logger, and the routes only answer after listen.
 let runtime: AgentRuntime | null = null;
@@ -69,6 +88,16 @@ const rt = startAgents({
       seeds: config.KITTY_FAKES ? fakeRegistrySeeds() : realRegistrySeeds(),
       rate: () => seed.rate,
       params,
+      // Step 4: each phone on the Nostr relays, with its own complete copy on disk. With
+      // KITTY_FAKES=1 the registry stays in-process and in memory (no relays, no files).
+      ...(!config.KITTY_FAKES && {
+        transportFor: () => new NostrTransport({ urls: NOSTR_RELAYS, log: app.log }),
+        storeFor: (id: MemberId) => new FileStore(`${REGISTRY_DIR}/${id}.jsonl`),
+      }),
+      ...(CHECKPOINT_SECONDS !== undefined && {
+        checkpointQuietMs: Math.min(3, CHECKPOINT_SECONDS) * 1000,
+        checkpointEveryMs: CHECKPOINT_SECONDS * 1000,
+      }),
     },
   }),
 });
@@ -79,7 +108,12 @@ const setUp =
   registry === 'v2'
     ? seedRegistry(
         rt,
-        { tripId: 'vietnam-2026', name: 'Vietnam 2026', assetId: seed.assetId },
+        {
+          tripId: 'vietnam-2026',
+          name: 'Vietnam 2026',
+          assetId: seed.assetId,
+          ...(!config.KITTY_FAKES && { relays: NOSTR_RELAYS }),
+        },
         app.log,
       )
     : seedTrip(rt, seed, params, app.log);
