@@ -6,19 +6,28 @@ import type {
   ActorId,
   AgentClient,
   LineView,
-  MemberId,
   Receipt,
   SplitAssignment,
   TripView,
 } from '@kitty/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ESPLORA, startStack, tipHeight, waitFor, type Stack } from './harness.js';
+import {
+  ESPLORA,
+  nostrRelay,
+  relayIds,
+  startStack,
+  tipHeight,
+  waitFor,
+  type Stack,
+} from './harness.js';
 
 // pnpm e2e:demo:v2 (KITTY_REGISTRY=v2, 23/10): the demo driven by the registry v2, without the
 // UI, through the agent API on the real regtest stack, with the real on-device AI. No
 // coordinator: dave's node is only the LSP. Charlie contests, then withdraws by approving after
 // seeing the line again (C3), and pays; at the end every member leaves, closing their own
-// channels with the LSP, and the trip is closed. IRREVERSIBLE: run `pnpm demo:reset` first.
+// channels with the LSP, and the trip is closed. Step 4: the registry travels on the three
+// Nostr relays of the stack; one stops halfway and the group carries on, and when it comes
+// back it gets the events it missed. IRREVERSIBLE: run `pnpm demo:reset` first.
 
 const LOG =
   process.env.KITTY_E2E_LOG ??
@@ -36,6 +45,7 @@ const note = (k: string, v: unknown) => {
 /** A member's close must confirm and sweep within this many blocks (as v1's step 6). */
 const CLOSE_MAX_BLOCKS = 8;
 const TRAVELERS = ['alice', 'bob', 'charlie'] as const;
+const RELAY = (n: 1 | 2 | 3) => `ws://127.0.0.1:${7000 + n}`;
 
 let stack: Stack;
 let api: Record<ActorId, AgentClient>;
@@ -160,6 +170,12 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
     expect(seen.group).toMatchObject({ voters: ['bob'], canVote: true, outcome: null });
   });
 
+  it('step 4: a relay stops: the registry goes on through the other two', async () => {
+    await nostrRelay(2, 'stop');
+    await expect(relayIds(RELAY(2), 2_000)).rejects.toThrow();
+    note('relay 2 stopped', { relay1: (await relayIds(RELAY(1))).length });
+  });
+
   it('step 3: bob does nothing; his agent pays 3.09 after the silent assent, no block mined', async () => {
     const t0 = Date.now();
     const line = await waitFor(
@@ -236,6 +252,26 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
     expect(s.me?.owedToMeCents).toBe(0n);
   });
 
+  it('step 6: the relay comes back and gets every event it missed', async () => {
+    const t0 = Date.now();
+    await nostrRelay(2, 'start');
+    const ids = await waitFor(
+      'relay 2 holding what relay 1 holds',
+      async () => {
+        const [one, two, three] = await Promise.all([1, 2, 3].map((n) => relayIds(RELAY(n as 1))));
+        return two !== undefined &&
+          JSON.stringify(one) === JSON.stringify(two) &&
+          JSON.stringify(one) === JSON.stringify(three)
+          ? two
+          : undefined;
+      },
+      60_000,
+      1_000,
+    ).catch(() => []);
+    note('relay 2 back', { afterMs: Date.now() - t0, events: ids.length });
+    expect(ids.length).toBeGreaterThan(20);
+  });
+
   it('B6: every traveler backed their node up to the relay, encrypted', async () => {
     const seed = JSON.parse(
       readFileSync(
@@ -261,16 +297,27 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
     for (const n of Object.values(sizes)) expect(n).toBeGreaterThan(10_000);
   });
 
-  it('"Ledger verified" on every phone: the same registry state on 3/3', async () => {
-    const heads = await waitFor('the same state on 3/3', async () => {
-      const all = await Promise.all(TRAVELERS.map(state));
-      const h = all.map((x) => x.ledger);
-      return h.every((x) => x.headHash !== null && x.headHash === h[0]?.headHash) ? h : undefined;
-    });
-    note('ledger', heads);
-    for (const h of heads) {
-      expect(h.chainValid).toBe(true);
-      expect(h.validSignatures).toBe(h.events);
+  it('"Ledger verified" on every phone: the same state on 3/3, from the checkpoints', async () => {
+    const all = await waitFor(
+      'every phone verifying the three checkpoints',
+      async () => {
+        const x = await Promise.all(TRAVELERS.map(state));
+        return x.every(
+          (s) => s.ledger.checkpoints?.matching === 3 && s.ledger.checkpoints.compared === 3,
+        )
+          ? x
+          : undefined;
+      },
+      60_000,
+      1_000,
+    );
+    note(
+      'ledger',
+      all.map((s) => s.ledger),
+    );
+    for (const s of all) {
+      expect(s.ledger.chainValid).toBe(true);
+      expect(s.ledger.validSignatures).toBe(s.ledger.events);
     }
     // L = 30.00 covers the demo: the LSP opened no liquidity
     expect((await state('dave')).operations.filter((o) => o.kind === 'opening_liquidity')).toEqual(
@@ -278,17 +325,19 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
     );
   });
 
-  const leave = (who: MemberId) =>
-    it(`step 7: ${who} leaves, closing their own channels with the LSP`, async () => {
-      const was = (await state(who)).me?.balance;
-      const h0 = await tipHeight();
-      const t0 = Date.now();
-      const r = await api[who].leaveTrip();
-      const blocksMined = (await tipHeight()) - h0;
-      note(`${who} left`, { ...r, ms: Date.now() - t0, blocksMined });
+  it('step 7: the three members leave at once, each closing their own channels with the LSP', async () => {
+    const was = Object.fromEntries(
+      await Promise.all(TRAVELERS.map(async (w) => [w, (await state(w)).me?.balance] as const)),
+    );
+    const h0 = await tipHeight();
+    const t0 = Date.now();
+    const results = await Promise.all(TRAVELERS.map((w) => api[w].leaveTrip()));
+    const blocksMined = (await tipHeight()) - h0;
+    note('left', { ms: Date.now() - t0, blocksMined, results });
+    expect(blocksMined).toBeLessThanOrEqual(3 * CLOSE_MAX_BLOCKS);
+    for (const r of results) {
       expect(r.warning).toBeNull();
       expect(r.closingTxids).toHaveLength(2);
-      expect(blocksMined).toBeLessThanOrEqual(CLOSE_MAX_BLOCKS);
       for (const txid of r.closingTxids) {
         const res = await fetch(`${ESPLORA}/tx/${txid}`);
         expect(res.status).toBe(200);
@@ -296,25 +345,22 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
           true,
         );
       }
+    }
+    for (const who of TRAVELERS) {
       const b = await waitFor(
         `${who}'s DUSD back on-chain`,
         async () => {
           const x = (await state(who)).me?.balance;
-          return x && was && x.onchainCents === was.onchainCents + was.tripOutboundCents
-            ? x
-            : undefined;
+          const w = was[who];
+          return x && w && x.onchainCents === w.onchainCents + w.tripOutboundCents ? x : undefined;
         },
         90_000,
         2_000,
       );
       note(`${who} balance`, b);
       expect(b.tripOutboundCents).toBe(0n);
-      const me = (await state(who)).members.find((m) => m.memberId === who);
-      expect(me?.status).toBe('left');
-    });
-  leave('bob');
-  leave('charlie');
-  leave('alice');
+    }
+  });
 
   it('step 7: everyone has left: the trip is closed on every phone', async () => {
     const all = await waitFor('the trip closed on 3/3', async () => {
