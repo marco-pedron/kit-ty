@@ -161,4 +161,5 @@ Codice: `packages/shared/src/events.ts`, esportato come namespace `registry` fin
 - **Limiti.**
   - L'LSP non vede le righe, quindi riapre liquidità dopo un pagamento, non prima: un rimborso più grande di quanto il creditore può ricevere fallisce finché l'LSP non ha riaperto, e l'agente del debitore ritenta.
   - Il cambio è l'ultimo salvato sul telefono (`infra/rates.json` in demo) fino al passo 5.
+  - **Garanzia** *(aggiornato il 23/10)*: la copertura dell'operatore (`GUARANTEE_PAID` nel v1) non ha sostituto. Il debito di chi non paga resta, visibile a tutti, e si paga a mano; la maggioranza dei blocchi può escludere chi non paga, ma non rimborsa il creditore. In roadmap: garanzia senza custode (piano §0bis.6).
   - Il registro vecchio resta finché il passo 4 non è stabile; lo si toglie in una PR separata.

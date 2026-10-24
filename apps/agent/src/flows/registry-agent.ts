@@ -42,6 +42,13 @@ export interface RegistryAgentOptions {
   retryMs?: number;
   /** Back the node up once quiet this long after a change (SPEC §12); unset: never. */
   backupQuietMs?: number;
+  /**
+   * CHECKPOINT (plan §2.6): published by an active member once its state changed and stayed
+   * quiet this long (default 3 s), at most one every `checkpointEveryMs` (default 10 s; the
+   * plan says 5 minutes in production).
+   */
+  checkpointQuietMs?: number;
+  checkpointEveryMs?: number;
 }
 
 type Line = v2.RegistryLine;
@@ -97,6 +104,13 @@ export class RegistryAgent {
   /** After MEMBER_LEFT: the closing txids once the channels are closed, null until then. */
   private closed: string[] | null = null;
   private closeRetryAt = 0;
+  private readonly checkpointQuietMs: number;
+  private readonly checkpointEveryMs: number;
+  /** Events other than checkpoints: they only grow, so their count says the state changed. */
+  private stateCount = 0;
+  private stateChangedAt = 0;
+  private checkpointedCount = 0;
+  private checkpointAt = -Infinity;
   /** The close in flight, resolving to its error (null when it succeeded). */
   private closing: Promise<unknown> | null = null;
 
@@ -110,6 +124,8 @@ export class RegistryAgent {
     this.now = o.now ?? (() => new Date());
     this.retryMs = o.retryMs ?? 10_000;
     this.backupQuietMs = o.backupQuietMs ?? null;
+    this.checkpointQuietMs = o.checkpointQuietMs ?? 3_000;
+    this.checkpointEveryMs = o.checkpointEveryMs ?? 10_000;
     this.dirtySince = this.now().getTime();
   }
 
@@ -219,6 +235,7 @@ export class RegistryAgent {
     if (!me.left) await this.reissueExpired(trip, me.pubkey);
     if (me.left) void this.closeChannels(); // in the background: a close takes about a minute
     this.noteReceived(trip, me.pubkey);
+    await this.maybeCheckpoint(trip, me);
     await this.maybeBackup();
   }
 
@@ -319,6 +336,26 @@ export class RegistryAgent {
         });
       });
     }
+  }
+
+  /** An active member checkpoints its state once it changed and stayed quiet (plan §2.6). */
+  private async maybeCheckpoint(trip: Trip, me: v2.RegistryMember): Promise<void> {
+    const count = this.registry.allEvents().filter((e) => e.content.type !== 'CHECKPOINT').length;
+    const now = this.now().getTime();
+    if (count !== this.stateCount) {
+      this.stateCount = count;
+      this.stateChangedAt = now;
+    }
+    if (me.left || me.excluded || !v2.isActive(trip.fold, me.pubkey)) return;
+    if (count === this.checkpointedCount) return;
+    if (now - this.stateChangedAt < this.checkpointQuietMs) return;
+    if (now - this.checkpointAt < this.checkpointEveryMs) return;
+    this.checkpointAt = now;
+    await this.once(`CHECKPOINT:${count}`, async () => {
+      const e = await this.registry.checkpoint();
+      if (e.rejected !== null) throw new FlowError('INVALID_EVENT', e.rejected);
+      this.checkpointedCount = count;
+    });
   }
 
   /** Every new payment to me changes my node: back it up again. */
@@ -593,16 +630,28 @@ export class RegistryAgent {
         );
       await this.publishOk('MEMBER_LEFT', {});
     }
-    const owed = [...trip.lines.values()].filter((l) => l.payer === me.pubkey && OPEN(l));
-    const total = owed.reduce((a, l) => a + l.amount, 0n);
+    const warning = this.leaveWarning(trip);
     await this.closeChannels(true);
-    return {
-      closingTxids: [...(this.closed ?? [])],
-      warning:
-        owed.length === 0
-          ? null
-          : `You are still owed ${this.amount(trip, total)}: with your channels closed, it can only be paid to you on-chain.`,
-    };
+    return { closingTxids: [...(this.closed ?? [])], warning };
+  }
+
+  /**
+   * Before leaving (24/10, declared consequence): the credits still open, from whom and how
+   * much, and that after leaving they are collected outside the app, since the channels will
+   * be closed. Null when nothing is owed to me.
+   */
+  leaveWarning(trip: Trip | null = this.view()): string | null {
+    const me = this.me(trip);
+    if (trip === null || me === null) return null;
+    const owed = [...trip.lines.values()].filter((l) => l.payer === me.pubkey && OPEN(l));
+    if (owed.length === 0) return null;
+    const list = owed
+      .map((l) => {
+        const merchant = trip.expenses.get(l.expenseRef)?.body.proposal.receipt.merchant;
+        return `${this.amount(trip, l.amount)} from ${this.nameOf(trip, l.debtor)}${merchant ? ` (${merchant})` : ''}`;
+      })
+      .join(', ');
+    return `You are still owed ${list}. After you leave your channels are closed: these are collected outside the app.`;
   }
 
   /**

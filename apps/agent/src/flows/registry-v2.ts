@@ -1,4 +1,5 @@
 import {
+  KIND_REGISTRY,
   bindDescriptionV2,
   newTripSecret,
   nextRegistryIndex,
@@ -13,13 +14,14 @@ import {
   tripTagOf,
   verifyNostrEvent,
   type DecodedInvoice,
+  type NostrEvent,
   type Policy,
   type RegistryKey,
 } from '@kitty/shared';
 import { registry as v2 } from '@kitty/ledger';
 import { WalletError } from '../wallet/errors.js';
 import type { Wallet } from '../wallet/types.js';
-import type { RegistryTransport } from './registry-transport.js';
+import { MemoryStore, type RegistryStore, type RegistryTransport } from './registry-transport.js';
 
 // One member's registry v2 (KITTY_REGISTRY=v2): its NIP-06 key for the trip, the events it
 // holds (each verified and decoded with its own node), and publishing. Since 23/10 there is no
@@ -63,6 +65,12 @@ export class RegistryV2 {
   readonly problems: string[] = [];
   private publishing: Promise<unknown> = Promise.resolve();
   private nodePubkey: string | null = null;
+  /** Every verified kind-7345 event this phone has, as received (the local copy, step 4). */
+  private readonly local = new Map<string, NostrEvent>();
+  private readonly store: RegistryStore;
+  private unsubscribe: (() => void) | null = null;
+  /** Missing parents asked to the relays, with when (fetchMissing, plan §2.5). */
+  private readonly asked = new Map<string, number>();
 
   constructor(
     private readonly o: {
@@ -71,8 +79,15 @@ export class RegistryV2 {
       wallet: Wallet;
       transport: RegistryTransport;
       now: () => Date;
+      /** The complete local copy on disk; in memory if absent (tests). */
+      store?: RegistryStore;
+      /** A missing parent is asked again after this (default 5 s). */
+      fetchRetryMs?: number;
     },
-  ) {}
+  ) {
+    this.store = o.store ?? new MemoryStore();
+    for (const e of this.store.load()) if (this.valid(e)) this.local.set(e.id, e);
+  }
 
   get pubkey(): string | null {
     return this.key?.pubkey ?? null;
@@ -91,6 +106,15 @@ export class RegistryV2 {
       this.deps(),
       v2.unixSeconds(now.toISOString()),
     );
+  }
+
+  /** A CHECKPOINT of this phone's registry now: its heads, count and stateHash (plan §2.6). */
+  checkpoint(): Promise<fmt.RegistryEvent & { rejected: string | null }> {
+    return this.publish('CHECKPOINT', {
+      frontier: ['0'.repeat(64)],
+      count: 1,
+      stateHash: '0'.repeat(64),
+    });
   }
 
   /** Every event this phone holds and verified (decoded, signature checked). */
@@ -121,19 +145,42 @@ export class RegistryV2 {
 
   // ---------- recovery and sync ----------
 
+  private valid(e: NostrEvent): boolean {
+    return e.kind === KIND_REGISTRY && verifyNostrEvent(e, schnorrVerifier);
+  }
+
+  /** An event from a relay or from this phone: verified, then kept in the local copy. */
+  private receive(e: NostrEvent): void {
+    if (this.local.has(e.id) || !this.valid(e)) return;
+    this.local.set(e.id, e);
+    this.store.add(e);
+  }
+
+  /** The events of `pk`: the local copy first, then the relays (offline recovery works). */
+  private async eventsBy(pk: string): Promise<readonly NostrEvent[]> {
+    const mine = [...this.local.values()].filter((e) => e.pubkey === pk);
+    const remote = await this.o.transport.query({ authors: [pk] }).catch(() => []);
+    for (const e of remote) this.receive(e);
+    return [...mine, ...remote.filter((e) => !mine.some((m) => m.id === e.id))];
+  }
+
   /**
-   * After a restart: finds this member's trip again from the seed alone (recoverTrips: the
-   * keys i = 0, 1, … and the trip secret each wrote to itself). True if found.
+   * After a restart or on a new phone: finds this member's trip again from the seed alone
+   * (recoverTrips: the keys i = 0, 1, … until 5 in a row have no event, and the trip secret
+   * each wrote to itself in TRIP_SECRET_SHARED), from the local copy and the relays. True if
+   * found; then the trip's events are fetched and followed.
    */
   async recover(tripId: string): Promise<boolean> {
     if (this.trip !== null) return true;
-    const found = await recoverTrips(this.o.seed, (pk) =>
-      this.o.transport.query({ authors: [pk] }),
-    );
+    const found = await recoverTrips(this.o.seed, (pk) => this.eventsBy(pk));
     for (const { key, trips } of found)
       for (const t of trips) {
         const trip = this.tripOf(tripId, t.tripSecret);
-        const genesis = (await this.o.transport.query({ tripTag: trip.tripTag })).find((e) => {
+        const all = [
+          ...this.local.values(),
+          ...(await this.o.transport.query({ tripTag: trip.tripTag }).catch(() => [])),
+        ];
+        const genesis = all.find((e) => {
           try {
             return fmt.readRegistryEvent(e, trip).content.type === 'TRIP_CREATED';
           } catch {
@@ -141,24 +188,63 @@ export class RegistryV2 {
           }
         });
         if (genesis === undefined) continue;
+        for (const e of all) this.receive(e);
         this.key = key;
         this.trip = trip;
+        this.follow();
         await this.sync();
         return true;
       }
     return false;
   }
 
-  /** Fetches the events of the trip; only valid, decodable ones are kept. */
+  /** Subscribes to the trip on every relay: stored events first, then live ones. */
+  private follow(): void {
+    if (this.trip === null || this.unsubscribe !== null) return;
+    this.unsubscribe = this.o.transport.subscribe({ tripTag: this.trip.tripTag }, (e) =>
+      this.receive(e),
+    );
+  }
+
+  /** Stops following the trip (shutdown, lose-phone). */
+  close(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+  }
+
+  /**
+   * Decodes what arrived (only valid events of this trip are kept) and asks the relays for any
+   * parent this phone does not have: an event waits, not applied, until all its ancestors
+   * are here (plan §2.5).
+   */
   async sync(): Promise<void> {
     if (this.trip === null) return;
-    for (const e of await this.o.transport.query({ tripTag: this.trip.tripTag })) {
-      if (this.events.has(e.id) || !verifyNostrEvent(e, schnorrVerifier)) continue;
+    this.follow();
+    await this.decodeArrived();
+    const missing = new Set<string>();
+    for (const e of this.events.values())
+      for (const p of e.parents) if (!this.events.has(p)) missing.add(p);
+    const now = this.o.now().getTime();
+    const retry = this.o.fetchRetryMs ?? 5_000;
+    const ask = [...missing].filter((id) => now - (this.asked.get(id) ?? -Infinity) >= retry);
+    if (ask.length === 0) return;
+    for (const id of ask) this.asked.set(id, now);
+    for (const e of await this.o.transport.fetchMissing(ask).catch(() => [])) this.receive(e);
+    await this.decodeArrived();
+  }
+
+  /** The events of the local copy for this trip, not decoded yet. */
+  private async decodeArrived(): Promise<void> {
+    const trip = this.trip;
+    if (trip === null) return;
+    for (const e of this.local.values()) {
+      if (this.events.has(e.id) || !e.tags.some((t) => t[0] === 'T' && t[1] === trip.tripTag))
+        continue;
       let r: fmt.RegistryEvent;
       try {
-        r = fmt.readRegistryEvent(e, this.trip);
+        r = fmt.readRegistryEvent(e, trip);
       } catch {
-        continue; // another trip, or malformed: never applied
+        continue; // another trip id, or malformed: never applied
       }
       await this.decodeAll(r);
       this.events.set(r.id, r);
@@ -197,7 +283,7 @@ export class RegistryV2 {
 
   /** A fresh NIP-06 account for a new trip: one past the highest this seed already used. */
   private async newKey(): Promise<RegistryKey> {
-    const used = await recoverTrips(this.o.seed, (pk) => this.o.transport.query({ authors: [pk] }));
+    const used = await recoverTrips(this.o.seed, (pk) => this.eventsBy(pk));
     return registryKey(this.o.seed, nextRegistryIndex(used.map((u) => u.key.index)));
   }
 
@@ -214,6 +300,7 @@ export class RegistryV2 {
     if (this.trip !== null) return;
     this.key = await this.newKey();
     this.trip = this.tripOf(p.tripId, newTripSecret());
+    this.follow();
     await this.publish('TRIP_CREATED', { name: p.name, params: p.params, relays: p.relays });
     await this.joinAs(null, p.policy);
   }
@@ -234,6 +321,7 @@ export class RegistryV2 {
     if (this.trip !== null) return;
     this.key = await this.newKey();
     this.trip = this.tripOf(invite.tripId, invite.tripSecret);
+    this.follow();
     await this.sync();
     await this.joinAs(invite.inviteRef, policy);
   }
@@ -288,18 +376,28 @@ export class RegistryV2 {
     const key = this.requireKey();
     const trip = this.requireTrip();
     await this.sync();
-    const parents = type === 'TRIP_CREATED' ? [] : [...(this.view()?.frontier ?? [])];
+    const view = this.view();
+    const parents = type === 'TRIP_CREATED' ? [] : [...(view?.frontier ?? [])];
+    // A CHECKPOINT reports exactly what it cites (plan §2.6): computed here, on the same view.
+    const content = (
+      type === 'CHECKPOINT' && view !== null
+        ? { frontier: parents, count: view.count, stateHash: view.stateHash }
+        : body
+    ) as fmt.EventBody<T>;
     const unsigned = fmt.buildRegistryEvent({
       author: key.pubkey,
       createdAt: v2.unixSeconds(this.o.now().toISOString()),
       tripTag: trip.tripTag,
       parents,
-      content: { v: 2, tripId: trip.tripId, type, body } as fmt.RegistryContent,
+      content: { v: 2, tripId: trip.tripId, type, body: content } as fmt.RegistryContent,
       tripKey: trip.tripKey,
     });
     const id = nostrEventId(unsigned);
     const signed = { ...unsigned, id, sig: schnorrSign(key.secret, id) };
-    await this.o.transport.publish(signed);
+    // In the local copy first: the event exists even if no relay answers now; the transport
+    // delivers it to each relay when it can.
+    this.receive(signed);
+    await this.o.transport.publish(signed).catch(() => undefined);
     await this.sync();
     const rejected = this.view()?.rejected.find((r) => r.id === id)?.reason ?? null;
     if (rejected !== null) this.problems.unshift(`${type} rejected: ${rejected}`);

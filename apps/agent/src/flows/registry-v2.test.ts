@@ -1,10 +1,16 @@
-import { sha256Hex, type SplitAssignment } from '@kitty/shared';
+import { sha256Hex, type NostrEvent, type SplitAssignment } from '@kitty/shared';
 import type { registry as v2 } from '@kitty/ledger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_RECEIPT, DEMO_SPLIT } from '../dev-fakes/fake-ai.js';
 import { FakeLightningNetwork } from '../dev-fakes/fake-wallet.js';
 import { FlowError } from './errors.js';
 import { LspAgent, lspLiquidityPlan } from './lsp-agent.js';
+import {
+  MemoryStore,
+  MemoryTransport,
+  type RegistryFilter,
+  type RegistryTransport,
+} from './registry-transport.js';
 import { RegistryV2 } from './registry-v2.js';
 import { registryVersion, startAgents } from './runtime.js';
 import { MemoryRelay } from './test/memory-relay.js';
@@ -145,6 +151,87 @@ describe('the trip in the registry v2 only', () => {
   });
 });
 
+describe('step 4: transport, local copy, missing events, checkpoints', () => {
+  it('a restart finds the trip again from the local copy alone, with no relay', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    const store = new MemoryStore();
+    for (const e of await d.transport.query({})) store.add(e);
+    const offline = new RegistryV2({
+      displayName: 'bob',
+      seed: d.seeds.bob,
+      wallet: d.net.wallet('bob'),
+      transport: new MemoryTransport(),
+      now: d.now,
+      store,
+    });
+    expect(await offline.recover('vietnam-2026')).toBe(true);
+    expect(offline.pubkey).toBe(d.travelers.bob.registry.pubkey);
+    const view = offline.view();
+    expect([...(view?.expenses.values() ?? [])].map((x) => x.body.proposal.expenseId)).toEqual([
+      id,
+    ]);
+    expect(view?.waiting).toEqual([]);
+  });
+
+  it('an event citing a parent this phone lacks waits; the parent is asked to the relays', async () => {
+    const d = await registryDemo();
+    const id = await dinner(d);
+    const expenseRef = d.travelers.alice.expenseRef(d.travelers.alice.requireMember().trip, id);
+    const hidden = new HidingTransport(d.transport, expenseRef);
+    const phone = new RegistryV2({
+      displayName: 'bob',
+      seed: d.seeds.bob,
+      wallet: d.net.wallet('bob'),
+      transport: hidden,
+      now: d.now,
+    });
+    expect(await phone.recover('vietnam-2026')).toBe(true);
+    expect(hidden.asked).toContain(expenseRef);
+    expect(phone.view()?.waiting).toEqual([]);
+    expect(phone.view()?.expenses.has(expenseRef)).toBe(true);
+  });
+
+  it('every active member checkpoints; each phone sees the same state on 3/3', async () => {
+    const d = await registryDemo();
+    await dinner(d);
+    d.advance(20);
+    await d.tickAll();
+    await d.tickAll();
+    for (let i = 0; i < 3; i++) {
+      d.advance(11);
+      await d.tickAll();
+    }
+    for (const who of ['alice', 'bob', 'charlie'] as const) {
+      const cps = d.travelers[who].view()?.checkpoints ?? [];
+      expect(cps).toHaveLength(3);
+      expect(cps.every((c) => c.verified && c.sameState)).toBe(true);
+    }
+  });
+});
+
+/** A relay that does not deliver one event on the trip subscription, but has it by id. */
+class HidingTransport implements RegistryTransport {
+  readonly asked: string[] = [];
+  constructor(
+    private readonly inner: MemoryTransport,
+    private readonly hidden: string,
+  ) {}
+  publish(e: NostrEvent) {
+    return this.inner.publish(e);
+  }
+  async query(f: RegistryFilter) {
+    return (await this.inner.query(f)).filter((e) => e.id !== this.hidden);
+  }
+  subscribe(f: RegistryFilter, on: (e: NostrEvent) => void) {
+    return this.inner.subscribe(f, (e) => e.id !== this.hidden && on(e));
+  }
+  fetchMissing(ids: readonly string[]) {
+    this.asked.push(...ids);
+    return this.inner.fetchMissing(ids);
+  }
+}
+
 describe('the story of the v2 demo', () => {
   it('bob pays after the silent assent; charlie contests, withdraws (C3) and pays', async () => {
     const d = await registryDemo();
@@ -228,7 +315,9 @@ describe('the story of the v2 demo', () => {
     expect((await balance(d, 'charlie')).tripOutboundCents).toBe(5000n);
     // alice can leave with credits: she is warned they will come on-chain only
     const r = await d.travelers.alice.leave();
-    expect(r.warning).toMatch(/still owed 6\.59/);
+    expect(r.warning).toBe(
+      'You are still owed 3.09 from bob (Pho restaurant, Hanoi), 3.50 from charlie (Pho restaurant, Hanoi). After you leave your channels are closed: these are collected outside the app.',
+    );
   });
 });
 

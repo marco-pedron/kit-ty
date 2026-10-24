@@ -28,7 +28,7 @@
 - **Da qui in poi una PR entra nel ramo principale solo se `pnpm demo:reset && pnpm e2e:demo` passa ancora dall'inizio alla fine.**
 
 ### 0bis.1 Infrastruttura
-- **Nessun membro con poteri speciali, nemmeno Dave.** In demo Dave è solo il nodo RLN che instrada: fa la parte dell'LSP Utexo. **Esce dal registro**: non firma eventi, non ammette, non fissa cambi, non risolve contestazioni, non esclude, non chiude il viaggio, **non legge il registro**. La sua liquidità la gestisce guardando solo i suoi canali, come farà l'LSP Utexo. **(23/10)** Confermato; inventario di ogni sua azione nella demo v1 e del sostituto nel v2 in [`docs/proposte/inventario-dave.md`](proposte/inventario-dave.md). Con `KITTY_REGISTRY=v2` le app leggono e scrivono solo il registro v2 (niente più doppia scrittura); la nuova storia della demo è in [`docs/proposte/spec-16-demo-v2.md`](proposte/spec-16-demo-v2.md).
+- **Nessun membro con poteri speciali, nemmeno Dave.** In demo Dave è solo il nodo RLN che instrada: fa la parte dell'LSP Utexo. **Esce dal registro**: non firma eventi, non ammette, non fissa cambi, non risolve contestazioni, non esclude, non chiude il viaggio, **non legge il registro**. La sua liquidità la gestisce guardando solo i suoi canali, come farà l'LSP Utexo. **(23/10)** Confermato; inventario di ogni sua azione nella demo v1 e del sostituto nel v2 in [`docs/proposte/inventario-dave.md`](proposte/inventario-dave.md). **Limite dichiarato (aggiornato il 23/10):** la copertura con la garanzia non ha sostituto: il debito di chi non paga resta e si paga a mano; in roadmap la "garanzia senza custode" (§0bis.6). Con `KITTY_REGISTRY=v2` le app leggono e scrivono solo il registro v2 (niente più doppia scrittura); la nuova storia della demo è in [`docs/proposte/spec-16-demo-v2.md`](proposte/spec-16-demo-v2.md).
 - **`LspProvider`** (§8.1): interfaccia ricavata dalle API documentate di Utexo, implementata oggi da Dave su `rln-rest`. Implementa **solo** le operazioni con un equivalente reale e non custodiale: `health`, `getInfo`, apertura e attesa del canale, ricezione e invio Lightning. **Non si implementano** i ponti `onchain_send` / `lightning_receive`: non sono atomici, nell'intervallo l'LSP tiene i fondi. Vanno in Roadmap (§0bis.6), da sostituire con gli swap. App e ledger non sanno che dietro c'è Dave.
 - **Canali:** in demo restano i due canali per membro di oggi. "Uno o due" resta aperto (§8.2): dipende da Utexo e dagli swap.
 - APay no; `enableVirtualChannelsV0` sempre `false`. Solo regtest, relay Nostr nostri in Docker, QVAC `~0.21.0`.
@@ -69,6 +69,12 @@ Sybil sugli inviti (D3), contestazioni senza arbitro (D5), ambito del blocco (D6
 - Ponti `onchain_send` / `lightning_receive` di `LspProvider`: solo se diventano atomici, altrimenti sostituiti dagli swap.
 - Rotazione del segreto del viaggio (limite di D1).
 - Holepunch (Hypercore + Autobase) come `Transport` alternativo.
+- **Garanzia senza custode** *(aggiornato il 23/10)*. Nel v2 la copertura con la garanzia dell'operatore non ha sostituto: il debito di chi non paga resta e si paga a mano (inventario di Dave, riga 6). Da studiare una garanzia che nessuno custodisce. Domande per Utexo:
+  1. Si può vincolare un deposito nel canale con l'LSP (una parte dei fondi del membro che l'LSP può usare solo per pagare una fattura di un altro membro dello stesso viaggio, scaduta e non pagata)? Con quale meccanismo (script on-chain, HTLC trattenuti, canale dedicato)?
+  2. Chi decide che la fattura è scaduta e non pagata, senza un arbitro: basta la regola del registro (`overdue` calcolato da ogni telefono) o serve una prova verificabile dall'LSP?
+  3. Se il membro chiude il canale prima della scadenza, il deposito vincolato torna a lui o resta bloccato fino alla scadenza?
+  4. Costi e limiti: quanta liquidità resta immobilizzata, per quanto tempo, e con quali commissioni?
+  Non si implementa niente finché non ci sono le risposte.
 - Passo 5 (oracolo), passo 6 (QR), passo 7 (presenza e notifiche LSPS5), USDT a 6 decimali, `LspProvider` completa, passo 8 (motore WDK).
 
 ### 0bis.7 Calendario: 5 giorni
