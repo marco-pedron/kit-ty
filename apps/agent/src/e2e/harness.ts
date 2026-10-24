@@ -1,8 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, mkdtempSync, rmSync, type WriteStream } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { createAgentClient, MEMBER_IDS, type ActorId, type AgentClient } from '@kitty/shared';
 
 // E2E ONLY (pnpm e2e:*): a relay and the agents as child processes, on their own ports and a
@@ -142,7 +143,8 @@ export async function startStack(p: {
         const dead = exited();
         if (dead !== null) throw new StackDied(`the ${dead} stopped: see ${p.processLog}`);
         // v1: dave's view; v2: dave is only the LSP, with no trip, so a traveler's view.
-        const s = await client(p.env?.KITTY_REGISTRY === 'v2' ? 'alice' : 'dave').getState();
+        const v2 = (p.env?.KITTY_REGISTRY ?? process.env.KITTY_REGISTRY) === 'v2';
+        const s = await client(v2 ? 'alice' : 'dave').getState();
         const active = s.members.filter((m) => m.status === 'active').map((m) => m.memberId);
         return MEMBER_IDS.every((id) => active.includes(id)) ? s : undefined;
       },
@@ -154,4 +156,36 @@ export async function startStack(p: {
     throw e;
   }
   return { relayUrl, agentUrl, client, stop };
+}
+
+/** Step 4: the ids of every kind-7345 event one Nostr relay holds (NIP-01 REQ until EOSE). */
+export function relayIds(url: string, timeoutMs = 5_000): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const ids: string[] = [];
+    const timer = setTimeout(() => {
+      ws.close();
+      reject(new Error(`no EOSE from ${url} in ${timeoutMs} ms`));
+    }, timeoutMs);
+    ws.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error(`cannot reach the relay ${url}`));
+    };
+    ws.onopen = () => ws.send(JSON.stringify(['REQ', 'all', { kinds: [7345] }]));
+    ws.onmessage = (m) => {
+      const msg = JSON.parse(String(m.data)) as [string, string, { id?: string }?];
+      if (msg[0] === 'EVENT' && typeof msg[2]?.id === 'string') ids.push(msg[2].id);
+      if (msg[0] === 'EOSE') {
+        clearTimeout(timer);
+        ws.close();
+        resolve(ids.sort());
+      }
+    };
+  });
+}
+
+/** Step 4: stop or start one Nostr relay of the stack (docker compose service nostr-N). */
+export async function nostrRelay(n: 1 | 2 | 3, action: 'stop' | 'start'): Promise<void> {
+  const compose = fileURLToPath(new URL('../../../../infra/docker-compose.yml', import.meta.url));
+  await promisify(execFile)('docker', ['compose', '-f', compose, action, `nostr-${n}`]);
 }
