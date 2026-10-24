@@ -11,7 +11,9 @@ import { startStack, waitFor, type Stack } from './harness.js';
 
 // B6 + P1 demo:lose-phone on the regtest stack (SPEC §12, PLAN §4 B6): bob pays, his agent
 // backs his node up to the relay; bob loses his phone; a new node restored from the relay has
-// the same balance, and a new payment works. IRREVERSIBLE: run `pnpm demo:reset` after.
+// the same balance, and a new payment works. With KITTY_REGISTRY=v2 (`pnpm e2e:lose-phone:v2`)
+// the new phone also has no copy of the registry and finds the trip from the seed on the
+// Nostr relays. IRREVERSIBLE: run `pnpm demo:reset` after.
 
 const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const LOG = process.env.KITTY_E2E_LOG ?? `${repoRoot}infra/.out/logs/e2e-lose-phone-processes.log`;
@@ -89,11 +91,14 @@ describe('demo:lose-phone bob on the regtest stack (irreversible)', () => {
     const t0 = Date.now();
     const { stdout } = await execFileP(`${repoRoot}infra/scripts/lose-phone.sh`, ['bob'], {
       cwd: repoRoot,
-      env: { ...process.env, RELAY_URL: stack.relayUrl },
+      env: { ...process.env, RELAY_URL: stack.relayUrl, AGENT_URL: stack.agentUrl },
       timeout: 180_000,
     });
     log('lose-phone', { ms: Date.now() - t0, tail: stdout.trim().split('\n').slice(-1)[0] });
     expect(stdout).toContain("bob's new phone: same node, 2 channels usable, same balance");
+    // KITTY_REGISTRY=v2 (step 4): the registry too, from the seed on the Nostr relays alone
+    if (process.env.KITTY_REGISTRY === 'v2')
+      expect(stdout).toMatch(/bob's registry found again from the seed on the relays: \d+ events/);
     const b = await waitFor('bob balance from the new node', async () => {
       const x = (await state('bob')).me?.balance;
       return x?.tripOutboundCents === 4691n ? x : undefined;

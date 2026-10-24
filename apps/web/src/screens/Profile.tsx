@@ -135,7 +135,15 @@ function LeaveTrip({ trip, go }: ScreenProps) {
       {asking && (
         <AlertDialog
           title={`Leave ${trip.state?.trip?.name ?? 'the trip'}?`}
-          message="Your two channels with the LSP will be closed and you cannot be added to new expenses. It takes about a minute."
+          message={
+            <>
+              Your two channels with the LSP will be closed and you cannot be added to new expenses.
+              It takes about a minute.
+              {trip.state?.me?.leaveWarning != null && (
+                <span className="mt-2 block font-semibold">{trip.state.me.leaveWarning}</span>
+              )}
+            </>
+          }
           confirm="Leave"
           destructive
           onCancel={() => setAsking(false)}
