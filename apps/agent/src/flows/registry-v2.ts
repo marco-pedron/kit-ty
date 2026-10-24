@@ -322,7 +322,16 @@ export class RegistryV2 {
     this.key = await this.newKey();
     this.trip = this.tripOf(invite.tripId, invite.tripSecret);
     this.follow();
+    // The subscription delivers asynchronously: fetch the trip and the invite before joining,
+    // or the join would cite nothing (an event's parents are what this phone knows).
+    for (const e of await this.o.transport.query({ tripTag: this.trip.tripTag }).catch(() => []))
+      this.receive(e);
+    if (!this.local.has(invite.inviteRef))
+      for (const e of await this.o.transport.fetchMissing([invite.inviteRef]).catch(() => []))
+        this.receive(e);
     await this.sync();
+    if (!this.events.has(invite.inviteRef))
+      throw new Error('the invite is not on the relays yet: retry in a moment');
     await this.joinAs(invite.inviteRef, policy);
   }
 
@@ -377,6 +386,8 @@ export class RegistryV2 {
     const trip = this.requireTrip();
     await this.sync();
     const view = this.view();
+    if (type !== 'TRIP_CREATED' && view === null)
+      throw new Error('the trip is not on this phone yet: retry in a moment');
     const parents = type === 'TRIP_CREATED' ? [] : [...(view?.frontier ?? [])];
     // A CHECKPOINT reports exactly what it cites (plan §2.6): computed here, on the same view.
     const content = (
