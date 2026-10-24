@@ -1,6 +1,4 @@
-import { readFileSync } from 'node:fs';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sha256Hex } from './canonical.js';
@@ -193,51 +191,8 @@ describe('dev fakes', () => {
   });
 });
 
-// BIP-340 official vectors: https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
-// (BSD-2-Clause). Columns: index, secret key, public key, aux_rand, message, signature,
-// verification result, comment.
-const bip340 = readFileSync(new URL('./test/vectors/bip340.csv', import.meta.url), 'utf8')
-  .trim()
-  .split('\n')
-  .slice(1)
-  .map((line) => {
-    const [index, secret, pub, aux, msg, sig, ok, comment] = line.split(',');
-    return {
-      index: Number(index),
-      secret: (secret ?? '').toLowerCase(),
-      pub: (pub ?? '').toLowerCase(),
-      aux: (aux ?? '').toLowerCase(),
-      msg: (msg ?? '').toLowerCase(),
-      sig: (sig ?? '').toLowerCase(),
-      ok: ok === 'TRUE',
-      comment: comment ?? '',
-    };
-  });
-const digestVectors = bip340.filter((v) => v.msg.length === 64);
-
+// The BIP-340 official vectors are in crypto.vectors.test.ts (downloaded, needs network).
 describe('schnorrVerifier (BIP-340, registry v2)', () => {
-  it.each(digestVectors)('vector $index: $ok $comment', (v) => {
-    expect(schnorrVerifier.verify(v.pub, v.msg, v.sig)).toBe(v.ok);
-  });
-
-  it.each(digestVectors.filter((v) => v.secret !== ''))(
-    'vector $index: key and signature from the secret',
-    (v) => {
-      expect(schnorrPublicKeyHex(v.secret)).toBe(v.pub);
-      // The vectors fix aux_rand; schnorrSign draws it, so check the result verifies instead.
-      expect(
-        bytesToHex(schnorr.sign(hexToBytes(v.msg), hexToBytes(v.secret), hexToBytes(v.aux))),
-      ).toBe(v.sig);
-      expect(schnorrVerifier.verify(v.pub, v.msg, schnorrSign(v.secret, v.msg))).toBe(true);
-    },
-  );
-
-  it('refuses messages that are not 32-byte digests (vectors 15-18 sign other lengths)', () => {
-    const others = bip340.filter((v) => v.msg.length !== 64);
-    expect(others.map((v) => v.index)).toEqual([15, 16, 17, 18]);
-    for (const v of others) expect(schnorrVerifier.verify(v.pub, v.msg, v.sig)).toBe(false);
-  });
-
   const secret = '03'.padStart(64, '0');
   const pub = schnorrPublicKeyHex(secret);
   const digest = sha256Hex('kitty registry event');
@@ -260,6 +215,12 @@ describe('schnorrVerifier (BIP-340, registry v2)', () => {
     expect(schnorrVerifier.verify(pub, digest, sig.slice(2))).toBe(false);
     expect(verifyAny(schnorrVerifier, null, digest, sig)).toBe(false);
     expect(verifyAny(schnorrVerifier, pub, 42, sig)).toBe(false);
+  });
+
+  it('refuses a public key beyond the field size or a signature with r beyond it', () => {
+    const sig = schnorrSign(secret, digest);
+    expect(schnorrVerifier.verify('f'.repeat(64), digest, sig)).toBe(false);
+    expect(schnorrVerifier.verify(pub, digest, `${'f'.repeat(64)}${sig.slice(64)}`)).toBe(false);
   });
 
   it('is not the ed25519 verifier: a signature of one never passes the other', () => {
