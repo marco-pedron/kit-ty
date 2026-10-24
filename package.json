@@ -31,6 +31,7 @@
     "e2e:liquidity": "./infra/scripts/e2e.sh liquidity",
     "demo:lose-phone": "./infra/scripts/lose-phone.sh",
     "e2e:lose-phone": "./infra/scripts/e2e.sh lose-phone",
+    "e2e:lose-phone:v2": "KITTY_REGISTRY=v2 ./infra/scripts/e2e.sh lose-phone",
     "e2e:onchain": "./infra/scripts/e2e.sh onchain"
   },
   "devDependencies": {

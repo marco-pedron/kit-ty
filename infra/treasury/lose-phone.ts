@@ -140,4 +140,18 @@ console.log(
     `(${(balanceAfter.outbound / 100).toFixed(2)} DUSD to spend in the channels, ` +
     `${(balanceAfter.settled / 100).toFixed(2)} on-chain).`,
 );
+// KITTY_REGISTRY=v2 (step 4): the new phone has no copy of the registry either. The app,
+// installed again with the same seed, finds the trip from the relays alone.
+if (process.env.KITTY_REGISTRY === 'v2' && m !== 'dave') {
+  const agent = (process.env.AGENT_URL || 'http://127.0.0.1:4100').replace(/\/+$/u, '');
+  const r = await fetch(`${agent}/api/${m}/restore-from-seed`, { method: 'POST' });
+  const body = (await r.json()) as { events?: number; error?: { message?: string } };
+  if (!r.ok || typeof body.events !== 'number') {
+    console.error(
+      `ERR: ${m}'s registry not restored from the seed: ${body.error?.message ?? r.status}`,
+    );
+    process.exit(1);
+  }
+  console.log(`${m}'s registry found again from the seed on the relays: ${body.events} events.`);
+}
 process.exit(0);
