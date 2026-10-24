@@ -91,18 +91,27 @@ class Relay {
       for (const live of this.t.lives) this.req(live);
     };
     s.onmessage = (m) => this.onMessage(m.data);
-    s.onerror = () => undefined; // onclose follows
-    s.onclose = () => {
-      if (this.socket !== s) return;
-      this.open = false;
-      this.socket = null;
-      this.liveIds.clear();
-      for (const list of this.oks.values()) for (const r of list) r(false);
-      this.oks.clear();
-      for (const r of this.reqs.values()) r.onEose();
-      this.reqs.clear();
-      this.retry();
-    };
+    // Node 22's WebSocket reports a failed connection with `error` only, never `close`: both
+    // mean the connection is lost, handled once per socket.
+    s.onerror = () => this.lost(s);
+    s.onclose = () => this.lost(s);
+  }
+
+  private lost(s: Socket): void {
+    if (this.socket !== s) return;
+    this.open = false;
+    this.socket = null;
+    try {
+      s.close();
+    } catch {
+      // already closed
+    }
+    this.liveIds.clear();
+    for (const list of this.oks.values()) for (const r of list) r(false);
+    this.oks.clear();
+    for (const r of this.reqs.values()) r.onEose();
+    this.reqs.clear();
+    this.retry();
   }
 
   private retry(): void {

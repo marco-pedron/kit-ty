@@ -35,7 +35,8 @@ class FakeRelay {
 
   connect(c: Client): void {
     if (!this.up) {
-      queueMicrotask(() => c.onclose?.({}));
+      // as Node 22's WebSocket: a refused connection fires `error`, and no `close`
+      queueMicrotask(() => c.onerror?.({}));
       return;
     }
     const conn = { c, subs: new Map<string, RegistryFilter>() };
