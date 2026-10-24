@@ -241,9 +241,11 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
   });
 
   it('step 6: alice is reimbursed 6.59, 3.09 from bob and 3.50 from charlie', async () => {
+    // The money arrives first; the PAYMENT_MADE events come through the relays a moment later.
     const s = await waitFor('alice reimbursed', async () => {
       const x = await state('alice');
-      return x.me?.balance?.tripOutboundCents === 5659n ? x : undefined;
+      const paid = x.me?.credits.filter((l) => l.expenseId === expenseId && l.state === 'paid');
+      return x.me?.balance?.tripOutboundCents === 5659n && paid?.length === 2 ? x : undefined;
     });
     const credits = s.me?.credits.filter((l) => l.expenseId === expenseId) ?? [];
     const by = Object.fromEntries(credits.map((l) => [l.debtor, [l.state, l.paidBy, l.cents]]));
