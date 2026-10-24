@@ -8,7 +8,7 @@ docker image inspect settleup/rln:d4762ac >/dev/null 2>&1 \
 
 # Port pre-check, skipped when our stack is already running (it owns the ports).
 if [ -z "$($COMPOSE ps -q 2>/dev/null)" ]; then
-    for port in 3000 3001 3002 3003 3004 3010 18443 50001 9735 9736 9737 9738; do
+    for port in 3000 3001 3002 3003 3004 3010 18443 50001 9735 9736 9737 9738 "${NOSTR_PORTS[@]}"; do
         if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
             _die "port $port is already in use: $(lsof -nP -iTCP:"$port" -sTCP:LISTEN | tail -1)"
         fi
@@ -49,4 +49,8 @@ for port in "${RLN_PORTS[@]}"; do
     _wait_until "RLN $port" curl -s -o /dev/null "http://127.0.0.1:$port/nodeinfo" \
         || { $COMPOSE logs; exit 1; }
 done
-echo "stack up: bitcoind height $($BITCOIN_CLI getblockcount), esplora $ESPLORA_URL, RLN ${RLN_PORTS[*]}"
+for port in "${NOSTR_PORTS[@]}"; do
+    echo "waiting for the Nostr relay on $port"
+    _wait_until "nostr $port" nc -z 127.0.0.1 "$port" || { $COMPOSE logs; exit 1; }
+done
+echo "stack up: bitcoind height $($BITCOIN_CLI getblockcount), esplora $ESPLORA_URL, RLN ${RLN_PORTS[*]}, Nostr ${NOSTR_PORTS[*]}"
