@@ -114,6 +114,34 @@ services:
       # B6: lock → backup → unlock writes here; the agent reads it and uploads it to the relay
       - ./data/backups/dave:/backups
 
+  # Step 4 (KITTY_REGISTRY=v2): three Nostr relays (strfry, NIP-01) carry the registry v2
+  # events, kind 7345, content encrypted with the trip key. Each phone publishes to all three
+  # and reads from all three; they never see the content. Regtest only, ports on 127.0.0.1.
+  nostr-1: &nostr
+    image: dockurr/strfry:1.1.3
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:7001:7777
+    volumes:
+      - ./nostr/strfry.conf:/etc/strfry.conf:ro
+      - nostr-1:/app/strfry-db
+
+  nostr-2:
+    <<: *nostr
+    ports:
+      - 127.0.0.1:7002:7777
+    volumes:
+      - ./nostr/strfry.conf:/etc/strfry.conf:ro
+      - nostr-2:/app/strfry-db
+
+  nostr-3:
+    <<: *nostr
+    ports:
+      - 127.0.0.1:7003:7777
+    volumes:
+      - ./nostr/strfry.conf:/etc/strfry.conf:ro
+      - nostr-3:/app/strfry-db
+
   # demo:lose-phone (SPEC §12, P1): the member's NEW phone, an empty node restored from the
   # backup on the relay. Same ports and the same network name as the lost node, which stays
   # stopped (its data is kept; infra:up refuses to start it again until demo:reset).
@@ -185,3 +213,6 @@ volumes:
   rln-bob-restored:
   rln-charlie-restored:
   rln-dave-restored:
+  nostr-1:
+  nostr-2:
+  nostr-3:
