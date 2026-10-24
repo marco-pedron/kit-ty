@@ -32,7 +32,6 @@ import { FlowError, apiErrorOf } from './errors.js';
 import { planExpense, previewOf } from './expense.js';
 import { LocalLog } from './local-log.js';
 import { publishEvent } from './publish.js';
-import type { RegistryV2 } from './registry-v2.js';
 
 // The agent of one member (SPEC §6, §8, §14): it holds ONLY that member's wallet, verifies
 // every event itself, and acts within the member's policy. `tick()` is the loop, called every
@@ -104,12 +103,6 @@ export class MemberAgent {
   /** When the node last changed and was not backed up since; null when the backup is current. */
   private dirtySince: number | null;
   private backingUp: Promise<void> | null = null;
-  /**
-   * Always null: this is the v1 agent. Since 23/10 a traveler with KITTY_REGISTRY=v2 is a
-   * RegistryAgent and never touches the legacy log (no double write). Kept for the routes of
-   * stream C until they read the v2 runtime.
-   */
-  readonly registry: RegistryV2 | null = null;
 
   constructor(opts: MemberAgentOptions) {
     this.actor = opts.actor;

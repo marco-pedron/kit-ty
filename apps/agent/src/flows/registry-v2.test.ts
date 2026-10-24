@@ -56,7 +56,7 @@ describe('KITTY_REGISTRY', () => {
 
   it('with v1 nothing changes, and there are no blocks', async () => {
     const d = await demo();
-    expect(d.agents.alice.registry).toBeNull();
+    expect('registry' in d.agents.alice).toBe(false);
     await expect(d.agents.bob.blockMember('alice')).rejects.toThrow(/KITTY_REGISTRY=v2/);
   });
 
