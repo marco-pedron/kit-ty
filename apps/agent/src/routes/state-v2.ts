@@ -169,6 +169,7 @@ class RegistryViewContext {
       ),
       debts: this.sorted((l) => l.debtor === me.pubkey).map((l) => this.line(l)),
       credits: this.sorted((l) => l.payer === me.pubkey).map((l) => this.line(l)),
+      leaveWarning: this.agent.leaveWarning(this.trip),
     };
   }
 
@@ -289,7 +290,7 @@ class RegistryViewContext {
     };
   }
 
-  /** "Ledger verified" on the registry: events held, all verified; DAG complete. */
+  /** "Ledger verified" on the registry: events held, all verified; DAG complete; checkpoints. */
   health(): LedgerHealth {
     const held = this.agent.registry.allEvents().length;
     return {
@@ -298,8 +299,14 @@ class RegistryViewContext {
       chainValid: this.trip.waiting.length === 0 && this.trip.rejected.length === 0,
       headSeq: this.trip.count,
       headHash: this.trip.stateHash,
-      // Compared through CHECKPOINT with step 4 (relays): not yet.
-      checkpoints: null,
+      // The latest CHECKPOINT of each active member, checked on this phone (step 4, plan §2.6).
+      checkpoints:
+        this.trip.checkpoints.length === 0
+          ? null
+          : {
+              matching: this.trip.checkpoints.filter((c) => c.sameState).length,
+              compared: this.trip.checkpoints.length,
+            },
     };
   }
 

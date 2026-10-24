@@ -4,6 +4,8 @@ COMPOSE="docker compose -f $INFRA_DIR/docker-compose.yml"
 BITCOIN_CLI="$COMPOSE exec -T -u blits bitcoind bitcoin-cli -regtest"
 ESPLORA_URL="${ESPLORA_URL:-http://127.0.0.1:3010}"
 RLN_PORTS=(3001 3002 3003 3004)
+# step 4: the Nostr relays of the registry v2 (KITTY_NOSTR_RELAYS of the agent)
+NOSTR_PORTS=(7001 7002 7003)
 TIMEOUT="${TIMEOUT:-120}"
 
 _die() {

@@ -7,7 +7,7 @@ ok() { echo "  OK   $*"; }
 fail() { echo "  FAIL $*"; exit 1; }
 
 echo "[1] containers running"
-expected=(bitcoind electrs esplora proxy rln-alice rln-bob rln-charlie rln-dave)
+expected=(bitcoind electrs esplora proxy rln-alice rln-bob rln-charlie rln-dave nostr-1 nostr-2 nostr-3)
 running=$($COMPOSE ps --status running --services)
 for s in "${expected[@]}"; do
     grep -qx "$s" <<<"$running" && ok "$s" || fail "$s not running"

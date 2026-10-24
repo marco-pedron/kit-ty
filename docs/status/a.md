@@ -18,6 +18,19 @@
 - [x] **S2 Stack A, passo 2: regole del registro v2** (gio 22/10, branch `a/S2-registry-rules`). Dettagli sotto.
 - [x] **S3 Stack A, passo 3: chiave del registro per viaggio, `kitty-bind:v2`, app sul registro v2 dietro `KITTY_REGISTRY`** (gio 22/10, branch `a/S3-registry-v2-flag`). Dettagli sotto.
 - [x] **S3 bis, decisioni del 23/10: con v2 decide il registro nuovo** (ven 23/10, pila di PR `b/S3-wallet-leave` ← `a/S3-v2-only` ← `c/S3-v2-routes` ← `b/S3-demo-v2-story`). Dettagli sotto.
+- [x] **S4 Stack A, passo 4: trasporto Nostr** (sab 24/10, pila `b/S4-nostr-relays` ← `a/S4-nostr-registry` ← `c/S4-nostr-transport` ← `a/S4-nostr-wiring` ← `b/S4-demo-v2-relays`). Dettagli sotto.
+
+## S4: trasporto Nostr (passo 4, solo con `KITTY_REGISTRY=v2`)
+- **Cosa funziona:**
+  - interfaccia `Transport` (publish, subscribe, fetchMissing, query) in `flows/registry-transport.ts`;
+  - `RegistryV2` segue il viaggio con `subscribe`, salva ogni evento nella copia locale (`FileStore`), chiede i genitori mancanti (`fetchMissing`) e applica un evento solo con tutti gli antenati;
+  - checkpoint dei membri attivi, verificati da ogni telefono ("uguale su N/N", ledger `checkpoints`);
+  - recupero dalla seed dalla copia locale e dai relay; `RegistryAgent.restoreFromSeed` per `demo:lose-phone`;
+  - avviso prima dell'uscita con i crediti aperti, da chi e quanto.
+
+  Il client NIP-01 (`relay/nostr-transport.ts`) è dello stream C, i relay strfry in Docker dello stream B.
+- **Come si prova:** `pnpm test` (ledger "checkpoints compared on every phone", agente "step 4", `nostr-transport.test.ts` con relay finti); `pnpm demo:reset && pnpm e2e:demo:v2` (relay spento a metà demo); `KITTY_REGISTRY=v2 pnpm e2e:lose-phone`.
+- **Problemi noti:** la richiesta effimera "need" agli altri membri (piano §2.5, punto 3) è del passo 7; il recupero dalla seed usa una connessione per relay per tutte le chiavi (limite nell'ADR §12).
 
 ## S3 bis: le decisioni del 23/10 (con `KITTY_REGISTRY=v2` decide il registro nuovo)
 - **Cosa funziona:**
@@ -34,7 +47,7 @@
   - `MemberAgent.registry` resta come campo sempre `null` finché una pulizia non lo toglie (le rotte di C non lo usano più).
   - Uscire con crediti è permesso, ma dopo l'uscita i canali sono chiusi: quei crediti si pagano solo on-chain (l'app avvisa). Da confermare.
   - `demo:lose-phone` non è provato con v2.
-- **Prossimo passo:** passo 4 (trasporto Nostr), dopo la tua conferma.
+- **Prossimo passo:** fatto, vedi S4.
 
 ## Demo di riserva `demo-finale-v1` (non si modifica più)
 - Tag `demo-finale-v1` = commit `d963464` del ramo principale (21/10), pubblicato su origin.

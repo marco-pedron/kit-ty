@@ -187,6 +187,11 @@ export const MeViewSchema = z.object({
    * was settled, e.g. "Reimbursed 6.59: 3.09 from bob, 3.50 guaranteed by the operator".
    */
   credits: z.array(LineViewSchema),
+  /**
+   * KITTY_REGISTRY=v2: shown before leaving: the credits still open, from whom and how much,
+   * collected outside the app once the channels are closed. Null when nothing is owed to me.
+   */
+  leaveWarning: z.string().nullable().optional(),
 });
 export type MeView = z.output<typeof MeViewSchema>;
 

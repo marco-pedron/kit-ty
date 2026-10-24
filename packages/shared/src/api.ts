@@ -244,6 +244,17 @@ export const routes = {
     params: As,
     response: LeaveResponseSchema,
   },
+  /**
+   * KITTY_REGISTRY=v2 only (step 4, demo:lose-phone): the app installed again on a new phone
+   * finds its trip from the seed alone, on the relays. → how many events came back.
+   */
+  restoreFromSeed: {
+    method: 'POST',
+    path: '/api/:as/restore-from-seed',
+    roles: traveler,
+    params: As,
+    response: z.object({ events: z.number().int().nonnegative() }),
+  },
   resolveDispute: {
     method: 'POST',
     path: '/api/dave/disputes/:expenseId/:member',

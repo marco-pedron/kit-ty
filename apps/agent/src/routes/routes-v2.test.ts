@@ -183,6 +183,27 @@ describe('agent routes with KITTY_REGISTRY=v2', () => {
     expect(end.activity.filter((r) => r.kind === 'MEMBER_LEFT')).toHaveLength(3);
   });
 
+  it('"same on 3/3" from the checkpoints; a new phone restores the registry from the seed', async () => {
+    const d = await registryDemo();
+    const a = serve(d);
+    await dinner(d, a);
+    d.advance(20);
+    await d.tickAll();
+    for (let i = 0; i < 3; i++) {
+      d.advance(11);
+      await d.tickAll();
+    }
+    for (const as of ['alice', 'bob', 'charlie'] as const)
+      expect((await state(a, as)).ledger.checkpoints).toEqual({ matching: 3, compared: 3 });
+    const before = (await state(a, 'bob')).ledger.headHash;
+    const r = await call(a, 'POST', '/api/bob/restore-from-seed');
+    expect(r.status).toBe(200);
+    expect(r.json.events).toBeGreaterThan(10);
+    expect((await state(a, 'bob')).ledger.headHash).toBe(before);
+    // bob and charlie paid after the silent assent: nothing left to warn alice about
+    expect((await state(a, 'alice')).me?.leaveWarning).toBeNull();
+  });
+
   it('a vote through the route decides the line; leaving with a debt is refused', async () => {
     const d = await registryDemo();
     const a = serve(d);
@@ -193,6 +214,10 @@ describe('agent routes with KITTY_REGISTRY=v2', () => {
     });
     const refused = await call(a, 'POST', '/api/charlie/leave');
     expect(refused.status).toBe(403);
+    // before leaving, alice sees what is still owed to her and that it is collected outside
+    expect((await state(a, 'alice')).me?.leaveWarning).toMatch(
+      /still owed 3\.09 from bob .*3\.50 from charlie .*collected outside the app/,
+    );
     await d.tickAll();
     const vote = await call(a, 'POST', `/api/bob/expenses/${id}/lines/charlie/vote`, {
       outcome: 'voided',
