@@ -14,6 +14,7 @@ import type {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   ESPLORA,
+  mine,
   nostrRelay,
   relayIds,
   startStack,
@@ -355,8 +356,11 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
   });
 
   it("step 7: each member's DUSD come back on-chain", async () => {
-    // RGB settles the swept outputs a little after the closes confirm: the three in parallel.
+    // RGB settles the swept outputs on the next blocks after the sweeps confirm. On a real
+    // chain blocks keep coming; on regtest only the closers mined, and they stopped: a block
+    // every 15 s stands for the chain going on.
     const t0 = Date.now();
+    const chain = setInterval(() => void mine(1).catch(() => undefined), 15_000);
     const back = await Promise.all(
       TRAVELERS.map((who) =>
         waitFor(
@@ -373,6 +377,7 @@ describe('the demo with KITTY_REGISTRY=v2 on the regtest stack (irreversible)', 
         ),
       ),
     );
+    clearInterval(chain);
     note('back on-chain', { afterMs: Date.now() - t0, balances: back });
     for (const b of back) expect(b.tripOutboundCents).toBe(0n);
   });

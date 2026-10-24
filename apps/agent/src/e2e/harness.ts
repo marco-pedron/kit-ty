@@ -189,3 +189,9 @@ export async function nostrRelay(n: 1 | 2 | 3, action: 'stop' | 'start'): Promis
   const compose = fileURLToPath(new URL('../../../../infra/docker-compose.yml', import.meta.url));
   await promisify(execFile)('docker', ['compose', '-f', compose, action, `nostr-${n}`]);
 }
+
+/** Regtest: mine `n` blocks (infra/scripts/mine.sh), as time passing on a real chain. */
+export async function mine(n = 1): Promise<void> {
+  const script = fileURLToPath(new URL('../../../../infra/scripts/mine.sh', import.meta.url));
+  await promisify(execFile)(script, [String(n)]);
+}
