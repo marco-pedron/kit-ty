@@ -24,6 +24,7 @@ describe('route table (SPEC §14.3)', () => {
         'POST /api/:as/members/:member/unblock',
         'POST /api/:as/expenses/:id/lines/:member/vote',
         'POST /api/:as/leave',
+        'POST /api/:as/restore-from-seed',
         'POST /api/dave/disputes/:expenseId/:member',
         'POST /api/dave/defaults/:expenseId/:member/cover-and-exclude',
         'PUT /api/dave/rates',

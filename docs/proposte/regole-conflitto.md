@@ -68,7 +68,7 @@ Codice: con `KITTY_REGISTRY=v2` i viaggiatori sono `RegistryAgent` (`apps/agent/
 Non esiste un evento di chiusura e nessuno la decide. Quando un membro esce (`MEMBER_LEFT`, valido solo senza debiti noti), chiude i propri canali con l'LSP dal proprio wallet. Il viaggio è chiuso quando tutti i membri sono usciti: lo calcola ogni telefono (`finished` di `deriveRegistry`).
 
 - **Ordine nell'app.** Prima `MEMBER_LEFT` (se il registro lo rifiuta non si chiude niente), poi la chiusura cooperativa dei due canali. Se la chiusura non riesce, l'agente la ritenta finché non riesce; l'uscita resta valida.
-- **Conseguenza da confermare.** Si può uscire con crediti da incassare (regola del 22/10), ma dopo l'uscita i canali sono chiusi: chi deve ancora pagare l'uscito può farlo solo on-chain. L'app lo avvisa al momento dell'uscita.
+- **Uscita con crediti: conseguenza dichiarata** *(aggiornato il 23/10)*. Si può uscire con crediti da incassare (regola del 22/10, confermata il 24/10). Prima dell'uscita l'app elenca i crediti ancora aperti, da chi e quanto, e avvisa che dopo l'uscita si incassano **fuori dall'app**, perché i canali saranno chiusi. Codice: `RegistryAgent.leaveWarning`, mostrato prima della conferma.
 
 ## Contestazioni a maggioranza (provvisoria) *(aggiornato il 23/10)*
 

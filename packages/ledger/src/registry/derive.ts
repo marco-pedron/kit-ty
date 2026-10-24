@@ -7,13 +7,14 @@ import {
   possibleDuplicates,
   type PolicyLimits,
 } from '../conflicts.js';
-import { fixedOrder } from '../order.js';
+import { fixedOrder, type FixedOrder } from '../order.js';
 import {
   blockersOf,
   blocks,
   exclusionsConcurrentWith,
   fold,
   groupMajority,
+  isActive,
   isExcluded,
   isOpen,
   memberPolicy,
@@ -112,6 +113,15 @@ export interface RegistryTrip {
   rejected: readonly { id: string; reason: string }[];
   /** Events that wait for a missing parent (not applied yet). */
   waiting: readonly string[];
+  /** Ids cited but absent: what the phone asks the relays for (fetchMissing, plan §2.5). */
+  missing: readonly string[];
+  /**
+   * The latest CHECKPOINT of each active member, checked on this phone (plan §2.6):
+   * `verified` = this phone holds everything it cites and recomputes the same count and
+   * stateHash on it (else a relay hid something, or a bug); `sameState` = besides the
+   * checkpoints themselves, it covers exactly the events this phone has: "same on N/N".
+   */
+  checkpoints: readonly { author: string; id: string; verified: boolean; sameState: boolean }[];
   frontier: readonly string[];
   /** Events in the fixed order (CHECKPOINT.count). */
   count: number;
@@ -206,6 +216,8 @@ export function deriveRegistry(
     autoPayments,
     rejected: [...rejected].map(([id, reason]) => ({ id, reason })),
     waiting: fo.waiting.map((e) => e.id),
+    missing: fo.missing,
+    checkpoints: checkpointsOf(fo, f, rejected),
     frontier: fo.frontier,
     count: fo.order.length,
     stateHash: fo.stateHash,
@@ -305,4 +317,43 @@ function lineAt(
 export function lineIsOpen(trip: RegistryTrip, key: string): boolean {
   const l = trip.fold.lines.get(key);
   return l !== undefined && isOpen(trip.fold, l);
+}
+
+/** The latest valid CHECKPOINT of each active member, checked against this phone's events. */
+function checkpointsOf(
+  fo: FixedOrder<registry.RegistryEvent>,
+  f: Fold,
+  rejected: ReadonlyMap<string, string>,
+): RegistryTrip['checkpoints'] {
+  const latest = new Map<string, registry.RegistryEvent>();
+  for (const e of fo.order)
+    if (e.content.type === 'CHECKPOINT' && !rejected.has(e.id) && isActive(f, e.author))
+      latest.set(e.author, e);
+  const byId = new Map(fo.order.map((e) => [e.id, e]));
+  const isState = (e: registry.RegistryEvent) => e.content.type !== 'CHECKPOINT';
+  const mine = new Set(fo.order.filter(isState).map((e) => e.id));
+  const out: { author: string; id: string; verified: boolean; sameState: boolean }[] = [];
+  for (const [author, cp] of latest) {
+    if (cp.content.type !== 'CHECKPOINT') continue;
+    const body = cp.content.body;
+    const covered = new Set<string>();
+    let complete = true;
+    for (const head of body.frontier) {
+      if (!byId.has(head)) {
+        complete = false;
+        break;
+      }
+      covered.add(head);
+      for (const a of fo.causality.ancestorsOf(head)) covered.add(a);
+    }
+    const sub = complete
+      ? fixedOrder([...covered].map((id) => byId.get(id) as registry.RegistryEvent))
+      : null;
+    const verified =
+      sub !== null && sub.stateHash === body.stateHash && sub.order.length === body.count;
+    const states = [...covered].filter((id) => isState(byId.get(id) as registry.RegistryEvent));
+    const sameState = verified && states.length === mine.size && states.every((id) => mine.has(id));
+    out.push({ author, id: cp.id, verified, sameState });
+  }
+  return out.sort((a, b) => a.author.localeCompare(b.author));
 }

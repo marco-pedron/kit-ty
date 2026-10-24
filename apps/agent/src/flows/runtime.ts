@@ -18,7 +18,11 @@ import { apiErrorOf } from './errors.js';
 import { LspAgent } from './lsp-agent.js';
 import { MemberAgent } from './member-agent.js';
 import { RegistryAgent, type SavedRate } from './registry-agent.js';
-import { MemoryTransport, type RegistryTransport } from './registry-transport.js';
+import {
+  MemoryTransport,
+  type RegistryStore,
+  type RegistryTransport,
+} from './registry-transport.js';
 import { RegistryV2 } from './registry-v2.js';
 import { loadRates, type TripChannels } from './seed-state.js';
 
@@ -42,7 +46,8 @@ export interface AgentRuntime {
 export interface RegistryRuntime {
   travelers: Map<MemberId, RegistryAgent>;
   lsp: LspAgent;
-  transport: RegistryTransport;
+  /** Tests: the one in-process transport they share. With relays each traveler has its own. */
+  transport?: RegistryTransport;
   /** What the UI shows of the trip (D, L, labels); the rules are the registry's TripParams. */
   params: TripParams;
 }
@@ -74,12 +79,17 @@ export function startAgents(p: {
   backupQuietMs?: number;
   /**
    * KITTY_REGISTRY=v2: each traveler's BIP-39 seed (the registry keys are derived from it,
-   * NIP-06), the transport of the registry (in-process until step 4), the rate each phone
-   * saved and the UI parameters of the trip. Unset: v1.
+   * NIP-06), the transport of each phone (Nostr relays, step 4; default one in-process
+   * transport), its local copy (default in memory), the rate each phone saved, the UI
+   * parameters of the trip and the checkpoint timing. Unset: v1.
    */
   registry?: {
     seeds: Record<MemberId, Uint8Array>;
     transport?: RegistryTransport;
+    transportFor?: (id: MemberId) => RegistryTransport;
+    storeFor?: (id: MemberId) => RegistryStore;
+    checkpointQuietMs?: number;
+    checkpointEveryMs?: number;
     rate?: () => SavedRate;
     params?: TripParams;
     retryMs?: number;
@@ -137,7 +147,8 @@ function startRegistryAgents(
   },
 ): AgentRuntime {
   const now = p.now ?? (() => new Date());
-  const transport = p.registry.transport ?? new MemoryTransport();
+  const shared = p.registry.transport ?? new MemoryTransport();
+  const transportFor = p.registry.transportFor ?? (() => shared);
   const params = p.registry.params ?? DEMO_TRIP_PARAMS;
   const rate = p.registry.rate ?? loadRates;
   const lspNode = p.wallets.dave.nodePubkey();
@@ -146,24 +157,40 @@ function startRegistryAgents(
   const travelers = new Map<MemberId, RegistryAgent>();
   for (const id of MEMBER_IDS) {
     const wallet = p.wallets[id];
+    const reg = p.registry;
+    const transport = transportFor(id);
+    /** This phone's registry; `fresh`: a new install with nothing on disk (lose-phone). */
+    const registryOf = (fresh: boolean) => {
+      const store = reg.storeFor?.(id);
+      if (fresh) store?.wipe();
+      return new RegistryV2({
+        displayName: id,
+        seed: reg.seeds[id],
+        wallet,
+        transport,
+        now,
+        ...(store && { store }),
+      });
+    };
     travelers.set(
       id,
       new RegistryAgent({
         actor: id,
         wallet,
-        registry: new RegistryV2({
-          displayName: id,
-          seed: p.registry.seeds[id],
-          wallet,
-          transport,
-          now,
-        }),
+        registry: registryOf(false),
+        newRegistry: () => registryOf(true),
         relay: p.relay,
         rate,
         lspNodePubkey: () => lspNode,
         now,
         backupQuietMs: p.backupQuietMs ?? BACKUP_QUIET_MS,
         ...(p.registry.retryMs !== undefined && { retryMs: p.registry.retryMs }),
+        ...(p.registry.checkpointQuietMs !== undefined && {
+          checkpointQuietMs: p.registry.checkpointQuietMs,
+        }),
+        ...(p.registry.checkpointEveryMs !== undefined && {
+          checkpointEveryMs: p.registry.checkpointEveryMs,
+        }),
       }),
     );
   }
@@ -173,8 +200,16 @@ function startRegistryAgents(
   return {
     agents: new Map(),
     registry: 'v2',
-    v2: { travelers, lsp, transport, params },
-    stop: () => clearInterval(timer),
+    v2: {
+      travelers,
+      lsp,
+      ...(p.registry.transportFor === undefined && { transport: shared }),
+      params,
+    },
+    stop: () => {
+      clearInterval(timer);
+      for (const t of travelers.values()) t.registry.close();
+    },
   };
 }
 
@@ -248,14 +283,14 @@ export async function seedTrip(
  */
 export async function seedRegistry(
   rt: AgentRuntime,
-  p: { tripId: string; name: string; assetId: string },
+  p: { tripId: string; name: string; assetId: string; relays?: readonly string[] },
   log: Log,
 ): Promise<void> {
   const v2 = rt.v2;
   if (v2 === undefined) throw new Error('seedRegistry needs KITTY_REGISTRY=v2');
   for (;;) {
     try {
-      await seedRegistryV2(v2.travelers, p.tripId, p.name, p.assetId, v2.params);
+      await seedRegistryV2(v2.travelers, p.tripId, p.name, p.assetId, v2.params, p.relays);
       log.info(`trip "${p.name}" ready in the registry v2 (asset ${p.assetId}), no coordinator`);
       return;
     } catch (err) {
@@ -272,6 +307,8 @@ export async function seedRegistryV2(
   name: string,
   assetId: string,
   params: TripParams,
+  /** The relays of the trip (TRIP_CREATED.relays); none before step 4: in-process. */
+  relays: readonly string[] = ['ws://localhost/in-process'],
 ): Promise<void> {
   const [creatorId = 'alice', ...others] = MEMBER_IDS;
   const creator = travelers.get(creatorId)?.registry;
@@ -286,12 +323,11 @@ export async function seedRegistryV2(
       rateMaxAgeSeconds: 86_400,
       oracles: [],
     };
-    // No Nostr relay before step 4: the events travel inside the agent process.
     await creator.createTrip({
       tripId,
       name,
       params: v2Params,
-      relays: ['ws://localhost/in-process'],
+      relays: [...relays],
       policy: DEFAULT_POLICY,
     });
   }

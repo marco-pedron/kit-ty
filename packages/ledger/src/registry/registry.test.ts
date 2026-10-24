@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import type { registry as shared } from '@kitty/shared';
 import { describe, expect, it } from 'vitest';
+import { fixedOrder } from '../order.js';
 import { expenseShares } from '../shares.js';
 import { PARAMS, PK, T0, TestTrip, shuffled, type Name } from '../test/registry.js';
 import { decideRegistryAutoPay, invoiceRefusal } from './autopay.js';
@@ -492,6 +493,55 @@ describe('CHECKPOINT: only an active member', () => {
     expect(reasonOf(trip, ok)).toBeUndefined();
     expect(reasonOf(trip, left)).toMatch(/active member/);
     expect(reasonOf(trip, excluded)).toMatch(/active member/);
+  });
+});
+
+describe('checkpoints compared on every phone (step 4, plan §2.6)', () => {
+  /** What an author writes in its CHECKPOINT: its heads, count and stateHash. */
+  const body = (t: TestTrip) => {
+    const fo = fixedOrder(t.events);
+    return { frontier: [...fo.frontier], count: fo.order.length, stateHash: fo.stateHash };
+  };
+  const cps = (t: TestTrip) =>
+    Object.fromEntries(
+      derive(t).checkpoints.map((c) => [
+        Object.entries(PK).find(([, pk]) => pk === c.author)?.[0],
+        [c.verified, c.sameState],
+      ]),
+    );
+
+  it('three checkpoints of the same state: verified and the same on 3/3', () => {
+    const t = TestTrip.withMembers();
+    t.expense('alice', ['bob', 'charlie']);
+    for (const who of ['alice', 'bob', 'charlie'] as const) t.add(who, 'CHECKPOINT', body(t));
+    expect(cps(t)).toEqual({ alice: [true, true], bob: [true, true], charlie: [true, true] });
+  });
+
+  it('a later expense: the old checkpoints are verified but no longer the same state', () => {
+    const t = TestTrip.withMembers();
+    t.add('alice', 'CHECKPOINT', body(t));
+    t.expense('bob', ['alice']);
+    expect(cps(t)).toEqual({ alice: [true, false] });
+  });
+
+  it('a wrong stateHash or a head this phone lacks is not verified', () => {
+    const t = TestTrip.withMembers();
+    t.add('alice', 'CHECKPOINT', { ...body(t), stateHash: 'f'.repeat(64) });
+    t.add('bob', 'CHECKPOINT', { ...body(t), frontier: ['a'.repeat(64)] });
+    expect(cps(t)).toEqual({ alice: [false, false], bob: [false, false] });
+  });
+
+  it('a missing parent is listed, to ask the relays for it', () => {
+    const t = TestTrip.withMembers();
+    const e = t.expense('alice', ['bob']);
+    t.pay('bob', e);
+    const trip = deriveRegistry(
+      t.events.filter((x) => x.id !== e.id),
+      t.deps,
+      LATER,
+    );
+    expect(trip?.missing).toEqual([e.id]);
+    expect(trip?.waiting).toHaveLength(1);
   });
 });
 

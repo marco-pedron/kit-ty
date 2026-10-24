@@ -361,6 +361,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps): void {
     return travelerV2(v2, as).leave();
   });
 
+  handle('restoreFromSeed', async ({ params: { as } }) => {
+    const v2 = registryOf();
+    if (v2 === null) throw v1Only('Restoring the registry from the seed');
+    const agent = travelerV2(v2, as);
+    // The trip id is not secret: the new phone knows it from the invite or the operator.
+    const tripId = agent.view()?.tripId;
+    if (tripId === undefined) throw refuse('NOT_FOUND', `${as} has no trip to restore`);
+    return agent.restoreFromSeed(tripId);
+  });
+
   handle('resolveDispute', async ({ params: { expenseId, member }, body }) => {
     if (registryOf() !== null) throw noCoordinator();
     const dave = daveAgent();
