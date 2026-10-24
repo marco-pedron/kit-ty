@@ -32,6 +32,11 @@ export interface RegistryAgentOptions {
   actor: MemberId;
   wallet: Wallet;
   registry: RegistryV2;
+  /**
+   * A new install on a new phone (demo:lose-phone): a fresh registry with an empty local
+   * copy, the same seed. Unset: restoreFromSeed is not available.
+   */
+  newRegistry?: () => RegistryV2;
   /** Only for the encrypted backups of the node (SPEC §12). */
   relay: Pick<RelayClient, 'putBackup'>;
   rate: () => SavedRate;
@@ -77,7 +82,8 @@ export interface LeaveResult {
 
 export class RegistryAgent {
   readonly actor: MemberId;
-  readonly registry: RegistryV2;
+  private current: RegistryV2;
+  private readonly newRegistry: (() => RegistryV2) | null;
   private readonly lspNodePubkey: () => Promise<string>;
   private readonly wallet: Wallet;
   private readonly relay: Pick<RelayClient, 'putBackup'>;
@@ -117,7 +123,8 @@ export class RegistryAgent {
   constructor(o: RegistryAgentOptions) {
     this.actor = o.actor;
     this.wallet = o.wallet;
-    this.registry = o.registry;
+    this.current = o.registry;
+    this.newRegistry = o.newRegistry ?? null;
     this.relay = o.relay;
     this.rate = o.rate;
     this.lspNodePubkey = o.lspNodePubkey;
@@ -127,6 +134,29 @@ export class RegistryAgent {
     this.checkpointQuietMs = o.checkpointQuietMs ?? 3_000;
     this.checkpointEveryMs = o.checkpointEveryMs ?? 10_000;
     this.dirtySince = this.now().getTime();
+  }
+
+  get registry(): RegistryV2 {
+    return this.current;
+  }
+
+  /**
+   * The lost phone (demo:lose-phone, SPEC §12): the app installed again with the same seed and
+   * nothing on disk. The registry key and the trip come back from the relays alone (recovery:
+   * the key indexes until 5 empty in a row, the trip secret from TRIP_SECRET_SHARED). Returns
+   * how many events came back. The node itself is restored from its backup (stream B).
+   */
+  async restoreFromSeed(tripId: string): Promise<{ events: number }> {
+    if (this.newRegistry === null)
+      throw new FlowError('NOT_ALLOWED', 'restoring from the seed is not set up for this agent');
+    this.current.close();
+    const fresh = this.newRegistry();
+    if (!(await fresh.recover(tripId)))
+      throw new FlowError('NOT_FOUND', `no trip ${tripId} found from the seed on the relays`);
+    this.current = fresh;
+    this.sent.clear();
+    this.addActivity('This phone found your trip again from your seed, on the relays.');
+    return { events: fresh.allEvents().length };
   }
 
   // ---------- reading (for the routes) ----------

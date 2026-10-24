@@ -192,6 +192,23 @@ describe('step 4: transport, local copy, missing events, checkpoints', () => {
     expect(phone.view()?.expenses.has(expenseRef)).toBe(true);
   });
 
+  it('lose-phone: a new install finds the trip from the seed on the relays, and pays again', async () => {
+    const d = await registryDemo();
+    await dinner(d);
+    d.advance(20);
+    await d.tickAll();
+    const key = d.travelers.bob.registry.pubkey;
+    const { events } = await d.travelers.bob.restoreFromSeed('vietnam-2026');
+    expect(events).toBeGreaterThan(10);
+    expect(d.travelers.bob.registry.pubkey).toBe(key);
+    const id = await dinner(d);
+    d.advance(20);
+    await d.tickAll();
+    await d.tickAll();
+    expect(lineOf(d, id, 'bob').state).toBe('paid');
+    expect(d.travelers.alice.view()?.members.get(key ?? '')?.forked).toBe(false);
+  });
+
   it('every active member checkpoints; each phone sees the same state on 3/3', async () => {
     const d = await registryDemo();
     await dinner(d);

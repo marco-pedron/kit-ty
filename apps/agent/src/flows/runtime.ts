@@ -157,19 +157,28 @@ function startRegistryAgents(
   const travelers = new Map<MemberId, RegistryAgent>();
   for (const id of MEMBER_IDS) {
     const wallet = p.wallets[id];
+    const reg = p.registry;
+    const transport = transportFor(id);
+    /** This phone's registry; `fresh`: a new install with nothing on disk (lose-phone). */
+    const registryOf = (fresh: boolean) => {
+      const store = reg.storeFor?.(id);
+      if (fresh) store?.wipe();
+      return new RegistryV2({
+        displayName: id,
+        seed: reg.seeds[id],
+        wallet,
+        transport,
+        now,
+        ...(store && { store }),
+      });
+    };
     travelers.set(
       id,
       new RegistryAgent({
         actor: id,
         wallet,
-        registry: new RegistryV2({
-          displayName: id,
-          seed: p.registry.seeds[id],
-          wallet,
-          transport: transportFor(id),
-          now,
-          ...(p.registry.storeFor && { store: p.registry.storeFor(id) }),
-        }),
+        registry: registryOf(false),
+        newRegistry: () => registryOf(true),
         relay: p.relay,
         rate,
         lspNodePubkey: () => lspNode,

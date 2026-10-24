@@ -76,6 +76,8 @@ export class MemoryTransport implements RegistryTransport {
 export interface RegistryStore {
   load(): NostrEvent[];
   add(e: NostrEvent): void;
+  /** The phone is gone (demo:lose-phone): nothing left on disk. */
+  wipe(): void;
 }
 
 export class MemoryStore implements RegistryStore {
@@ -85,6 +87,9 @@ export class MemoryStore implements RegistryStore {
   }
   add(e: NostrEvent): void {
     this.events.push(e);
+  }
+  wipe(): void {
+    this.events.length = 0;
   }
 }
 

@@ -140,13 +140,16 @@ export async function registryDemo(opts: { retryMs?: number } = {}): Promise<Reg
   const travelers = Object.fromEntries(
     MEMBER_IDS.map((id) => {
       const wallet = net.wallet(id);
-      const registry = new RegistryV2({ displayName: id, seed: seeds[id], wallet, transport, now });
+      const registryOf = () =>
+        new RegistryV2({ displayName: id, seed: seeds[id], wallet, transport, now });
+      const registry = registryOf();
       return [
         id,
         new RegistryAgent({
           actor: id,
           wallet,
           registry,
+          newRegistry: registryOf,
           relay,
           rate: () => ({ asOf: '2026-10-17', source: 'infra/rates.json', rates: { VND: '26350' } }),
           lspNodePubkey: () => daveWallet.nodePubkey(),
