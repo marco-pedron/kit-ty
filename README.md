@@ -95,7 +95,7 @@ The WDK spike ([`docs/spike-wdk.md`](docs/spike-wdk.md)) tried `@utexo/wdk-rgb-l
 
 Finally, the design and planning documents (spec, work plan, pitch and session prompts) predate the hackathon too. There were no UI designs or mobile app at that point.
 
-#kit+ty v2
+# kit+ty v2
 
 This is ongoing work on the v2 branch; the version presented at the final is on main.
 
