@@ -8,7 +8,7 @@ kit+ty is our project for the _Agentic Dollars on Bitcoin_ hackathon (BLOX Torin
 
 The README has two parts. [Part 1](#part-1--kitty-v1) describes kit+ty v1, the version on this branch, presented at the final. [Part 2](#part-2--kitty-v2) describes kit+ty v2, the work in progress on the `v2` branch.
 
-# Part 1 — kit+ty v1
+# kit+ty v1
 
 ## The idea
 
@@ -95,7 +95,7 @@ The WDK spike ([`docs/spike-wdk.md`](docs/spike-wdk.md)) tried `@utexo/wdk-rgb-l
 
 Finally, the design and planning documents (spec, work plan, pitch and session prompts) predate the hackathon too. There were no UI designs or mobile app at that point.
 
-# Part 2 — kit+ty v2
+#kit+ty v2
 
 This is ongoing work on the v2 branch; the version presented at the final is on main.
 
