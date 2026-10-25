@@ -5,10 +5,10 @@
 
 ## Decisioni del PM (sab 17/10, dopo la prima revisione)
 1. **Niente interruttore.** Un solo slider del limite, da 0 alla capacità del canale di viaggio (D = 50.00, `trip.params.tripChannelCents`). Etichette: a 0 "Always ask me"; a D "Automatic payment"; in mezzo "Pay automatically up to X DUSD". Sostituisce l'interruttore ON/OFF della sezione B e le domande E1 ed E4.
-2. **Finestre in sequenza.** Contestazione 45 s, poi approvazione fino a 120 s dalla notifica (`LINE_SEEN`). Il ledger le conta già entrambe da `LINE_SEEN`: con 45/120 diventano due fasi consecutive (0-45 s contestazione; 45-120 s approvazione delle parti sopra limite, ancora contestabili). **Serve però una modifica di codice**: i tempi non sono configurabili, sono le costanti di `DEMO_TRIP_PARAMS` che `seedTrip` scrive in `TRIP_CREATED` (`apps/agent/src/flows/runtime.ts:95`). Richiesta R4 a Marco in `docs/status/c.md`; SPEC §15 va aggiornata dal PM.
+2. **Finestre in sequenza.** Contestazione 45 s, poi approvazione fino a 120 s dalla notifica (`LINE_SEEN`). Il ledger le conta già entrambe da `LINE_SEEN`: con 45/120 diventano due fasi consecutive (0-45 s contestazione; 45-120 s approvazione delle parti sopra limite, ancora contestabili). **Serve però una modifica di codice**: i tempi non sono configurabili, sono le costanti di `DEMO_TRIP_PARAMS` che `seedTrip` scrive in `TRIP_CREATED` (`apps/agent/src/flows/runtime.ts:95`). Richiesta R4 allo stream B in `docs/status/c.md`; SPEC §15 va aggiornata dal PM.
 3. **Alla scadenza dell'approvazione** la parte diventa insolvente da sola (`overdue`, derivata senza evento: `packages/ledger/src/kitty.ts:152-158`) e compare tra gli insolventi di Dave; l'esclusione la decide sempre Dave con "Cover and exclude" (`MEMBER_EXCLUDED` firmato solo da lui, `apps/agent/src/flows/dave.ts`). Corrisponde già al codice.
 
-4. **R4 approvata (sab 17/10):** i tempi 45/120 si passano al seed come override; i test restano su 20/30. La implementa Marco.
+4. **R4 approvata (sab 17/10):** i tempi 45/120 si passano al seed come override; i test restano su 20/30. La implementa lo stream B.
 5. **E12, tempi confermati:** 45/120. **Dal vivo si fa solo la storia 1; la storia 2 va nel video, con i tagli** sulle attese (120 s dopo la conferma di Dave, ~73 s di "Cover and exclude").
 6. **E2:** tetto giornaliero fisso a 60.00, mostrato in sola lettura in Settings.
 7. **R1 → P1** (serve solo al modulo manuale), chiusa lato UI: l'anteprima del modulo manuale si calcola nel browser con `expenseShares` di `@kitty/ledger` (vedi C2).
@@ -175,7 +175,7 @@ Elementi comuni a ogni schermata: banner "Fakes on" se `fakes`; nome dell'attore
 5. ~~Storia 2, contestazione in 20 s~~ **Superata** dai 45 s della decisione 2.
 6. ~~Storia 1 con i fake~~ **Chiusa:** anteprima manuale nel browser con `expenseShares` (decisione 7).
 7. **Ordine delle storie in demo.** Charlie viene escluso alla fine della storia 2. **Raccomando** storia 1 → storia 2 sullo stesso viaggio, senza `demo:reset` in mezzo.
-8. **Registro per evento.** SPEC §9.5 chiede solo il riepilogo, che c'è. **Raccomando** riepilogo + attività ora; l'elenco con hash e firme per evento (R2) solo se Marco ha tempo.
+8. **Registro per evento.** SPEC §9.5 chiede solo il riepilogo, che c'è. **Raccomando** riepilogo + attività ora; l'elenco con hash e firme per evento (R2) solo se lo stream B ha tempo.
 9. **"Uguale su 4/4".** Non c'è (P1). **Raccomando** di non simularlo confrontando le finestre dal browser: si mostra quando `checkpoints` arriva.
 10. **Notifiche.** **Raccomando** solo banner in app dal polling (nessuna notifica del browser), che basta per tre finestre affiancate.
 11. **"Cover and exclude" di ~73 s.** **Raccomando** di tenerlo sincrono e mostrare le `operations`; se il PM vuole un tempo più corto sul palco, è lavoro di B (mining).

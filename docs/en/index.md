@@ -71,3 +71,10 @@ Details: [limitations-and-roadmap.md](limitations-and-roadmap.md).
 | [Demo walkthrough](demo-walkthrough.md)               | The demo stories step by step, with the commands to reproduce them                  |
 | [Troubleshooting](troubleshooting.md)                 | Known failure modes and how to get out of them                                      |
 | [Limitations and roadmap](limitations-and-roadmap.md) | Honest limits and what comes next                                                   |
+
+## kit+ty v2
+
+These pages describe v1, the version presented at the final. kit+ty v2, with no coordinator, the
+group's ledger on three Nostr relays and the operator reduced to an LSP, is ongoing work on the
+[`v2` branch](https://github.com/marco-pedron/kit-ty/tree/v2). It is summarised in Part 2 of the
+[README](../../README.md#part-2--kitty-v2) and documented in [v2/](v2/index.md).

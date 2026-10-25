@@ -56,7 +56,7 @@
 
 ## 5. SPEC vs rotte
 **Nella SPEC, non nelle rotte:**
-1. Anteprima delle parti per un'assegnazione **manuale** (SPEC §11, regola 4: "modulo manuale precompilato"). `MemberAgent.previewSplit` esiste, ma l'unica rotta che lo usa è `/expenses/split`, che passa dall'AI. → richiesta a Marco (BLOCCANTE per la storia 1 con i fake e per il modulo manuale).
+1. Anteprima delle parti per un'assegnazione **manuale** (SPEC §11, regola 4: "modulo manuale precompilato"). `MemberAgent.previewSplit` esiste, ma l'unica rotta che lo usa è `/expenses/split`, che passa dall'AI. → richiesta allo stream B (BLOCCANTE per la storia 1 con i fake e per il modulo manuale).
 2. Pagare a mano una riga `overdue` (`decideAutoPay` dice "Pay it yourself"): rimandato a P1 dal PM.
 3. "Uguale su N/N telefoni": `ledger.checkpoints` è sempre `null` (P1, primo taglio di PLAN §1 dopo il backup).
 4. `TRIP_CLOSED`, uscita volontaria del viaggiatore, ricarica: nessuna rotta (fuori demo).

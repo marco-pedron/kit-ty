@@ -13,7 +13,7 @@
 - [x] B8 e2e:demo (sab 17/10 16:55, branch `b/B8-e2e-demo`)
 - [x] B5 (P1) Rail on-chain (sab 17/10 19:45, branch `b/B5-onchain-rail`; livello wallet/rail, non ancora nei flussi)
 - [x] B6 Backup automatico (lock → backup → unlock) (sab 17/10 18:10, #29; correzione 19:05: solo viaggiatori); `demo:lose-phone` P1 fatto (sab 17/10 19:05, branch `b/B6b-lose-phone`)
-- [x] R4 Tempi della demo dal vivo 45/120 s, test fissati a 20/30 (dom 18/10, branch `a/R4-trip-windows`, PR in bozza; da verificare sul PC di Marco)
+- [x] R4 Tempi della demo dal vivo 45/120 s, test fissati a 20/30 (dom 18/10, branch `a/R4-trip-windows`, PR in bozza; da verificare sul PC dello stream B)
 - [x] B9 Liquidità just-in-time di Dave (openLiquidity + liquidityPlan) (sab 17/10 17:40, branch `b/B9-liquidity`)
 
 ## Bloccato da

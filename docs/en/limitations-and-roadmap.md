@@ -56,16 +56,28 @@ demo therefore uses `rgb-lightning-node` over REST for every node and WDK's
 
 ## Roadmap
 
-- **Native mobile app.** The agent and the node on each traveler's phone, so that "only you can
-  spend it" holds physically too. Candidate paths: `@utexo/rgb-sdk-rn`, or the WDK module on Bare.
-- **WDK Lightning node per member**, in-process and on mobile, with VSS backups, once the upstream
-  fixes (persistent signer, sweep after close, VSS restore) are released.
-- **Checkpoints outside the relay** (for example over Lightning onion messages) and the cross-phone
-  comparison in the UI.
-- **Watchtower** independent of the operator, against an old channel state being broadcast.
-- **More than one hub and blinded paths**, so the operator does not see every payment.
-- **Unlock or biometrics** for approvals above the limit; Biscuit tokens on the node APIs.
-- **The production timers**: hours for the contest window and a day for the payment deadline,
-  instead of the 45 s / 120 s of the live demo.
-- A fix of RLN `/signmessage` (it signs the empty string at `d4762ac`), proposed upstream, so the
-  node key could sign events directly.
+The roadmap below is the one of the pitch. It now runs through kit+ty v2, ongoing work on the
+[`v2` branch](https://github.com/marco-pedron/kit-ty/tree/v2), which removes the coordinator's
+powers and the single relay. For each milestone, the real state and what it needs are in the
+[v2 limitations and roadmap](v2/limitations-and-roadmap.md).
+
+- **Now:** v1 presented; v2 in progress on the v2 branch. On `v2`, the group's ledger already
+  travels on three Nostr relays, with no coordinator and `dave` reduced to an LSP.
+- **Month 2 — Holepunch:** every traveler runs their own node, connected directly peer-to-peer.
+  No middleman. Holepunch would be a second transport for the ledger, behind the same `Transport`
+  interface as the Nostr relays.
+- **Month 3 — Shared ledger:** the group's ledger syncs between devices. No single point of
+  failure. This already works on `v2` through three Nostr relays.
+- **Month 4 — Mobile app:** snap the receipt, local AI splits it, your agent pays. It needs the
+  WDK Lightning node on the phone (see above, "Why not WDK for the Lightning nodes (yet)").
+- **Month 5 — Submarine swaps:** top up or cash out without opening and closing channels every
+  trip. It depends on Kaleidoswap and on USD₮ support on the Lightning side.
+- **Month 6 — Mainnet pilot:** a paid pilot on mainnet with one group-tour operator. It needs the
+  Utexo LSP and WDK ready, a watchtower that handles RGB assets, and USD₮ with 6 decimals.
+
+Items of the v1 roadmap that are not milestones of their own: checkpoints outside the relay and
+the cross-phone comparison in the UI; more than one hub and blinded paths, so the operator does
+not see every payment; unlock or biometrics for approvals above the limit and Biscuit tokens on
+the node APIs; the production timers (hours for the contest window, a day for the payment
+deadline, instead of the 45 s / 120 s of the live demo); a fix of RLN `/signmessage` (it signs
+the empty string at `d4762ac`), proposed upstream, so the node key could sign events directly.
